@@ -1,0 +1,302 @@
+/* 数据库自动更新器样式 */
+
+.acu-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--SmartThemeBodyColor);
+}
+
+/* 标签页样式 */
+.acu-tabs {
+    display: flex;
+    gap: 10px;
+    border-bottom: 2px solid var(--SmartThemeBorderColor);
+    margin-bottom: 20px;
+}
+
+.acu-tab-button {
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--SmartThemeBodyColor);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.acu-tab-button:hover {
+    color: var(--SmartThemeLinkColor);
+    background: var(--SmartThemeTertiaryColor);
+}
+
+.acu-tab-button.active {
+    border-bottom-color: var(--SmartThemeLinkColor);
+    color: var(--SmartThemeLinkColor);
+    font-weight: bold;
+}
+
+.acu-tab-content {
+    display: none;
+}
+
+.acu-tab-content.active {
+    display: block;
+}
+
+/* 卡片样式 */
+.acu-card {
+    background: var(--SmartThemeTertiaryColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.acu-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: var(--SmartThemeBodyColor);
+    font-size: 18px;
+}
+
+/* 输入组样式 */
+.input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.input-group label {
+    min-width: 120px;
+    color: var(--SmartThemeBodyColor);
+}
+
+.input-group input,
+.input-group select,
+.input-group textarea {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--SmartThemeInputColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 4px;
+    color: var(--SmartThemeBodyColor);
+    font-size: 14px;
+}
+
+.input-group input:disabled,
+.input-group select:disabled,
+.input-group textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 按钮样式 */
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.button-group button {
+    padding: 8px 16px;
+    background: var(--SmartThemeLinkColor);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.button-group button:hover {
+    background: var(--SmartThemeLinkHoverColor);
+    transform: translateY(-1px);
+}
+
+.button-group button.secondary {
+    background: var(--SmartThemeTertiaryColor);
+    color: var(--SmartThemeBodyColor);
+}
+
+.button-group button.secondary:hover {
+    background: var(--SmartThemeBorderColor);
+}
+
+.button-group button.primary {
+    background: #007bff;
+}
+
+.button-group button.primary:hover {
+    background: #0056b3;
+}
+
+/* 复选框和单选按钮样式 */
+.checkbox-group,
+.radio-group {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.checkbox-group label,
+.radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--SmartThemeBodyColor);
+}
+
+/* 提示文本样式 */
+.notes {
+    font-size: 12px;
+    color: var(--SmartThemePlaceholderColor);
+    font-style: italic;
+    margin-top: 5px;
+}
+
+/* 状态显示样式 */
+.status-display {
+    padding: 10px;
+    background: var(--SmartThemeTertiaryColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.status-display.success {
+    background: rgba(40, 167, 69, 0.1);
+    border-color: #28a745;
+    color: #28a745;
+}
+
+.status-display.error {
+    background: rgba(220, 53, 69, 0.1);
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.status-display.warning {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: #ffc107;
+    color: #ffc107;
+}
+
+/* 折叠区域样式 */
+.toggle-section {
+    margin-bottom: 20px;
+}
+
+.toggle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px;
+    background: var(--SmartThemeTertiaryColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-header:hover {
+    background: var(--SmartThemeBorderColor);
+}
+
+.toggle-content {
+    padding: 15px;
+    background: var(--SmartThemeInputColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    display: none;
+}
+
+.toggle-content.active {
+    display: block;
+}
+
+/* 表格可视化样式 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.data-table th,
+.data-table td {
+    border: 1px solid var(--SmartThemeBorderColor);
+    padding: 8px;
+    text-align: left;
+}
+
+.data-table th {
+    background: var(--SmartThemeTertiaryColor);
+    font-weight: bold;
+}
+
+.data-table tr:nth-child(even) {
+    background: var(--SmartThemeInputColor);
+}
+
+.data-table tr:hover {
+    background: var(--SmartThemeBorderColor);
+}
+
+/* 滚动容器样式 */
+.scroll-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .acu-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .acu-tab-button {
+        padding: 8px 15px;
+        font-size: 12px;
+    }
+    
+    .input-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .input-group label {
+        min-width: auto;
+        margin-bottom: 5px;
+    }
+    
+    .button-group {
+        flex-direction: column;
+    }
+    
+    .button-group button {
+        width: 100%;
+    }
+}
+
+/* 加载动画 */
+.loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--SmartThemeBorderColor);
+    border-top-color: var(--SmartThemeLinkColor);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+

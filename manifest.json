@@ -1,0 +1,15 @@
+{
+  "name": "数据库自动更新器",
+  "displayName": "数据库自动更新器 (TavernDB Auto Updater)",
+  "description": "通过增量更新模式，自动维护世界书中的JSON数据库条目。支持自动解析AI回复中的表格编辑指令，更新表格数据并同步到世界书。",
+  "version": "1.0.0",
+  "author": "Cline (AI Assisted)",
+  "main": "index.js",
+  "styles": ["style.css"],
+  "icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJTMi40OCAyMiAxMiAyMiAyMiAxNy41MiAyMiAxMlMxNy41MiAyIDEyIDJ6bTAgMThjLTQuNDEgMC04LTMuNTktOC04czMuNTktOCA4LTggOCAzLjU5IDggOC0zLjU5IDgtOCA4em0tLjUtMTNoMXY2aDV2MUgxMS41Vjd6IiBmaWxsPSIjZmZmIi8+PC9zdmc+",
+  "tags": ["database", "worldbook", "automation", "table"],
+  "requirements": {
+    "sillytavern": ">=1.10.0"
+  }
+}
+
