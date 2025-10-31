@@ -48,97 +48,142 @@
 
 ## 🔄 进行中的工作
 
-### 第六阶段：表格数据管理（待实现）
-- [ ] `loadAllChatMessages_ACU` - 加载所有聊天消息
-- [ ] `loadOrCreateJsonTableFromChatHistory_ACU` - 从聊天历史加载或创建表格
-- [ ] `initializeJsonTableInChatHistory_ACU` - 初始化表格数据
-- [ ] `saveJsonTableToChatHistory_ACU` - 保存表格数据到聊天历史
-- [ ] `formatJsonToReadable_ACU` - 格式化表格为可读格式
+### 第六阶段：表格数据管理（已完成）
+- [x] `loadAllChatMessages_ACU` - 加载所有聊天消息
+- [x] `loadOrCreateJsonTableFromChatHistory_ACU` - 从聊天历史加载或创建表格
+- [x] `initializeJsonTableInChatHistory_ACU` - 初始化表格数据
+- [x] `saveJsonTableToChatHistory_ACU` - 保存表格数据到聊天历史
+- [x] `formatJsonToReadable_ACU` - 格式化表格为可读格式
+- [x] 聊天变更事件处理集成
+- [x] 消息删除/滑动事件处理集成
+- [x] `importTableAsJson` API 函数实现
 
-### 第七阶段：表格操作（待实现）
-- [ ] `parseAndApplyTableEdits_ACU` - 解析并应用表格编辑指令
-- [ ] `executeTableOperations_ACU` - 执行表格操作（insertRow, updateRow, deleteRow）
-- [ ] `parseTableEditInstructions_ACU` - 解析 `<tableEdit>` 标签中的指令
+### 第七阶段：表格操作（已完成）
+- [x] `parseAndApplyTableEdits_ACU` - 解析并应用表格编辑指令
+  - [x] AI响应清理和解析
+  - [x] `<tableEdit>` 标签提取
+  - [x] 多行指令重组
+  - [x] JSON解析和容错处理
+  - [x] `insertRow` 操作实现
+  - [x] `updateRow` 操作实现
+  - [x] `deleteRow` 操作实现
 
-### 第八阶段：AI 调用（待实现）
-- [ ] `callCustomOpenAI_ACU` - 调用自定义 API
-- [ ] `prepareAIInput_ACU` - 准备 AI 输入内容
-- [ ] `proceedWithCardUpdate_ACU` - 执行数据库更新流程
+### 第八阶段：AI 调用（已完成）
+- [x] `prepareAIInput_ACU` - 准备 AI 输入内容
+  - [x] 格式化表格数据为可读文本
+  - [x] 格式化消息内容
+  - [x] 获取世界书内容（简化版）
+- [x] `callCustomOpenAI_ACU` - 调用自定义 API
+  - [x] 支持酒馆连接预设模式
+  - [x] 支持使用主API模式
+  - [x] 支持独立配置的API模式
+  - [x] 提示词插值替换
+  - [x] 请求中止支持
+- [x] `proceedWithCardUpdate_ACU` - 执行数据库更新流程
+  - [x] 状态更新显示
+  - [x] 终止按钮支持
+  - [x] 重试机制（最多3次）
+  - [x] 错误处理和恢复
 
-### 第九阶段：世界书同步（待实现）
-- [ ] `updateReadableLorebookEntry_ACU` - 更新可读世界书条目
-- [ ] `updateImportantPersonsRelatedEntries_ACU` - 更新重要人物条目
-- [ ] `updateSummaryTableEntries_ACU` - 更新总结表条目
-- [ ] `updateOutlineTableEntry_ACU` - 更新故事主线条目
-- [ ] `getInjectionTargetLorebook_ACU` - 获取注入目标世界书
-- [ ] `deleteAllGeneratedEntries_ACU` - 删除所有生成的条目
+### 第九阶段：世界书同步（已完成）
+- [x] `getInjectionTargetLorebook_ACU` - 获取注入目标世界书
+- [x] `deleteAllGeneratedEntries_ACU` - 删除所有生成的世界书条目
+- [x] `updateOutlineTableEntry_ACU` - 更新故事主线条目
+- [x] `updateSummaryTableEntries_ACU` - 更新总结表条目
+- [x] `updateImportantPersonsRelatedEntries_ACU` - 更新重要人物条目
+- [x] `updateReadableLorebookEntry_ACU` - 更新可读世界书条目（主函数）
 
-### 第十阶段：自动更新（待实现）
-- [ ] `handleNewMessageDebounced_ACU` - 处理新消息（防抖）
-- [ ] `triggerAutomaticUpdateIfNeeded_ACU` - 触发自动更新
-- [ ] `resetScriptStateForNewChat_ACU` - 重置脚本状态（新聊天）
-- [ ] `processUpdates_ACU` - 处理批量更新
+### 第十阶段：自动更新（已完成）
+- [x] `processUpdates_ACU` - 处理批量更新（主入口）
+- [x] `handleNewMessageDebounced_ACU` - 处理新消息（防抖）
+- [x] `triggerAutomaticUpdateIfNeeded_ACU` - 触发自动更新
+- [x] `resetScriptStateForNewChat_ACU` - 重置脚本状态（新聊天）
+- [x] `hideMessagesByFloorRange_ACU` - 根据楼层范围隐藏消息
+- [x] `triggerSlash_ACU` - 触发斜杠命令
+- [x] 事件监听器集成（CHAT_CHANGED, GENERATION_ENDED）
 
-### 第十一阶段：UI 完整实现（待实现）
-- [ ] 完整的 `openAutoCardPopup_ACU` 实现
-  - [ ] 弹出窗口 HTML 结构
-  - [ ] UI 元素绑定
-  - [ ] 事件监听器设置
-  - [ ] 标签页切换逻辑
-- [ ] `renderPromptSegments_ACU` - 渲染提示词段落
-- [ ] `getCharCardPromptFromUI_ACU` - 从 UI 获取提示词
-- [ ] API 配置 UI 函数
-  - [ ] `saveApiConfig_ACU`
-  - [ ] `fetchModelsAndConnect_ACU`
-  - [ ] `updateApiStatusDisplay_ACU`
-- [ ] 提示词管理 UI 函数
-  - [ ] `saveCustomCharCardPrompt_ACU`
-  - [ ] `resetDefaultCharCardPrompt_ACU`
-  - [ ] `loadCharCardPromptFromJson_ACU`
-- [ ] 自动更新设置 UI 函数
-  - [ ] `saveAutoUpdateFrequency_ACU`
-  - [ ] `saveAutoUpdateTokenThreshold_ACU`
-  - [ ] `saveUpdateBatchSize_ACU`
-  - [ ] `saveRemoveTags_ACU`
-- [ ] 数据管理 UI 函数
-  - [ ] `displayAllData_ACU`
-  - [ ] `showDataOverview_ACU`
-  - [ ] `exportCurrentJsonData_ACU`
-  - [ ] `importTableTemplate_ACU`
-  - [ ] `exportTableTemplate_ACU`
-  - [ ] `resetTableTemplate_ACU`
-- [ ] 世界书管理 UI 函数
-  - [ ] `populateWorldbookList_ACU`
-  - [ ] `populateWorldbookEntryList_ACU`
-  - [ ] `updateWorldbookSourceView_ACU`
-  - [ ] `populateInjectionTargetSelector_ACU`
+### 第十一阶段：UI 完整实现（已完成）
+- [x] 完整的 `openAutoCardPopup_ACU` 实现
+  - [x] 弹出窗口 HTML 结构
+  - [x] UI 元素绑定
+  - [x] 事件监听器设置
+  - [x] 标签页切换逻辑
+- [x] `updateCardUpdateStatusDisplay_ACU` - 更新状态显示
+- [x] `renderPromptSegments_ACU` - 渲染提示词段落
+- [x] `getCharCardPromptFromUI_ACU` - 从 UI 获取提示词
+- [x] API 配置 UI 函数
+  - [x] `saveApiConfig_ACU`
+  - [x] `clearApiConfig_ACU`
+  - [x] `fetchModelsAndConnect_ACU`
+  - [x] `updateApiStatusDisplay_ACU`
+  - [x] `updateApiModeView_ACU`
+  - [x] `updateCustomApiInputsState_ACU`
+  - [x] `loadTavernApiProfiles_ACU`
+- [x] 提示词管理 UI 函数
+  - [x] `saveCustomCharCardPrompt_ACU`
+  - [x] `resetDefaultCharCardPrompt_ACU`
+  - [x] `loadCharCardPromptFromJson_ACU`
+- [x] 自动更新设置 UI 函数
+  - [x] `saveAutoUpdateFrequency_ACU`
+  - [x] `saveAutoUpdateTokenThreshold_ACU`
+  - [x] `saveUpdateBatchSize_ACU`
+  - [x] `saveRemoveTags_ACU`
+- [x] 数据管理 UI 函数
+  - [x] `displayAllData_ACU`
+  - [x] `showDataOverview_ACU`
+  - [x] `exportCurrentJsonData_ACU`
+  - [x] `importTableTemplate_ACU`
+  - [x] `exportTableTemplate_ACU`
+  - [x] `resetTableTemplate_ACU`
+  - [x] `exportCombinedSettings_ACU`
+  - [x] `importCombinedSettings_ACU`
+  - [x] `exportDisplayData_ACU`
+  - [x] `bindDataDisplayEvents_ACU`
+  - [x] `bindOverviewEvents_ACU`
+  - [x] `bindDetailsEvents_ACU`
+  - [x] `editTable_ACU`
+  - [x] `deleteTable_ACU`
+  - [x] `editRow_ACU`
+  - [x] `deleteRow_ACU`
+  - [x] `toggleMessageDetails_ACU`
+  - [x] `loadMessageDetails_ACU`
+  - [x] `deleteMessageData_ACU`
+  - [x] `saveRowInDetails`
+  - [x] `deleteRowInDetails`
+  - [x] `deleteTableInDetails`
+  - [x] `showEditModal_ACU`（临时实现）
+  - [x] `optimizeForMobile`
+  - [x] `addExpandDetailsStyles`
+- [x] 世界书管理 UI 函数
+  - [x] `populateWorldbookList_ACU`
+  - [x] `populateWorldbookEntryList_ACU`
+  - [x] `updateWorldbookSourceView_ACU`
+  - [x] `populateInjectionTargetSelector_ACU`
 
-### 第十二阶段：辅助功能（待实现）
-- [ ] `loadTavernApiProfiles_ACU` - 加载 Tavern API 预设
-- [ ] `updateApiModeView_ACU` - 更新 API 模式视图
-- [ ] `updateCustomApiInputsState_ACU` - 更新自定义 API 输入状态
-- [ ] 手动更新函数
-  - [ ] `handleManualUpdateCard_ACU`
-  - [ ] `hideMessagesByFloorRange_ACU`
-- [ ] 事件处理函数
-  - [ ] 聊天变更事件处理
-  - [ ] 消息生成结束事件处理
-  - [ ] 消息删除/滑动事件处理
+### 第十二阶段：手动更新功能（已完成）
+- [x] `handleManualUpdateCard_ACU` - 手动更新函数
+- [x] 事件处理函数
+  - [x] 聊天变更事件处理
+  - [x] 消息生成结束事件处理
+  - [x] 消息删除/滑动事件处理
 
 ## 📝 下一步计划
 
-### 立即优先级（核心功能）
-1. **表格数据管理** - 实现表格数据的加载、保存、初始化
-2. **表格操作** - 实现表格编辑指令的解析和执行
-3. **AI 调用** - 实现 API 调用和更新流程
+### 🎉 所有核心阶段已完成！
 
-### 中等优先级（完整功能）
-4. **世界书同步** - 实现数据到世界书的同步
-5. **自动更新** - 实现自动触发更新逻辑
+所有核心功能已成功迁移：
+1. ✅ **表格数据管理** - 已实现表格数据的加载、保存、初始化
+2. ✅ **表格操作** - 已实现表格编辑指令的解析和执行
+3. ✅ **AI 调用** - 已实现 API 调用和更新流程
+4. ✅ **世界书同步** - 已实现数据到世界书的同步
+5. ✅ **自动更新** - 已实现自动触发更新逻辑
+6. ✅ **完整 UI 实现** - 已实现所有 UI 功能和交互
+7. ✅ **辅助功能** - 已实现所有辅助和管理功能
 
-### 后续优先级（UI 完善）
-6. **完整 UI 实现** - 实现所有 UI 功能和交互
-7. **辅助功能** - 实现所有辅助和管理功能
+### 当前阶段：测试与优化
+- 在 SillyTavern 环境中测试扩展
+- 修复运行时的错误
+- 优化性能和用户体验
 
 ## 📋 迁移检查清单
 
