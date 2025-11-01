@@ -6,30 +6,6 @@
 (function() {
     'use strict';
 
-    // ==================== 扩展初始化 ====================
-    
-    // 等待 SillyTavern 加载完成
-    function initExtension() {
-        console.log('[数据库自动更新器] 开始初始化...');
-        
-        // 检查必要的 API
-        if (typeof SillyTavern === 'undefined') {
-            console.warn('[数据库自动更新器] SillyTavern API 未就绪，延迟初始化...');
-            setTimeout(initExtension, 1000);
-            return;
-        }
-
-        // 开始初始化扩展
-        mainInitialize_ACU();
-    }
-
-    // 如果 DOM 已加载，立即初始化；否则等待
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initExtension);
-    } else {
-        setTimeout(initExtension, 500);
-    }
-
     // ==================== 核心常量定义 ====================
     const DEBUG_MODE_ACU = true;
     const SCRIPT_ID_PREFIX_ACU = 'biaozhunbanv2';
@@ -4817,7 +4793,31 @@
         }
     };
 
+    // ==================== 扩展初始化 ====================
+    
+    // 等待 SillyTavern 加载完成
+    function initExtension() {
+        console.log('[数据库自动更新器] 开始初始化...');
+        
+        // 检查必要的 API
+        if (typeof SillyTavern === 'undefined') {
+            console.warn('[数据库自动更新器] SillyTavern API 未就绪，延迟初始化...');
+            setTimeout(initExtension, 1000);
+            return;
+        }
+
+        // 开始初始化扩展
+        mainInitialize_ACU();
+    }
+
     console.log('[数据库自动更新器] 扩展脚本已加载，等待初始化...');
+
+    // 如果 DOM 已加载，立即初始化；否则等待
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initExtension);
+    } else {
+        setTimeout(initExtension, 500);
+    }
 
 })();
 

@@ -13,8 +13,15 @@
 
 ## 安装方法
 
-1. 将扩展文件夹放置到 SillyTavern 的 `scripts/extensions` 目录下
-2. 重启 SillyTavern 或在扩展管理界面中启用该扩展
+1. 将扩展文件夹放置到 SillyTavern 的 `scripts/extensions` 目录下（注意：不同版本可能是 `plugins` 目录）
+2. 确保文件夹名为 `data_table` 或任意名称
+3. 重启 SillyTavern 服务器
+4. 在扩展菜单中查找"数据库更新"菜单项
+
+**重要提示**：
+- 不同版本的 SillyTavern 可能使用不同的扩展目录
+- 如果无法加载，尝试将扩展放在 `plugins` 目录下
+- 打开浏览器控制台（F12）查看加载日志
 
 ## 使用方法
 
