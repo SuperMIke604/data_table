@@ -1,0 +1,14 @@
+{
+    "display_name": "数据管理",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "dependencies": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Your Name",
+    "version": "1.0.0",
+    "homePage": "https://github.com/your/extension",
+    "auto_update": true
+}
+
