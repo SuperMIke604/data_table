@@ -2079,22 +2079,374 @@ function showDataOverview() {
     
     if (!overviewArea || !overviewContainer) return;
     
-    if (overviewArea.style.display === 'none' || !overviewArea.style.display) {
-        overviewArea.style.display = 'block';
-        overviewContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载数据概览...</em>';
+    try {
+        const context = SillyTavern.getContext();
         
-        // TODO: 实现实际的数据概览逻辑
-        setTimeout(() => {
-            overviewContainer.innerHTML = `
-                <div style="color: var(--ios-text);">
-                    <h4 style="margin: 0 0 10px 0;">数据概览</h4>
-                    <p style="color: var(--ios-text-secondary);">数据概览功能待实现。这里将显示当前对话的数据库统计信息。</p>
-                </div>
-            `;
-        }, 500);
-    } else {
-        overviewArea.style.display = 'none';
+        if (!context || !context.chat || context.chat.length === 0) {
+            showToast('没有聊天记录可查看', 'warning');
+            return;
+        }
+        
+        const chat = context.chat;
+        let dataCount = 0;
+        
+        // 保存当前展开状态
+        if (!window.dataManageExpandedDetails) {
+            window.dataManageExpandedDetails = new Set();
+        }
+        const expandedDetails = window.dataManageExpandedDetails;
+        
+        if (overviewArea.style.display === 'none' || !overviewArea.style.display) {
+            overviewArea.style.display = 'block';
+            overviewContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载数据概览...</em>';
+            
+            // 遍历聊天记录，查找包含数据库数据的消息（排除楼层0）
+            let html = '<div class="overview-content">';
+            html += '<h3 style="color: var(--ios-text); margin-bottom: 20px;">聊天记录数据概览</h3>';
+            
+            for (let i = chat.length - 1; i > 0; i--) {
+                const message = chat[i];
+                let messageData = null;
+                
+                // 优先查找 TavernDB_ACU_Data 字段
+                if (message.TavernDB_ACU_Data) {
+                    messageData = message.TavernDB_ACU_Data;
+                } else if (message.mes) {
+                    // 尝试从消息文本中解析JSON数据
+                    try {
+                        const mesText = message.mes;
+                        // 查找JSON格式的数据
+                        const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                        if (jsonMatch) {
+                            const jsonData = JSON.parse(jsonMatch[1]);
+                            if (jsonData && typeof jsonData === 'object') {
+                                messageData = jsonData;
+                            }
+                        } else {
+                            // 尝试直接解析为JSON
+                            try {
+                                const jsonData = JSON.parse(mesText);
+                                if (jsonData && typeof jsonData === 'object') {
+                                    messageData = jsonData;
+                                }
+                            } catch (e) {
+                                // 不是JSON格式，继续查找
+                            }
+                        }
+                    } catch (e) {
+                        // 解析失败，继续查找
+                    }
+                }
+                
+                if (messageData) {
+                    dataCount++;
+                    const messageIndex = i;
+                    const timestamp = new Date(message.send_date || message.timestamp || Date.now()).toLocaleString();
+                    const messageType = message.is_user ? '用户消息' : 'AI回复';
+                    
+                    html += `<div class="message-data-card" data-message-index="${i}" style="
+                        background: var(--ios-gray); border: 1px solid var(--ios-border); border-radius: 10px; 
+                        padding: 15px; margin-bottom: 15px; color: var(--ios-text);
+                    ">`;
+                    html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
+                    html += `<h4 style="margin: 0; color: var(--ios-text);">楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
+                    html += `<span style="font-size: 12px; color: var(--ios-text-secondary);">${escapeHtml(timestamp)}</span>`;
+                    html += `</div>`;
+                    
+                    // 显示数据统计
+                    const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
+                    html += `<div style="margin-bottom: 10px;">`;
+                    html += `<p style="margin: 5px 0; color: var(--ios-text-secondary);">包含 ${tableKeys.length} 个数据表格</p>`;
+                    
+                    // 显示每个表格的简要信息
+                    tableKeys.forEach(sheetKey => {
+                        const table = messageData[sheetKey];
+                        if (table && table.name && table.content) {
+                            const rowCount = table.content.length - 1; // 减去表头
+                            html += `<div style="background: var(--ios-gray-dark); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 12px;">`;
+                            html += `<strong>${escapeHtml(table.name)}</strong>: ${rowCount} 条记录`;
+                            if (table.sourceData && table.sourceData.note) {
+                                html += ` - ${escapeHtml(table.sourceData.note)}`;
+                            }
+                            html += `</div>`;
+                        }
+                    });
+                    
+                    html += `</div>`;
+                    
+                    // 详情展开区域（根据状态决定是否显示）
+                    const isExpanded = expandedDetails.has(i);
+                    const displayStyle = isExpanded ? 'block' : 'none';
+                    const buttonText = isExpanded ? '收起详情' : '展开详情';
+                    
+                    // 操作按钮
+                    html += `<div style="text-align: right;">`;
+                    html += `<button class="toggle-details-btn" data-message-index="${i}" style="
+                        background: var(--ios-blue); color: white; border: none; padding: 6px 12px; 
+                        border-radius: 6px; cursor: pointer; margin-right: 5px; font-size: 12px;
+                        transition: all 0.2s;
+                    ">${buttonText}</button>`;
+                    html += `<button class="delete-message-btn" data-message-index="${i}" style="
+                        background: #dc3545; color: white; border: none; padding: 6px 12px; 
+                        border-radius: 6px; cursor: pointer; font-size: 12px;
+                        transition: all 0.2s;
+                    ">删除记录</button>`;
+                    html += `</div>`;
+                    
+                    html += `<div class="message-details" data-message-index="${i}" style="
+                        display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
+                        border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
+                        border-radius: 6px; padding: 15px;
+                    ">`;
+                    html += `<div class="details-content">`;
+                    if (isExpanded) {
+                        html += loadMessageDetails(i, messageData);
+                    } else {
+                        html += `<!-- 详情内容将在这里动态加载 -->`;
+                    }
+                    html += `</div>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                }
+            }
+            
+            if (dataCount === 0) {
+                html += '<p style="text-align: center; color: var(--ios-text-secondary); font-style: italic; padding: 20px;">暂无数据库记录</p>';
+            } else {
+                html += `<div style="margin-top: 20px; padding: 10px; background: var(--ios-gray-dark); border-radius: 8px; text-align: center;">`;
+                html += `<p style="margin: 0; color: var(--ios-text-secondary);">共找到 ${dataCount} 条数据库记录</p>`;
+                html += `</div>`;
+            }
+            
+            html += '</div>';
+            
+            overviewContainer.innerHTML = html;
+            
+            // 绑定概览事件
+            bindOverviewEvents(parentDoc);
+            
+            // 加载展开状态的详情内容
+            expandedDetails.forEach(messageIndex => {
+                const detailsArea = overviewContainer.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
+                if (detailsArea) {
+                    const message = chat[messageIndex];
+                    let messageData = null;
+                    if (message.TavernDB_ACU_Data) {
+                        messageData = message.TavernDB_ACU_Data;
+                    } else if (message.mes) {
+                        try {
+                            const mesText = message.mes;
+                            const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                            if (jsonMatch) {
+                                messageData = JSON.parse(jsonMatch[1]);
+                            } else {
+                                try {
+                                    messageData = JSON.parse(mesText);
+                                } catch (e) {}
+                            }
+                        } catch (e) {}
+                    }
+                    if (messageData) {
+                        const contentDiv = detailsArea.querySelector('.details-content');
+                        if (contentDiv) {
+                            contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
+                        }
+                    }
+                }
+            });
+            
+            showToast(`已加载 ${dataCount} 条数据库记录`, 'success');
+        } else {
+            overviewArea.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('显示数据概览失败:', error);
+        showToast(`显示数据概览失败: ${error.message}`, 'error');
     }
+}
+
+/**
+ * 绑定概览事件
+ */
+function bindOverviewEvents(parentDoc) {
+    const overviewArea = parentDoc.getElementById('data-manage-overview-area');
+    if (!overviewArea) return;
+    
+    // 移除之前的事件绑定
+    const toggleBtns = overviewArea.querySelectorAll('.toggle-details-btn');
+    const deleteBtns = overviewArea.querySelectorAll('.delete-message-btn');
+    
+    toggleBtns.forEach(btn => {
+        btn.removeEventListener('click', handleToggleDetails);
+        btn.addEventListener('click', handleToggleDetails);
+    });
+    
+    deleteBtns.forEach(btn => {
+        btn.removeEventListener('click', handleDeleteMessage);
+        btn.addEventListener('click', handleDeleteMessage);
+    });
+}
+
+/**
+ * 处理展开/收起详情
+ */
+function handleToggleDetails(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    const overviewArea = parentDoc.getElementById('data-manage-overview-area');
+    if (!overviewArea) return;
+    
+    const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
+    const toggleBtn = overviewArea.querySelector(`.toggle-details-btn[data-message-index="${messageIndex}"]`);
+    
+    if (!detailsArea || !toggleBtn) return;
+    
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) return;
+        
+        const message = context.chat[messageIndex];
+        if (!message) return;
+        
+        let messageData = null;
+        if (message.TavernDB_ACU_Data) {
+            messageData = message.TavernDB_ACU_Data;
+        } else if (message.mes) {
+            try {
+                const mesText = message.mes;
+                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    messageData = JSON.parse(jsonMatch[1]);
+                } else {
+                    try {
+                        messageData = JSON.parse(mesText);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
+        
+        if (!messageData) return;
+        
+        if (detailsArea.style.display === 'none' || !detailsArea.style.display) {
+            // 展开详情
+            const contentDiv = detailsArea.querySelector('.details-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
+            }
+            detailsArea.style.display = 'block';
+            toggleBtn.textContent = '收起详情';
+            if (!window.dataManageExpandedDetails) {
+                window.dataManageExpandedDetails = new Set();
+            }
+            window.dataManageExpandedDetails.add(messageIndex);
+        } else {
+            // 收起详情
+            detailsArea.style.display = 'none';
+            toggleBtn.textContent = '展开详情';
+            if (window.dataManageExpandedDetails) {
+                window.dataManageExpandedDetails.delete(messageIndex);
+            }
+        }
+    } catch (error) {
+        console.error('展开/收起详情失败:', error);
+        showToast('展开/收起详情失败', 'error');
+    }
+}
+
+/**
+ * 处理删除记录
+ */
+async function handleDeleteMessage(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    
+    if (!confirm(`确定要删除楼层 ${messageIndex} 的数据库记录吗？此操作不可恢复。`)) {
+        return;
+    }
+    
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) {
+            showToast('无法访问聊天记录', 'error');
+            return;
+        }
+        
+        const message = context.chat[messageIndex];
+        if (!message) {
+            showToast('消息不存在', 'error');
+            return;
+        }
+        
+        // 删除 TavernDB_ACU_Data 字段
+        if (message.TavernDB_ACU_Data) {
+            delete message.TavernDB_ACU_Data;
+        }
+        
+        // 如果数据在消息文本中，尝试删除
+        if (message.mes) {
+            try {
+                // 移除JSON代码块
+                message.mes = message.mes.replace(/```json\s*[\s\S]*?\s*```/g, '');
+                // 如果消息文本为空，可以删除整个消息（可选）
+            } catch (e) {
+                console.error('删除消息数据失败:', e);
+            }
+        }
+        
+        // 刷新概览
+        showDataOverview();
+        showToast(`已删除楼层 ${messageIndex} 的数据库记录`, 'success');
+    } catch (error) {
+        console.error('删除记录失败:', error);
+        showToast(`删除记录失败: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * 加载消息详情内容
+ */
+function loadMessageDetails(messageIndex, messageData) {
+    let html = '<div class="expanded-details-content">';
+    
+    const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
+    
+    if (tableKeys.length === 0) {
+        html += '<p style="color: var(--ios-text-secondary); text-align: center; padding: 20px;">没有数据表格</p>';
+    } else {
+        tableKeys.forEach(sheetKey => {
+            const table = messageData[sheetKey];
+            if (!table || !table.name || !table.content) return;
+            
+            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px;">`;
+            html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
+            html += `<h4 class="table-title" style="margin: 0; color: var(--ios-text);">${escapeHtml(table.name)}</h4>`;
+            html += `</div>`;
+            
+            // 显示表格元数据
+            if (table.sourceData && table.sourceData.note) {
+                html += `<div class="table-metadata" style="margin-bottom: 10px;">`;
+                html += `<p style="margin: 5px 0; color: var(--ios-text-secondary);">备注: ${escapeHtml(table.sourceData.note)}</p>`;
+                html += `</div>`;
+            }
+            
+            // 显示表格内容
+            html += `<div class="table-scroll-container" style="overflow-x: auto;">`;
+            html += generateTableHtml(table.name, table.content);
+            html += `</div>`;
+            
+            html += `</div>`;
+        });
+    }
+    
+    html += '</div>';
+    return html;
 }
 
 /**
