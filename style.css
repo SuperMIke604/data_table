@@ -17,7 +17,7 @@
     background-color: transparent;
     border-radius: 14px;
     box-shadow: none;
-    padding: 0 20px 20px 20px;
+    padding: 20px;
     width: 100% !important;
     max-width: 100% !important;
     min-width: 100% !important;
@@ -31,8 +31,8 @@
     font-weight: 600;
     color: var(--ios-text);
     text-align: center;
-    margin: 0;
-    padding: 0 0 15px 0;
+    margin: 0 0 20px 0;
+    padding-bottom: 15px;
     border-bottom: 1px solid var(--ios-border);
 }
 
@@ -40,10 +40,12 @@
 .data-manage-tabs-nav {
     display: flex;
     gap: 0;
-    margin-bottom: 0;
-    margin-top: 0;
+    margin-bottom: 20px;
     background-color: var(--ios-surface);
     border-radius: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 100%;
     overflow: hidden;
     box-shadow: 0 1px 4px var(--ios-shadow);
 }
@@ -77,8 +79,9 @@
 .data-manage-tab-content {
     display: none;
     animation: fadeIn 0.3s ease;
-    margin-top: 0;
-    padding-top: 0;
+    width: 100%;
+    max-width: 100%;
+    min-width: 100%;
 }
 
 .data-manage-tab-content.active {

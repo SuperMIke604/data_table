@@ -290,8 +290,8 @@ function updateStatusDisplay() {
         }
         
         const chat = context.chat;
-        // 参考参考文档：楼层号直接使用数组索引，不需要减1
-        const totalMessages = chat.length;
+        // 排除楼层0，统计实际楼层数
+        const totalMessages = chat.length > 0 ? chat.length - 1 : 0; // 排除楼层0
         
         // 计算已记录的楼层数 - 参考参考文档：查找最新的有数据库记录的消息索引
         let recordedCount = -1;
@@ -303,8 +303,8 @@ function updateStatusDisplay() {
             }
         }
         
-        // 计算未记录的楼层数
-        const unrecordedCount = recordedCount === -1 ? totalMessages : (totalMessages - 1 - recordedCount);
+        // 计算未记录的楼层数（排除楼层0）
+        const unrecordedCount = recordedCount === -1 ? totalMessages : (totalMessages - recordedCount);
         
         // 更新显示
         const statusDisplay = parentDoc.getElementById('data-manage-status-display');
@@ -2343,22 +2343,11 @@ function showDataOverview() {
                     
                     html += `</div>`;
                     
-                    // 操作按钮 - 参考弹窗主视觉
-                    html += `<div style="text-align: right;">`;
-                    html += `<button class="toggle-details-btn" data-message-index="${i}" style="
-                        background: var(--ios-blue); color: white; border: none; padding: 5px 10px; 
-                        border-radius: 6px; cursor: pointer; margin-right: 5px; font-size: 12px;
-                    ">${buttonText}</button>`;
-                    html += `<button class="delete-message-btn" data-message-index="${i}" style="
-                        background: #dc3545; color: white; border: none; padding: 5px 10px; 
-                        border-radius: 6px; cursor: pointer; font-size: 12px;
-                    ">删除记录</button>`;
-                    html += `</div>`;
-                    
+                    // 详情展开区域（在操作按钮之前）
                     html += `<div class="message-details" data-message-index="${i}" style="
                         display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
                         border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
-                        border-radius: 6px; padding: 15px;
+                        border-radius: 6px; padding: 15px; margin-bottom: 15px;
                     ">`;
                     html += `<div class="details-content">`;
                     if (isExpanded) {
@@ -2367,6 +2356,18 @@ function showDataOverview() {
                         html += `<!-- 详情内容将在这里动态加载 -->`;
                     }
                     html += `</div>`;
+                    html += `</div>`;
+                    
+                    // 操作按钮 - 展示在每个条目的底部
+                    html += `<div style="text-align: right; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ios-border);">`;
+                    html += `<button class="toggle-details-btn" data-message-index="${i}" style="
+                        background: var(--ios-blue); color: white; border: none; padding: 5px 10px; 
+                        border-radius: 6px; cursor: pointer; margin-right: 5px; font-size: 12px;
+                    ">${buttonText}</button>`;
+                    html += `<button class="delete-message-btn" data-message-index="${i}" style="
+                        background: #dc3545; color: white; border: none; padding: 5px 10px; 
+                        border-radius: 6px; cursor: pointer; font-size: 12px;
+                    ">删除记录</button>`;
                     html += `</div>`;
                     html += `</div>`;
                 }
@@ -4298,13 +4299,8 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
             const messagesForContext = chat.slice(sliceStartIndex, lastMessageIndex + 1);
             
             // 3. 执行更新
-            // 参考参考文档：修复绑定逻辑，直接使用用户指定的结束楼层作为绑定目标
-            // 对于整个范围（如6-10层），数据应该保存在结束楼层（10层）
             const toastMessage = `正在处理手动更新 (${batchNumber}/${totalBatches})...`;
-            // 使用整个范围的结束楼层作为保存目标（参考参考文档）
-            const saveTargetIndex = floorEnd !== null && floorEnd !== undefined ? floorEnd : lastMessageIndex;
-            
-            console.log(`[批次 ${batchNumber}] 保存目标楼层: ${saveTargetIndex} (范围: ${floorStart}-${floorEnd}, 批次最后索引: ${lastMessageIndex})`);
+            const saveTargetIndex = lastMessageIndex;
             
             try {
                 const success = await proceedWithCardUpdate(messagesForContext, toastMessage, saveTargetIndex);
@@ -4537,6 +4533,7 @@ async function updateReadableLorebookEntry(createIfNeeded = false) {
 
 /**
  * 格式化JSON数据为可读文本 - 参考参考文档实现
+ * 重要角色表、总结表、故事主线表不应该展示在 TavernDB-ACU-ReadableDataTable 中
  */
 function formatJsonToReadable(jsonData) {
     if (!jsonData) return '数据库为空。';
@@ -4544,12 +4541,27 @@ function formatJsonToReadable(jsonData) {
     let readableText = '';
     const tableKeys = Object.keys(jsonData).filter(k => k.startsWith('sheet_'));
     
-    tableKeys.forEach((sheetKey, tableIndex) => {
+    // 用于跟踪实际处理的表格索引（排除特殊表格后）
+    let actualTableIndex = 0;
+    
+    tableKeys.forEach((sheetKey) => {
         const table = jsonData[sheetKey];
         if (!table || !table.name || !table.content) return;
         
+        // 参考参考文档：排除特殊表格 - 这些表格不应该包含在 ReadableDataTable 中
+        const tableName = table.name.trim();
+        switch (tableName) {
+            case '重要角色表':
+            case '总结表':
+            case '故事主线':
+                return; // 跳过这些表格，不包含在可读数据表中
+            default:
+                // 处理所有其他表格
+                break;
+        }
+        
         // 添加表格标题 [索引:表名]
-        readableText += `[${tableIndex}:${table.name}]\n`;
+        readableText += `[${actualTableIndex}:${table.name}]\n`;
         
         // 添加列信息 Columns: [0:列名1], [1:列名2], ...
         const headers = table.content[0] ? table.content[0].slice(1) : [];
@@ -4568,6 +4580,7 @@ function formatJsonToReadable(jsonData) {
         }
         
         readableText += '\n';
+        actualTableIndex++; // 只有处理了表格才增加索引
     });
     
     return readableText.trim();
