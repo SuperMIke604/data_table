@@ -1693,18 +1693,28 @@ function loadWorldbookSettingsToUI(settings) {
 }
 
 /**
- * 获取世界书列表
+ * 获取世界书列表 - 完全参考参考资料中的实现
  */
 async function getWorldBooks() {
     try {
-        const context = SillyTavern.getContext();
+        // 按照参考资料的方式获取 TavernHelper
+        const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+        let TavernHelper_API = null;
         
-        // 尝试使用 TavernHelper API
-        if (context && typeof context.getLorebooks === 'function' && typeof context.getLorebookEntries === 'function') {
-            const bookNames = context.getLorebooks();
+        // 尝试多种方式获取TavernHelper
+        if (typeof TavernHelper !== 'undefined') {
+            TavernHelper_API = TavernHelper;
+        } else if (parentWin && parentWin.TavernHelper) {
+            TavernHelper_API = parentWin.TavernHelper;
+        }
+        
+        // 优先使用 TavernHelper API
+        if (TavernHelper_API && typeof TavernHelper_API.getLorebooks === 'function' && typeof TavernHelper_API.getLorebookEntries === 'function') {
+            const bookNames = TavernHelper_API.getLorebooks();
             const books = [];
             for (const name of bookNames) {
-                let entries = await context.getLorebookEntries(name);
+                let entries = await TavernHelper_API.getLorebookEntries(name);
+                // 将世界书名称注入到每个条目中，以便后续处理（如检查启用状态）时可以引用。
                 if (entries && Array.isArray(entries)) {
                     entries = entries.map(entry => ({ ...entry, book: name }));
                 }
@@ -1714,6 +1724,7 @@ async function getWorldBooks() {
         }
         
         // 回退到 SillyTavern API
+        const context = SillyTavern.getContext();
         if (context && typeof context.getWorldBooks === 'function') {
             return await context.getWorldBooks();
         }
@@ -1862,24 +1873,22 @@ async function populateWorldbookEntryList() {
     let bookNames = [];
     
     try {
-        // 获取世界书名称列表
+        // 获取世界书名称列表 - 完全参考参考资料中的实现
         if (source === 'character') {
-            // 尝试使用 TavernHelper API 获取角色卡绑定的世界书
-            const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
-            let TavernHelper = null;
+            // 按照参考资料的方式获取 TavernHelper
+            const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+            let TavernHelper_API = null;
             
             // 尝试多种方式获取TavernHelper
-            if (parentWin && parentWin.TavernHelper) {
-                TavernHelper = parentWin.TavernHelper;
-            } else if (window.TavernHelper) {
-                TavernHelper = window.TavernHelper;
-            } else if (parentWin && parentWin.window && parentWin.window.TavernHelper) {
-                TavernHelper = parentWin.window.TavernHelper;
+            if (typeof TavernHelper !== 'undefined') {
+                TavernHelper_API = TavernHelper;
+            } else if (parentWin && parentWin.TavernHelper) {
+                TavernHelper_API = parentWin.TavernHelper;
             }
             
-            if (TavernHelper && typeof TavernHelper.getCharLorebooks === 'function') {
+            if (TavernHelper_API && typeof TavernHelper_API.getCharLorebooks === 'function') {
                 try {
-                    const charLorebooks = await TavernHelper.getCharLorebooks({ type: 'all' });
+                    const charLorebooks = await TavernHelper_API.getCharLorebooks({ type: 'all' });
                     if (charLorebooks) {
                         if (charLorebooks.primary) {
                             bookNames.push(charLorebooks.primary);

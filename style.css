@@ -77,8 +77,6 @@
 .data-manage-tab-content {
     display: none;
     animation: fadeIn 0.3s ease;
-    overflow-y: auto;
-    max-height: calc(90vh - 200px);
 }
 
 .data-manage-tab-content.active {
@@ -492,9 +490,6 @@
         grid-template-columns: 1fr;
     }
     
-    .data-manage-tab-content {
-        max-height: calc(90vh - 250px);
-    }
 }
 
 /* 数据概览样式 */
