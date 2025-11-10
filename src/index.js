@@ -1,4 +1,5 @@
 /* global SillyTavern */
+/* global jQuery */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -7,56 +8,89 @@ import { importFromUrl } from './util.js';
 
 const { registerSlashCommand } = SillyTavern.getContext();
 
+// Constants
+const MENU_ITEM_CONTAINER_ID = 'notebook-extensions-menu-container';
+const PREVIEW_BUTTON_ID = 'notebook-preview-button';
+const MANAGE_BUTTON_ID = 'notebook-manage-button';
+
+// Function to get jQuery and parent document
+function getJQueryAndParentDoc() {
+    const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+    const $ = typeof jQuery !== 'undefined' ? jQuery : parentWin.jQuery;
+    const parentDoc = SillyTavern?.Chat?.document
+        ? SillyTavern.Chat.document
+        : (window.parent || window).document;
+    return { $, parentDoc };
+}
+
 // Function to add buttons to the menu
 function addButtonsToMenu() {
-    // Choose the root container for the extension's main UI
-    const buttonContainer = document.getElementById('notebook_wand_container') ?? document.getElementById('extensionsMenu');
+    const { $, parentDoc } = getJQueryAndParentDoc();
     
-    // Check if container exists
-    if (!buttonContainer) {
-        // Retry after a delay if container is not ready
+    if (!$ || !parentDoc) {
+        console.error('Notebook: Cannot find jQuery or parent document.');
         setTimeout(addButtonsToMenu, 500);
-        return;
+        return false;
     }
 
-    // Check if buttons already exist to avoid duplicates
-    if (document.getElementById('dataPreviewButton') || document.getElementById('dataManageButton')) {
-        return;
+    const extensionsMenu = $('#extensionsMenu', parentDoc);
+    if (!extensionsMenu.length) {
+        setTimeout(addButtonsToMenu, 2000);
+        return false;
     }
 
+    // Check if container already exists
+    let $menuItemContainer = $(`#${MENU_ITEM_CONTAINER_ID}`, extensionsMenu);
+    
+    if ($menuItemContainer.length > 0) {
+        // Container exists, check if buttons exist
+        const $previewBtn = $menuItemContainer.find(`#${PREVIEW_BUTTON_ID}`);
+        const $manageBtn = $menuItemContainer.find(`#${MANAGE_BUTTON_ID}`);
+        
+        if ($previewBtn.length === 0 || $manageBtn.length === 0) {
+            // Buttons missing, recreate them
+            $menuItemContainer.empty();
+            createButtons($menuItemContainer);
+        } else {
+            // Rebind events
+            setupButtonListeners($previewBtn, $manageBtn);
+        }
+        return true;
+    }
+
+    // Create new container
+    $menuItemContainer = $(
+        `<div class="extension_container interactable" id="${MENU_ITEM_CONTAINER_ID}" tabindex="0"></div>`
+    );
+    
+    createButtons($menuItemContainer);
+    extensionsMenu.append($menuItemContainer);
+    
+    console.log('Notebook: Menu items added.');
+    return true;
+}
+
+// Function to create buttons
+function createButtons($container) {
+    const { $ } = getJQueryAndParentDoc();
+    
     // Create "数据预览" button
-    const previewButtonElement = document.createElement('div');
-    const previewIconElement = document.createElement('i');
-    const previewTextElement = document.createElement('span');
-    previewTextElement.textContent = '数据预览';
-    previewIconElement.classList.add('fa-solid', 'fa-eye');
-    previewButtonElement.id = 'dataPreviewButton';
-    previewButtonElement.classList.add('list-group-item', 'flex-container', 'flexGap5', 'interactable');
-    previewButtonElement.tabIndex = 0;
-    previewButtonElement.appendChild(previewIconElement);
-    previewButtonElement.appendChild(previewTextElement);
-    buttonContainer.appendChild(previewButtonElement);
+    const previewButtonHTML = `<div class="list-group-item flex-container flexGap5 interactable" id="${PREVIEW_BUTTON_ID}" title="数据预览"><div class="fa-fw fa-solid fa-eye extensionsMenuExtensionButton"></div><span>数据预览</span></div>`;
+    const $previewButton = $(previewButtonHTML);
+    $container.append($previewButton);
 
     // Create "数据管理" button
-    const manageButtonElement = document.createElement('div');
-    const manageIconElement = document.createElement('i');
-    const manageTextElement = document.createElement('span');
-    manageTextElement.textContent = '数据管理';
-    manageIconElement.classList.add('fa-solid', 'fa-database');
-    manageButtonElement.id = 'dataManageButton';
-    manageButtonElement.classList.add('list-group-item', 'flex-container', 'flexGap5', 'interactable');
-    manageButtonElement.tabIndex = 0;
-    manageButtonElement.appendChild(manageIconElement);
-    manageButtonElement.appendChild(manageTextElement);
-    buttonContainer.appendChild(manageButtonElement);
+    const manageButtonHTML = `<div class="list-group-item flex-container flexGap5 interactable" id="${MANAGE_BUTTON_ID}" title="数据管理"><div class="fa-fw fa-solid fa-database extensionsMenuExtensionButton"></div><span>数据管理</span></div>`;
+    const $manageButton = $(manageButtonHTML);
+    $container.append($manageButton);
 
     // Setup event listeners
-    setupButtonListeners(previewButtonElement, manageButtonElement);
+    setupButtonListeners($previewButton, $manageButton);
 }
 
 // Store button elements for later use
-let previewButtonElement = null;
-let manageButtonElement = null;
+let $previewButtonElement = null;
+let $manageButtonElement = null;
 
 // Setup root container for the panel
 const rootElement = document.getElementById('movingDivs');
@@ -97,18 +131,38 @@ async function animateNotebookPanel(alreadyVisible) {
 }
 
 // Function to setup button event listeners
-function setupButtonListeners(previewBtn, manageBtn) {
-    previewButtonElement = previewBtn;
-    manageButtonElement = manageBtn;
+function setupButtonListeners($previewBtn, $manageBtn) {
+    const { $, parentDoc } = getJQueryAndParentDoc();
+    
+    $previewButtonElement = $previewBtn;
+    $manageButtonElement = $manageBtn;
+
+    // Remove existing event listeners to avoid duplicates
+    $previewBtn.off('click.notebook');
+    $manageBtn.off('click.notebook');
 
     // Add click event listener for "数据预览" button
-    previewBtn.addEventListener('click', async () => {
+    $previewBtn.on('click.notebook', async function(e) {
+        e.stopPropagation();
+        const exMenuBtn = $('#extensionsMenuButton', parentDoc);
+        const extensionsMenu = $('#extensionsMenu', parentDoc);
+        if (exMenuBtn.length && extensionsMenu.is(':visible')) {
+            exMenuBtn.trigger('click');
+            await new Promise(r => setTimeout(r, 150));
+        }
         const alreadyVisible = rootContainer.classList.contains('flex');
         await animateNotebookPanel(alreadyVisible);
     });
 
     // Add click event listener for "数据管理" button
-    manageBtn.addEventListener('click', async () => {
+    $manageBtn.on('click.notebook', async function(e) {
+        e.stopPropagation();
+        const exMenuBtn = $('#extensionsMenuButton', parentDoc);
+        const extensionsMenu = $('#extensionsMenu', parentDoc);
+        if (exMenuBtn.length && extensionsMenu.is(':visible')) {
+            exMenuBtn.trigger('click');
+            await new Promise(r => setTimeout(r, 150));
+        }
         const alreadyVisible = rootContainer.classList.contains('flex');
         await animateNotebookPanel(alreadyVisible);
     });
@@ -132,12 +186,14 @@ addButtonsToMenu();
 setTimeout(() => {
     try {
         registerSlashCommand('data-preview', () => {
-            const btn = document.getElementById('dataPreviewButton');
-            if (btn) btn.click();
+            const { $, parentDoc } = getJQueryAndParentDoc();
+            const $btn = $(`#${PREVIEW_BUTTON_ID}`, parentDoc);
+            if ($btn.length) $btn.trigger('click');
         }, ['dp'], 'Toggle the data preview display.');
         registerSlashCommand('data-manage', () => {
-            const btn = document.getElementById('dataManageButton');
-            if (btn) btn.click();
+            const { $, parentDoc } = getJQueryAndParentDoc();
+            const $btn = $(`#${MANAGE_BUTTON_ID}`, parentDoc);
+            if ($btn.length) $btn.trigger('click');
         }, ['dm'], 'Toggle the data management display.');
     } catch (err) {
         console.error('Failed to register commands', err);
