@@ -21,7 +21,6 @@ const DEFAULT_SETTINGS = {
     updateBatchSize: 1,            // 每次更新楼层数
     summaryTableMaxEntries: 10,    // 总结条目显示数量
     removeTags: '',                // 自定义删除标签
-    removeMarkers: '',             // 标识剔除
     userMessageTags: '',           // 用户消息标签
     
     // 核心操作
@@ -323,7 +322,6 @@ function loadSettingsToUI() {
     const batchSizeInput = parentDoc.getElementById('data-manage-batch-size');
     const maxEntriesInput = parentDoc.getElementById('data-manage-max-entries');
     const removeTagsInput = parentDoc.getElementById('data-manage-remove-tags');
-    const removeMarkersInput = parentDoc.getElementById('data-manage-remove-markers');
     const userMessageTagsInput = parentDoc.getElementById('data-manage-user-message-tags');
     
     // 更新复选框
@@ -334,7 +332,6 @@ function loadSettingsToUI() {
     if (batchSizeInput) batchSizeInput.value = settings.updateBatchSize || '';
     if (maxEntriesInput) maxEntriesInput.value = settings.summaryTableMaxEntries || '';
     if (removeTagsInput) removeTagsInput.value = settings.removeTags || '';
-    if (removeMarkersInput) removeMarkersInput.value = settings.removeMarkers || '';
     if (userMessageTagsInput) userMessageTagsInput.value = settings.userMessageTags || '';
     
     if (autoUpdateCheckbox) autoUpdateCheckbox.checked = settings.autoUpdateEnabled || false;
@@ -647,14 +644,6 @@ function openDataManagePopup() {
                                 <input type="text" id="data-manage-remove-tags" placeholder="e.g., plot|status">
                                 <button id="data-manage-save-remove-tags" class="secondary">保存</button>
                             </div>
-                        </div>
-                        <div>
-                            <label for="data-manage-remove-markers">标识剔除 (竖线分隔):</label>
-                            <div class="data-manage-input-group">
-                                <input type="text" id="data-manage-remove-markers" placeholder="e.g., 以下|note">
-                                <button id="data-manage-save-remove-markers" class="secondary">保存</button>
-                            </div>
-                            <p class="data-manage-notes">从标识开始到第一个&lt;之前的内容将被剔除</p>
                         </div>
                         <div>
                             <label for="data-manage-user-message-tags">用户消息标签 (竖线分隔):</label>
@@ -1050,20 +1039,6 @@ function setupStatusTabListeners(parentDoc) {
             currentSettings.removeTags = value;
             if (saveSettings()) {
                 showToast('自定义删除标签配置已保存', 'success');
-            } else {
-                showToast('保存失败', 'error');
-            }
-        });
-    }
-    
-    // 保存标识剔除
-    const saveRemoveMarkersBtn = parentDoc.getElementById('data-manage-save-remove-markers');
-    if (saveRemoveMarkersBtn) {
-        saveRemoveMarkersBtn.addEventListener('click', function() {
-            const value = parentDoc.getElementById('data-manage-remove-markers')?.value || '';
-            currentSettings.removeMarkers = value;
-            if (saveSettings()) {
-                showToast('标识剔除配置已保存', 'success');
             } else {
                 showToast('保存失败', 'error');
             }
@@ -2852,14 +2827,14 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `</div>`;
             }
             
-            // 显示表格内容（可编辑）
+            // 显示表格内容（可编辑）- 参考参考文档的展示规则
             html += `<div class="table-scroll-container" style="overflow-x: auto;">`;
-            html += `<table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">`;
+            html += `<table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">`;
             
-            // 表头
+            // 表头 - 参考参考文档：简化为两列：内容和操作
             html += '<thead><tr>';
             html += `<th style="background-color: var(--ios-gray-dark); padding: 8px; text-align: left; border: 1px solid var(--ios-border);">条目内容</th>`;
-            html += `<th style="background-color: var(--ios-gray-dark); padding: 8px; text-align: center; border: 1px solid var(--ios-border); width: 120px;">操作</th>`;
+            html += `<th style="background-color: var(--ios-gray-dark); padding: 8px; text-align: center; border: 1px solid var(--ios-border); width: 80px;">操作</th>`;
             html += '</tr></thead>';
             
             // 数据行
@@ -2880,18 +2855,18 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `style="width: 100%; min-height: 40px; padding: 6px; border: 1px solid var(--ios-border); border-radius: 6px; background-color: var(--ios-gray); color: var(--ios-text); font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;">${escapeHtml(combinedValue)}</textarea>`;
                 html += `</td>`;
                 
-                // 操作列
+                // 操作列 - 参考参考文档：按钮上下排列
                 html += `<td style="text-align: center; vertical-align: middle; padding: 8px; border: 1px solid var(--ios-border);">`;
                 html += `<div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">`;
                 html += `<button class="save-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
                     background: #28a745; color: white; border: none; padding: 4px 8px; 
-                    border-radius: 6px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
+                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
                 ">保存</button>`;
                 html += `<button class="delete-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
                     background: #dc3545; color: white; border: none; padding: 4px 8px; 
-                    border-radius: 6px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
+                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
                 ">删除</button>`;
                 html += `</div>`;
                 html += `</td>`;
@@ -3589,19 +3564,6 @@ async function prepareAIInput(messages) {
             let content = msg.mes || msg.message || '';
             
             // 清理内容：移除标记和标签
-            if (currentSettings.removeMarkers) {
-                const markerIndex = content.indexOf(currentSettings.removeMarkers);
-                if (markerIndex !== -1) {
-                    const beforeMarker = content.substring(0, markerIndex);
-                    const afterMarker = content.substring(markerIndex);
-                    const tagIndex = afterMarker.indexOf('<');
-                    if (tagIndex !== -1) {
-                        content = beforeMarker + afterMarker.substring(tagIndex);
-                    } else {
-                        content = beforeMarker;
-                    }
-                }
-            }
             
             if (currentSettings.removeTags) {
                 const tags = currentSettings.removeTags.split(',').map(t => t.trim());
@@ -4159,9 +4121,57 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
 async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在填表，请稍候...', saveTargetIndex = -1) {
     let success = false;
     const maxRetries = 3;
+    let loadingToast = null;
     
     try {
-        showToast(batchToastMessage, 'info');
+        // 参考参考文档：创建带终止按钮的toast
+        const stopButtonHtml = `
+            <button id="data-manage-stop-update-btn" 
+                    style="border: 1px solid #ffc107; color: #ffc107; background: transparent; padding: 5px 10px; border-radius: 4px; cursor: pointer; float: right; margin-left: 15px; font-size: 0.9em; transition: all 0.2s ease;"
+                    onmouseover="this.style.backgroundColor='#ffc107'; this.style.color='#1a1d24';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#ffc107';">
+                终止
+            </button>`;
+        const toastMessage = `<div>${batchToastMessage}${stopButtonHtml}</div>`;
+        
+        // 显示toast（使用HTML内容）
+        const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
+        if (parentWin.toastr) {
+            loadingToast = parentWin.toastr.info(toastMessage, '', {
+                timeOut: 0,
+                extendedTimeOut: 0,
+                tapToDismiss: false,
+                escapeHtml: false,
+                onShown: function() {
+                    const stopBtn = parentWin.document.getElementById('data-manage-stop-update-btn');
+                    if (stopBtn) {
+                        stopBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            
+                            // 中止请求
+                            if (currentAbortController) {
+                                currentAbortController.abort();
+                            }
+                            const context = SillyTavern.getContext();
+                            if (context && typeof context.stopGeneration === 'function') {
+                                context.stopGeneration();
+                            }
+                            
+                            // 移除toast
+                            if (parentWin.toastr && loadingToast) {
+                                parentWin.toastr.clear(loadingToast);
+                            }
+                            
+                            // 显示确认消息
+                            showToast('填表操作已由用户终止。', 'warning');
+                        });
+                    }
+                }
+            });
+        } else {
+            showToast(batchToastMessage, 'info');
+        }
         
         // 准备AI输入
         console.log('准备AI输入...');
@@ -4221,6 +4231,15 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
             showToast(`更新失败: ${error.message}`, 'error');
         }
         return false;
+    } finally {
+        // 清除toast
+        if (loadingToast) {
+            const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
+            if (parentWin.toastr) {
+                parentWin.toastr.clear(loadingToast);
+            }
+        }
+        currentAbortController = null;
     }
 }
 
