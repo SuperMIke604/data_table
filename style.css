@@ -1,0 +1,298 @@
+/* iOS 扁平风格弹窗样式 */
+.data-manage-popup {
+    --ios-blue: #007AFF;
+    --ios-blue-hover: #0051D5;
+    --ios-gray: #F2F2F7;
+    --ios-gray-dark: #E5E5EA;
+    --ios-text: #000000;
+    --ios-text-secondary: #8E8E93;
+    --ios-border: #C6C6C8;
+    --ios-surface: #FFFFFF;
+    --ios-shadow: rgba(0, 0, 0, 0.1);
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 16px;
+    color: var(--ios-text);
+    background-color: var(--ios-gray);
+    border-radius: 14px;
+    box-shadow: 0 4px 20px var(--ios-shadow);
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* 标题 */
+.data-manage-popup h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ios-text);
+    text-align: center;
+    margin: 0 0 20px 0;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--ios-border);
+}
+
+/* Tab导航 */
+.data-manage-tabs-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--ios-border);
+    margin-bottom: 20px;
+    background-color: var(--ios-surface);
+    border-radius: 10px 10px 0 0;
+    overflow: hidden;
+}
+
+.data-manage-tab-button {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    background: transparent;
+    color: var(--ios-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+    position: relative;
+}
+
+.data-manage-tab-button:hover {
+    background-color: var(--ios-gray);
+    color: var(--ios-text);
+}
+
+.data-manage-tab-button.active {
+    color: var(--ios-blue);
+    border-bottom-color: var(--ios-blue);
+    background-color: var(--ios-gray);
+}
+
+/* Tab内容 */
+.data-manage-tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.data-manage-tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 卡片样式 */
+.data-manage-card {
+    background-color: var(--ios-surface);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px var(--ios-shadow);
+}
+
+.data-manage-card h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ios-text);
+    margin: 0 0 16px 0;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ios-gray-dark);
+}
+
+/* 网格布局 */
+.data-manage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+/* 表单元素 */
+.data-manage-popup label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--ios-text);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.data-manage-popup input,
+.data-manage-popup select,
+.data-manage-popup textarea {
+    width: 100%;
+    padding: 12px 16px;
+    background-color: var(--ios-gray);
+    border: 1px solid var(--ios-border);
+    border-radius: 10px;
+    color: var(--ios-text);
+    font-size: 16px;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.data-manage-popup input:focus,
+.data-manage-popup select:focus,
+.data-manage-popup textarea:focus {
+    outline: none;
+    border-color: var(--ios-blue);
+    background-color: var(--ios-surface);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.data-manage-popup textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+/* 按钮样式 - iOS扁平风格 */
+.data-manage-popup button,
+.data-manage-popup .button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.data-manage-popup button.primary,
+.data-manage-popup .button.primary {
+    background-color: var(--ios-blue);
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+
+.data-manage-popup button.primary:hover {
+    background-color: var(--ios-blue-hover);
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+.data-manage-popup button.primary:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3);
+}
+
+.data-manage-popup button.secondary {
+    background-color: var(--ios-gray-dark);
+    color: var(--ios-text);
+}
+
+.data-manage-popup button.secondary:hover {
+    background-color: var(--ios-border);
+}
+
+.data-manage-popup button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* 按钮组 */
+.data-manage-button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+/* 输入组 */
+.data-manage-input-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.data-manage-input-group label {
+    min-width: 120px;
+    margin-bottom: 0;
+}
+
+.data-manage-input-group input {
+    flex: 1;
+}
+
+/* 复选框组 */
+.data-manage-checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background-color: var(--ios-gray);
+    border-radius: 10px;
+    margin-bottom: 12px;
+}
+
+.data-manage-checkbox-group input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+}
+
+.data-manage-checkbox-group label {
+    margin: 0;
+    cursor: pointer;
+    flex: 1;
+}
+
+/* 状态显示 */
+.data-manage-status-display {
+    text-align: center;
+    padding: 16px;
+    border: 1px dashed var(--ios-border);
+    border-radius: 10px;
+    background-color: var(--ios-gray);
+    margin-bottom: 16px;
+    color: var(--ios-text-secondary);
+}
+
+/* 说明文字 */
+.data-manage-notes {
+    font-size: 13px;
+    color: var(--ios-text-secondary);
+    margin-top: 8px;
+    line-height: 1.4;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .data-manage-popup {
+        padding: 16px;
+        border-radius: 12px;
+    }
+    
+    .data-manage-tabs-nav {
+        flex-direction: column;
+    }
+    
+    .data-manage-tab-button {
+        border-bottom: 1px solid var(--ios-border);
+        border-right: none;
+    }
+    
+    .data-manage-tab-button.active {
+        border-bottom-color: var(--ios-blue);
+    }
+    
+    .data-manage-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

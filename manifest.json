@@ -5,7 +5,7 @@
     "optional": [],
     "dependencies": [],
     "js": "index.js",
-    "css": "",
+    "css": "style.css",
     "author": "Your Name",
     "version": "1.0.0",
     "homePage": "https://github.com/your/extension",
