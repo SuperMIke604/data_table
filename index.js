@@ -973,7 +973,12 @@ function setupStatusTabListeners(parentDoc) {
             
             console.log(`按楼层范围更新数据库: ${floorStart} - ${floorEnd}`);
             showToast(`开始更新楼层 ${floorStart} 到 ${floorEnd} 的数据库...`, 'info');
-            // TODO: 实现实际的数据库更新逻辑
+            
+            // 实现实际的数据库更新逻辑
+            updateDatabaseByFloorRange(floorStart, floorEnd).catch(error => {
+                console.error('更新数据库失败:', error);
+                showToast(`更新数据库失败: ${error.message}`, 'error');
+            });
         });
     }
     
@@ -2334,24 +2339,59 @@ function handleToggleDetails(e) {
     e.preventDefault();
     e.stopPropagation();
     
-    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
-    const parentDoc = (window.parent && window.parent !== window) 
-        ? window.parent.document 
-        : document;
-    const overviewArea = parentDoc.getElementById('data-manage-overview-area');
-    if (!overviewArea) return;
-    
-    const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
-    const toggleBtn = overviewArea.querySelector(`.toggle-details-btn[data-message-index="${messageIndex}"]`);
-    
-    if (!detailsArea || !toggleBtn) return;
-    
     try {
+        const messageIndexStr = e.target.getAttribute('data-message-index');
+        if (!messageIndexStr) {
+            console.error('无法获取消息索引');
+            showToast('无法获取消息索引', 'error');
+            return;
+        }
+        
+        const messageIndex = parseInt(messageIndexStr);
+        if (isNaN(messageIndex)) {
+            console.error('消息索引无效:', messageIndexStr);
+            showToast('消息索引无效', 'error');
+            return;
+        }
+        
+        const parentDoc = (window.parent && window.parent !== window) 
+            ? window.parent.document 
+            : document;
+        const overviewArea = parentDoc.getElementById('data-manage-overview-area');
+        if (!overviewArea) {
+            console.error('无法找到概览区域');
+            showToast('无法找到概览区域', 'error');
+            return;
+        }
+        
+        const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
+        const toggleBtn = overviewArea.querySelector(`.toggle-details-btn[data-message-index="${messageIndex}"]`);
+        
+        if (!detailsArea || !toggleBtn) {
+            console.error('无法找到详情区域或按钮', { detailsArea: !!detailsArea, toggleBtn: !!toggleBtn, messageIndex });
+            showToast('无法找到详情区域', 'error');
+            return;
+        }
+        
         const context = SillyTavern.getContext();
-        if (!context || !context.chat) return;
+        if (!context || !context.chat) {
+            console.error('无法获取聊天记录上下文');
+            showToast('无法获取聊天记录', 'error');
+            return;
+        }
+        
+        if (messageIndex < 0 || messageIndex >= context.chat.length) {
+            console.error('消息索引超出范围:', messageIndex, '聊天记录长度:', context.chat.length);
+            showToast('消息索引超出范围', 'error');
+            return;
+        }
         
         const message = context.chat[messageIndex];
-        if (!message) return;
+        if (!message) {
+            console.error('消息不存在:', messageIndex);
+            showToast('消息不存在', 'error');
+            return;
+        }
         
         let messageData = null;
         if (message.TavernDB_ACU_Data) {
@@ -2365,12 +2405,20 @@ function handleToggleDetails(e) {
                 } else {
                     try {
                         messageData = JSON.parse(mesText);
-                    } catch (e) {}
+                    } catch (e) {
+                        console.warn('无法解析消息文本为JSON:', e);
+                    }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn('解析消息数据失败:', e);
+            }
         }
         
-        if (!messageData) return;
+        if (!messageData) {
+            console.error('无法获取消息数据');
+            showToast('该消息没有数据库数据', 'warning');
+            return;
+        }
         
         if (detailsArea.style.display === 'none' || !detailsArea.style.display) {
             // 展开详情
@@ -2396,7 +2444,7 @@ function handleToggleDetails(e) {
         }
     } catch (error) {
         console.error('展开/收起详情失败:', error);
-        showToast('展开/收起详情失败', 'error');
+        showToast(`展开/收起详情失败: ${error.message}`, 'error');
     }
 }
 
@@ -3082,6 +3130,62 @@ function setupPopupScripts() {
             });
         });
     `;
+}
+
+/**
+ * 按楼层范围更新数据库
+ */
+async function updateDatabaseByFloorRange(floorStart, floorEnd) {
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) {
+            throw new Error('无法获取聊天记录');
+        }
+        
+        const chat = context.chat;
+        
+        // 验证楼层范围
+        if (floorStart < 1 || floorEnd < 1 || floorStart > chat.length || floorEnd > chat.length) {
+            throw new Error('楼层范围无效');
+        }
+        
+        // 查找要更新的消息索引（楼层从1开始，数组索引从0开始）
+        const indicesToUpdate = [];
+        for (let i = floorStart; i <= floorEnd; i++) {
+            const messageIndex = i - 1; // 转换为数组索引
+            if (messageIndex >= 0 && messageIndex < chat.length) {
+                const message = chat[messageIndex];
+                // 只更新AI回复的消息
+                if (message && !message.is_user) {
+                    indicesToUpdate.push(messageIndex);
+                }
+            }
+        }
+        
+        if (indicesToUpdate.length === 0) {
+            showToast('指定楼层范围内没有需要更新的消息', 'warning');
+            return;
+        }
+        
+        showToast(`开始更新 ${indicesToUpdate.length} 条消息的数据库...`, 'info');
+        
+        // 这里需要实现实际的更新逻辑
+        // 由于更新功能比较复杂，需要调用API、解析响应、保存数据等
+        // 暂时显示提示信息
+        showToast('数据库更新功能正在开发中，请参考参考文档实现完整的更新逻辑', 'info');
+        
+        console.log('需要更新的消息索引:', indicesToUpdate);
+        console.log('更新配置:', {
+            floorStart,
+            floorEnd,
+            batchSize: currentSettings.updateBatchSize,
+            autoUpdateFrequency: currentSettings.autoUpdateFrequency
+        });
+        
+    } catch (error) {
+        console.error('更新数据库失败:', error);
+        throw error;
+    }
 }
 
 // 初始化：等待 DOM 加载完成后添加按钮
