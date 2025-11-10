@@ -30,6 +30,9 @@ const DEFAULT_SETTINGS = {
     // AI指令预设
     charCardPrompt: DEFAULT_CHAR_CARD_PROMPT,  // 数据库更新预设
     
+    // 数据概览模板（独立于AI指令预设）
+    overviewTemplate: DEFAULT_CHAR_CARD_PROMPT,  // 数据概览模板
+    
     // API配置
     apiMode: 'custom',             // API模式: 'custom' 或 'tavern'
     apiConfig: {
@@ -820,6 +823,9 @@ function openDataManagePopup() {
     // 使用 SillyTavern 的弹窗API
     if (context && context.callGenericPopup) {
         context.callGenericPopup(popupHtml, context.POPUP_TYPE?.DISPLAY || 'display', '数据管理', {
+            wide: true,
+            large: true,
+            allowVerticalScrolling: true,
             okButton: '关闭',
             cancelButton: false,
             callback: function(action) {
@@ -1962,6 +1968,7 @@ function exportCombinedSettings() {
         const combinedData = {
             template: currentSettings,
             prompt: currentSettings.charCardPrompt,
+            overviewTemplate: currentSettings.overviewTemplate || DEFAULT_CHAR_CARD_PROMPT,
             timestamp: new Date().toISOString(),
             version: '1.0.0'
         };
@@ -2006,6 +2013,9 @@ function importCombinedSettings() {
                 if (importedData.prompt) {
                     currentSettings.charCardPrompt = importedData.prompt;
                 }
+                if (importedData.overviewTemplate) {
+                    currentSettings.overviewTemplate = importedData.overviewTemplate;
+                }
                 
                 if (saveSettings()) {
                     loadSettingsToUI();
@@ -2041,7 +2051,7 @@ function visualizeTemplate() {
         
         const templateData = {
             settings: currentSettings,
-            prompt: currentSettings.charCardPrompt
+            overviewTemplate: currentSettings.overviewTemplate || DEFAULT_CHAR_CARD_PROMPT
         };
         
         textarea.value = JSON.stringify(templateData, null, 2);
@@ -2067,8 +2077,8 @@ function saveVisualizedTemplate() {
         if (templateData.settings) {
             Object.assign(currentSettings, templateData.settings);
         }
-        if (templateData.prompt) {
-            currentSettings.charCardPrompt = templateData.prompt;
+        if (templateData.overviewTemplate) {
+            currentSettings.overviewTemplate = templateData.overviewTemplate;
         }
         
         if (saveSettings()) {
@@ -2328,6 +2338,9 @@ async function showDataPreview() {
         // 使用SillyTavern的弹窗API
         if (context && context.callGenericPopup) {
             context.callGenericPopup(previewHtml, context.POPUP_TYPE?.DISPLAY || 'display', '数据预览', {
+                wide: true,
+                large: true,
+                allowVerticalScrolling: true,
                 okButton: '关闭',
                 cancelButton: false,
                 callback: function(action) {
