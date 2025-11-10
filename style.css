@@ -40,7 +40,8 @@
 .data-manage-tabs-nav {
     display: flex;
     gap: 0;
-    margin-bottom: 20px;
+    margin-bottom: 0;
+    margin-top: 0;
     background-color: var(--ios-surface);
     border-radius: 10px;
     overflow: hidden;
@@ -76,6 +77,8 @@
 .data-manage-tab-content {
     display: none;
     animation: fadeIn 0.3s ease;
+    margin-top: 0;
+    padding-top: 0;
 }
 
 .data-manage-tab-content.active {
