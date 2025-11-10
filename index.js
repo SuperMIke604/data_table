@@ -2455,6 +2455,309 @@ function handleToggleDetails(e) {
 }
 
 /**
+ * 处理保存行
+ */
+async function handleSaveRow(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const sheetKey = e.target.getAttribute('data-sheet-key');
+    const rowIndex = parseInt(e.target.getAttribute('data-row-index'));
+    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) {
+            showToast('无法访问聊天记录', 'error');
+            return;
+        }
+        
+        const message = context.chat[messageIndex];
+        if (!message) {
+            showToast('消息不存在', 'error');
+            return;
+        }
+        
+        let messageData = null;
+        if (message.TavernDB_ACU_Data) {
+            messageData = message.TavernDB_ACU_Data;
+        } else if (message.mes) {
+            try {
+                const mesText = message.mes;
+                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    messageData = JSON.parse(jsonMatch[1]);
+                } else {
+                    try {
+                        messageData = JSON.parse(mesText);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
+        
+        if (!messageData || !messageData[sheetKey]) {
+            showToast('无法找到指定的表格', 'error');
+            return;
+        }
+        
+        const parentDoc = (window.parent && window.parent !== window) 
+            ? window.parent.document 
+            : document;
+        const overviewArea = parentDoc.getElementById('data-manage-overview-area');
+        if (!overviewArea) return;
+        
+        const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
+        if (!detailsArea) return;
+        
+        // 获取输入框内容
+        const rowInput = detailsArea.querySelector(`tr[data-row-index="${rowIndex}"][data-sheet-key="${sheetKey}"] .cell-input`);
+        if (!rowInput) {
+            showToast('无法找到输入框', 'error');
+            return;
+        }
+        
+        // 读取输入框内容，按 | 分隔符分割为数组
+        const inputValue = rowInput.value;
+        const newRowData = inputValue ? inputValue.split(' | ').map(val => val.trim()) : [];
+        
+        // 确保数组长度与原行数据一致
+        const table = messageData[sheetKey];
+        const originalRowData = table.content[rowIndex + 1] ? table.content[rowIndex + 1].slice(1) : [];
+        while (newRowData.length < originalRowData.length) {
+            newRowData.push('');
+        }
+        
+        // 创建深拷贝以更新数据
+        const newJsonData = JSON.parse(JSON.stringify(messageData));
+        const newTable = newJsonData[sheetKey];
+        
+        // 更新数据
+        if (newTable.content[rowIndex + 1]) {
+            newTable.content[rowIndex + 1] = [null, ...newRowData];
+        }
+        
+        // 更新消息数据
+        if (message.TavernDB_ACU_Data) {
+            message.TavernDB_ACU_Data = newJsonData;
+        } else if (message.mes) {
+            // 更新消息文本中的JSON数据
+            try {
+                const mesText = message.mes;
+                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    message.mes = mesText.replace(/```json\s*[\s\S]*?\s*```/, `\`\`\`json\n${JSON.stringify(newJsonData, null, 2)}\n\`\`\``);
+                } else {
+                    message.mes = JSON.stringify(newJsonData);
+                }
+            } catch (e) {
+                console.error('更新消息文本失败:', e);
+            }
+        }
+        
+        // 刷新显示
+        const contentDiv = detailsArea.querySelector('.details-content');
+        if (contentDiv) {
+            contentDiv.innerHTML = loadMessageDetails(messageIndex, newJsonData);
+            // 重新绑定事件
+            bindOverviewEvents(parentDoc);
+        }
+        
+        showToast('数据已保存', 'success');
+    } catch (error) {
+        console.error('保存行失败:', error);
+        showToast(`保存失败: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * 处理删除行
+ */
+async function handleDeleteRow(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const sheetKey = e.target.getAttribute('data-sheet-key');
+    const rowIndex = parseInt(e.target.getAttribute('data-row-index'));
+    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    
+    if (!confirm(`确定要删除这一行数据吗？此操作不可恢复。`)) {
+        return;
+    }
+    
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) {
+            showToast('无法访问聊天记录', 'error');
+            return;
+        }
+        
+        const message = context.chat[messageIndex];
+        if (!message) {
+            showToast('消息不存在', 'error');
+            return;
+        }
+        
+        let messageData = null;
+        if (message.TavernDB_ACU_Data) {
+            messageData = message.TavernDB_ACU_Data;
+        } else if (message.mes) {
+            try {
+                const mesText = message.mes;
+                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    messageData = JSON.parse(jsonMatch[1]);
+                } else {
+                    try {
+                        messageData = JSON.parse(mesText);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
+        
+        if (!messageData || !messageData[sheetKey]) {
+            showToast('无法找到指定的表格', 'error');
+            return;
+        }
+        
+        const table = messageData[sheetKey];
+        if (!table.content || !table.content[rowIndex + 1]) {
+            showToast('无法找到指定的行', 'error');
+            return;
+        }
+        
+        // 创建深拷贝以更新数据
+        const newJsonData = JSON.parse(JSON.stringify(messageData));
+        const newTable = newJsonData[sheetKey];
+        
+        // 删除行
+        newTable.content.splice(rowIndex + 1, 1);
+        
+        // 更新消息数据
+        if (message.TavernDB_ACU_Data) {
+            message.TavernDB_ACU_Data = newJsonData;
+        } else if (message.mes) {
+            try {
+                const mesText = message.mes;
+                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    message.mes = mesText.replace(/```json\s*[\s\S]*?\s*```/, `\`\`\`json\n${JSON.stringify(newJsonData, null, 2)}\n\`\`\``);
+                } else {
+                    message.mes = JSON.stringify(newJsonData);
+                }
+            } catch (e) {
+                console.error('更新消息文本失败:', e);
+            }
+        }
+        
+        // 刷新显示
+        const parentDoc = (window.parent && window.parent !== window) 
+            ? window.parent.document 
+            : document;
+        const overviewArea = parentDoc.getElementById('data-manage-overview-area');
+        if (overviewArea) {
+            const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
+            if (detailsArea) {
+                const contentDiv = detailsArea.querySelector('.details-content');
+                if (contentDiv) {
+                    contentDiv.innerHTML = loadMessageDetails(messageIndex, newJsonData);
+                    // 重新绑定事件
+                    bindOverviewEvents(parentDoc);
+                }
+            }
+        }
+        
+        showToast('行已删除', 'success');
+    } catch (error) {
+        console.error('删除行失败:', error);
+        showToast(`删除失败: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * 处理删除表格
+ */
+async function handleDeleteTable(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const sheetKey = e.target.getAttribute('data-sheet-key');
+    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) {
+            showToast('无法访问聊天记录', 'error');
+            return;
+        }
+        
+        const message = context.chat[messageIndex];
+        if (!message) {
+            showToast('消息不存在', 'error');
+            return;
+        }
+        
+        let messageData = null;
+        if (message.TavernDB_ACU_Data) {
+            messageData = message.TavernDB_ACU_Data;
+        } else if (message.mes) {
+            try {
+                const mesText = message.mes;
+                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    messageData = JSON.parse(jsonMatch[1]);
+                } else {
+                    try {
+                        messageData = JSON.parse(mesText);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
+        
+        if (!messageData || !messageData[sheetKey]) {
+            showToast('无法找到指定的表格', 'error');
+            return;
+        }
+        
+        const table = messageData[sheetKey];
+        const tableName = table.name || '表格';
+        
+        if (!confirm(`确定要删除表格 "${tableName}" 吗？此操作不可恢复。`)) {
+            return;
+        }
+        
+        // 创建深拷贝以更新数据
+        const newJsonData = JSON.parse(JSON.stringify(messageData));
+        
+        // 删除表格
+        delete newJsonData[sheetKey];
+        
+        // 更新消息数据
+        if (message.TavernDB_ACU_Data) {
+            message.TavernDB_ACU_Data = newJsonData;
+        } else if (message.mes) {
+            try {
+                const mesText = message.mes;
+                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    message.mes = mesText.replace(/```json\s*[\s\S]*?\s*```/, `\`\`\`json\n${JSON.stringify(newJsonData, null, 2)}\n\`\`\``);
+                } else {
+                    message.mes = JSON.stringify(newJsonData);
+                }
+            } catch (e) {
+                console.error('更新消息文本失败:', e);
+            }
+        }
+        
+        // 刷新概览
+        showDataOverview();
+        showToast('表格已删除', 'success');
+    } catch (error) {
+        console.error('删除表格失败:', error);
+        showToast(`删除失败: ${error.message}`, 'error');
+    }
+}
+
+/**
  * 处理删除记录
  */
 async function handleDeleteMessage(e) {
@@ -3139,6 +3442,72 @@ function setupPopupScripts() {
 }
 
 /**
+ * 加载数据库模板
+ */
+async function loadDatabaseTemplate() {
+    try {
+        const topLevelWindow = (window.parent && window.parent !== window) ? window.parent : window;
+        let templateStr = null;
+        
+        // 优先从extensionSettings加载
+        const context = SillyTavern.getContext();
+        if (context && context.extensionSettings && context.extensionSettings.dataManage) {
+            const template = context.extensionSettings.dataManage.overviewTemplate;
+            if (template && typeof template === 'string' && template.trim()) {
+                templateStr = template;
+            }
+        }
+        
+        // 备用：从localStorage加载
+        if (!templateStr && topLevelWindow.localStorage) {
+            templateStr = topLevelWindow.localStorage.getItem(STORAGE_KEY_TEMPLATE);
+        }
+        
+        if (!templateStr || !templateStr.trim()) {
+            console.warn('未找到数据库模板，使用空模板');
+            // 返回一个基本的空模板结构
+            return {
+                mate: {
+                    type: 'chatSheets'
+                }
+            };
+        }
+        
+        // 清理模板（移除注释）
+        let cleanTemplate = templateStr.trim();
+        cleanTemplate = cleanTemplate.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        
+        // 解析JSON
+        const template = JSON.parse(cleanTemplate);
+        
+        // 验证模板结构
+        if (!template.mate || template.mate.type !== 'chatSheets') {
+            throw new Error('模板格式不正确：缺少mate对象或type属性');
+        }
+        
+        const sheetKeys = Object.keys(template).filter(k => k.startsWith('sheet_'));
+        if (sheetKeys.length === 0) {
+            console.warn('模板中没有表格数据，使用空模板');
+            return {
+                mate: {
+                    type: 'chatSheets'
+                }
+            };
+        }
+        
+        return template;
+    } catch (error) {
+        console.error('加载数据库模板失败:', error);
+        // 返回一个基本的空模板结构
+        return {
+            mate: {
+                type: 'chatSheets'
+            }
+        };
+    }
+}
+
+/**
  * 准备AI输入 - 准备表格数据、消息文本、世界书内容
  */
 async function prepareAIInput(messages) {
@@ -3700,11 +4069,22 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
             }
             
             if (!foundDb) {
-                console.log(`[批次 ${batchNumber}] 未找到之前的数据库，需要从模板初始化`);
-                // 这里可以从模板初始化，暂时跳过
-                showToast('未找到基础数据库，请先初始化数据库', 'warning');
-                overallSuccess = false;
-                break;
+                console.log(`[批次 ${batchNumber}] 未找到之前的数据库，从模板初始化`);
+                try {
+                    // 从模板初始化数据库
+                    const template = await loadDatabaseTemplate();
+                    if (template) {
+                        currentJsonTableData = JSON.parse(JSON.stringify(template));
+                        console.log(`[批次 ${batchNumber}] 从模板成功初始化数据库`);
+                    } else {
+                        throw new Error('无法加载数据库模板');
+                    }
+                } catch (e) {
+                    console.error(`[批次 ${batchNumber}] 从模板初始化数据库失败:`, e);
+                    showToast('无法从模板初始化数据库，请检查模板格式', 'error');
+                    overallSuccess = false;
+                    break;
+                }
             }
             
             // 2. 准备要处理的消息（包含用户消息和AI回复）
