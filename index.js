@@ -1855,17 +1855,27 @@ async function populateWorldbookEntryList() {
         if (source === 'character') {
             // 尝试使用 TavernHelper API 获取角色卡绑定的世界书
             const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
-            let TavernHelper = parentWin.TavernHelper;
-            if (!TavernHelper && typeof window.TavernHelper !== 'undefined') {
+            let TavernHelper = null;
+            
+            // 尝试多种方式获取TavernHelper
+            if (parentWin && parentWin.TavernHelper) {
+                TavernHelper = parentWin.TavernHelper;
+            } else if (window.TavernHelper) {
                 TavernHelper = window.TavernHelper;
+            } else if (parentWin && parentWin.window && parentWin.window.TavernHelper) {
+                TavernHelper = parentWin.window.TavernHelper;
             }
             
             if (TavernHelper && typeof TavernHelper.getCharLorebooks === 'function') {
                 try {
                     const charLorebooks = await TavernHelper.getCharLorebooks({ type: 'all' });
-                    if (charLorebooks && charLorebooks.primary) bookNames.push(charLorebooks.primary);
-                    if (charLorebooks && charLorebooks.additional && charLorebooks.additional.length) {
-                        bookNames.push(...charLorebooks.additional);
+                    if (charLorebooks) {
+                        if (charLorebooks.primary) {
+                            bookNames.push(charLorebooks.primary);
+                        }
+                        if (charLorebooks.additional && Array.isArray(charLorebooks.additional) && charLorebooks.additional.length > 0) {
+                            bookNames.push(...charLorebooks.additional);
+                        }
                     }
                 } catch (error) {
                     console.error('使用TavernHelper获取角色卡世界书失败:', error);
@@ -1878,11 +1888,11 @@ async function populateWorldbookEntryList() {
                 if (context && context.chat && context.chat.character) {
                     try {
                         const char = context.chat.character;
-                        if (char.lorebook && char.lorebook.length > 0) {
+                        if (char.lorebook && Array.isArray(char.lorebook) && char.lorebook.length > 0) {
                             // 从角色卡数据中提取世界书名称
                             const lorebookNames = new Set();
                             char.lorebook.forEach(entry => {
-                                if (entry.worldbook) {
+                                if (entry && entry.worldbook) {
                                     lorebookNames.add(entry.worldbook);
                                 }
                             });
@@ -2275,6 +2285,9 @@ function bindOverviewEvents(parentDoc) {
     // 移除之前的事件绑定
     const toggleBtns = overviewArea.querySelectorAll('.toggle-details-btn');
     const deleteBtns = overviewArea.querySelectorAll('.delete-message-btn');
+    const saveRowBtns = overviewArea.querySelectorAll('.save-row-btn');
+    const deleteRowBtns = overviewArea.querySelectorAll('.delete-row-btn');
+    const deleteTableBtns = overviewArea.querySelectorAll('.delete-table-btn');
     
     toggleBtns.forEach(btn => {
         btn.removeEventListener('click', handleToggleDetails);
@@ -2284,6 +2297,33 @@ function bindOverviewEvents(parentDoc) {
     deleteBtns.forEach(btn => {
         btn.removeEventListener('click', handleDeleteMessage);
         btn.addEventListener('click', handleDeleteMessage);
+    });
+    
+    saveRowBtns.forEach(btn => {
+        btn.removeEventListener('click', handleSaveRow);
+        btn.addEventListener('click', handleSaveRow);
+    });
+    
+    deleteRowBtns.forEach(btn => {
+        btn.removeEventListener('click', handleDeleteRow);
+        btn.addEventListener('click', handleDeleteRow);
+    });
+    
+    deleteTableBtns.forEach(btn => {
+        btn.removeEventListener('click', handleDeleteTable);
+        btn.addEventListener('click', handleDeleteTable);
+    });
+    
+    // 自适应高度函数
+    const textareas = overviewArea.querySelectorAll('.cell-input');
+    textareas.forEach(textarea => {
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.max(40, this.scrollHeight) + 'px';
+        });
+        // 初始化高度
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
     });
 }
 
@@ -2337,6 +2377,8 @@ function handleToggleDetails(e) {
             const contentDiv = detailsArea.querySelector('.details-content');
             if (contentDiv) {
                 contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
+                // 重新绑定事件
+                bindOverviewEvents(parentDoc);
             }
             detailsArea.style.display = 'block';
             toggleBtn.textContent = '收起详情';
@@ -2427,6 +2469,10 @@ function loadMessageDetails(messageIndex, messageData) {
             html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px;">`;
             html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
             html += `<h4 class="table-title" style="margin: 0; color: var(--ios-text);">${escapeHtml(table.name)}</h4>`;
+            html += `<button class="delete-table-btn" data-sheet-key="${sheetKey}" data-message-index="${messageIndex}" style="
+                background: #dc3545; color: white; border: none; padding: 5px 10px; 
+                border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;
+            ">删除表格</button>`;
             html += `</div>`;
             
             // 显示表格元数据
@@ -2436,9 +2482,55 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `</div>`;
             }
             
-            // 显示表格内容
+            // 显示表格内容（可编辑）
             html += `<div class="table-scroll-container" style="overflow-x: auto;">`;
-            html += generateTableHtml(table.name, table.content);
+            html += `<table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">`;
+            
+            // 表头
+            html += '<thead><tr>';
+            html += `<th style="background-color: var(--ios-gray-dark); padding: 8px; text-align: left; border: 1px solid var(--ios-border);">条目内容</th>`;
+            html += `<th style="background-color: var(--ios-gray-dark); padding: 8px; text-align: center; border: 1px solid var(--ios-border); width: 120px;">操作</th>`;
+            html += '</tr></thead>';
+            
+            // 数据行
+            html += '<tbody>';
+            const rows = table.content.slice(1);
+            rows.forEach((row, rowIndex) => {
+                const rowData = row.slice(1);
+                // 将所有字段值用 | 分隔符合并为一个字符串
+                const combinedValue = rowData.map(cell => cell || '').join(' | ');
+                
+                html += `<tr data-row-index="${rowIndex}" data-sheet-key="${sheetKey}">`;
+                
+                // 单个输入框 - 包含整行数据（用 | 分隔）
+                html += `<td class="editable-cell" style="padding: 8px; border: 1px solid var(--ios-border);">`;
+                html += `<textarea class="cell-input" `;
+                html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
+                html += `data-message-index="${messageIndex}" `;
+                html += `style="width: 100%; min-height: 40px; padding: 6px; border: 1px solid var(--ios-border); border-radius: 6px; background-color: var(--ios-gray); color: var(--ios-text); font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;">${escapeHtml(combinedValue)}</textarea>`;
+                html += `</td>`;
+                
+                // 操作列
+                html += `<td style="text-align: center; vertical-align: middle; padding: 8px; border: 1px solid var(--ios-border);">`;
+                html += `<div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">`;
+                html += `<button class="save-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
+                html += `data-message-index="${messageIndex}" style="
+                    background: #28a745; color: white; border: none; padding: 4px 8px; 
+                    border-radius: 6px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
+                ">保存</button>`;
+                html += `<button class="delete-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
+                html += `data-message-index="${messageIndex}" style="
+                    background: #dc3545; color: white; border: none; padding: 4px 8px; 
+                    border-radius: 6px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
+                ">删除</button>`;
+                html += `</div>`;
+                html += `</td>`;
+                
+                html += '</tr>';
+            });
+            
+            html += '</tbody>';
+            html += '</table>';
             html += `</div>`;
             
             html += `</div>`;
