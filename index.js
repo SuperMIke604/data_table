@@ -1,5 +1,138 @@
 /* global SillyTavern */
 
+// ==================== 扩展配置 ====================
+// 参考: https://github.com/city-unit/st-extension-example/blob/master/index.js
+
+// 扩展名称，应该与仓库名称匹配
+const extensionName = 'dataManage';
+const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
+
+// 获取扩展设置
+function getExtensionSettings() {
+    try {
+        // 尝试从全局 extension_settings 获取
+        if (typeof extension_settings !== 'undefined' && extension_settings[extensionName]) {
+            return extension_settings[extensionName];
+        }
+        
+        // 尝试从 SillyTavern context 获取
+        const context = SillyTavern.getContext();
+        if (context && context.extensionSettings && context.extensionSettings[extensionName]) {
+            return context.extensionSettings[extensionName];
+        }
+        
+        return {};
+    } catch (error) {
+        console.error('获取扩展设置失败:', error);
+        return {};
+    }
+}
+
+// 保存扩展设置
+function saveExtensionSettings() {
+    try {
+        const context = SillyTavern.getContext();
+        
+        // 优先使用 extensionSettings（SillyTavern推荐方式）
+        if (context && context.extensionSettings) {
+            if (!context.extensionSettings[extensionName]) {
+                context.extensionSettings[extensionName] = {};
+            }
+            Object.assign(context.extensionSettings[extensionName], getExtensionSettings());
+            if (context.saveSettingsDebounced) {
+                context.saveSettingsDebounced();
+            } else if (context.saveSettings) {
+                context.saveSettings();
+            }
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('保存扩展设置失败:', error);
+        return false;
+    }
+}
+
+// 检查扩展是否启用
+function isExtensionEnabled() {
+    const settings = getExtensionSettings();
+    return settings.enabled !== false; // 默认启用
+}
+
+// 设置扩展启用状态
+function setExtensionEnabled(enabled) {
+    try {
+        const context = SillyTavern.getContext();
+        
+        // 更新全局 extension_settings（如果存在）
+        if (typeof extension_settings !== 'undefined') {
+            if (!extension_settings[extensionName]) {
+                extension_settings[extensionName] = {};
+            }
+            extension_settings[extensionName].enabled = enabled;
+        }
+        
+        // 更新 context.extensionSettings
+        if (context && context.extensionSettings) {
+            if (!context.extensionSettings[extensionName]) {
+                context.extensionSettings[extensionName] = {};
+            }
+            context.extensionSettings[extensionName].enabled = enabled;
+            
+            // 保存设置
+            if (context.saveSettingsDebounced) {
+                context.saveSettingsDebounced();
+            } else if (context.saveSettings) {
+                context.saveSettings();
+            }
+        }
+        
+        // 更新UI
+        updateExtensionUI();
+        
+        // 如果启用，添加按钮；如果禁用，移除按钮
+        if (enabled) {
+            addDataManageButton();
+        } else {
+            const parentDoc = (window.parent && window.parent !== window) 
+                ? window.parent.document 
+                : document;
+            const dataManageButton = parentDoc.getElementById('dataManageButton');
+            const dataPreviewButton = parentDoc.getElementById('dataPreviewButton');
+            if (dataManageButton) {
+                dataManageButton.remove();
+            }
+            if (dataPreviewButton) {
+                dataPreviewButton.remove();
+            }
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('设置扩展启用状态失败:', error);
+        return false;
+    }
+}
+
+// 更新扩展UI（显示/隐藏按钮）
+function updateExtensionUI() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const dataManageButton = parentDoc.getElementById('dataManageButton');
+    const dataPreviewButton = parentDoc.getElementById('dataPreviewButton');
+    
+    const enabled = isExtensionEnabled();
+    
+    if (dataManageButton) {
+        dataManageButton.style.display = enabled ? '' : 'none';
+    }
+    if (dataPreviewButton) {
+        dataPreviewButton.style.display = enabled ? '' : 'none';
+    }
+}
+
 // ==================== 配置管理模块 ====================
 
 const STORAGE_KEY = 'dataManageSettings';
@@ -456,6 +589,12 @@ function showToast(message, type = 'info') {
  * 添加"数据管理"按钮到 wand menu (extensionsMenu)
  */
 function addDataManageButton() {
+    // 检查扩展是否启用
+    if (!isExtensionEnabled()) {
+        console.log('扩展未启用，不添加按钮');
+        return;
+    }
+    
     // 获取正确的文档对象（处理 iframe 情况）
     const parentDoc = (window.parent && window.parent !== window) 
         ? window.parent.document 
@@ -515,6 +654,12 @@ function addDataManageButton() {
  * 添加数据预览按钮到菜单
  */
 function addDataPreviewButton(extensionsMenu, parentDoc) {
+    // 检查扩展是否启用
+    if (!isExtensionEnabled()) {
+        console.log('扩展未启用，不添加数据预览按钮');
+        return;
+    }
+    
     // 检查按钮是否已存在，避免重复添加
     if (parentDoc.getElementById('dataPreviewButton')) {
         return;
@@ -562,6 +707,12 @@ function addDataPreviewButton(extensionsMenu, parentDoc) {
  * 打开数据管理弹窗
  */
 function openDataManagePopup() {
+    // 检查扩展是否启用
+    if (!isExtensionEnabled()) {
+        showToast('扩展未启用，请先在设置中启用数据管理扩展', 'warning');
+        return;
+    }
+    
     const context = SillyTavern.getContext();
     
     // 创建弹窗HTML
@@ -3226,6 +3377,12 @@ function setupDataTabListeners(parentDoc) {
  * 显示数据预览
  */
 async function showDataPreview() {
+    // 检查扩展是否启用
+    if (!isExtensionEnabled()) {
+        showToast('扩展未启用，请先在设置中启用数据管理扩展', 'warning');
+        return;
+    }
+    
     try {
         const context = SillyTavern.getContext();
         
@@ -4401,12 +4558,130 @@ async function getInjectionTargetLorebook() {
     }
 }
 
-// 初始化：等待 DOM 加载完成后添加按钮
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', addDataManageButton);
+// ==================== 扩展初始化 ====================
+// 参考: https://github.com/city-unit/st-extension-example/blob/master/index.js
+
+// 加载扩展设置UI
+async function loadExtensionSettingsUI() {
+    try {
+        const parentDoc = (window.parent && window.parent !== window) 
+            ? window.parent.document 
+            : document;
+        
+        // 检查设置容器是否存在
+        const extensionsSettings = parentDoc.getElementById('extensions_settings');
+        if (!extensionsSettings) {
+            console.warn('扩展设置容器不存在，延迟重试...');
+            setTimeout(loadExtensionSettingsUI, 500);
+            return;
+        }
+        
+        // 检查是否已经添加过设置UI
+        if (parentDoc.getElementById('data-manage-extension-settings')) {
+            return;
+        }
+        
+        // 创建设置HTML
+        const settingsHtml = `
+            <div id="data-manage-extension-settings" class="extension_settings">
+                <div class="inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header">
+                        <b>数据管理扩展</b>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    </div>
+                    <div class="inline-drawer-content">
+                        <div class="flex-container flex-column flex-padding">
+                            <label class="checkbox_label">
+                                <input type="checkbox" id="data-manage-extension-enabled" />
+                                <span>启用数据管理扩展</span>
+                            </label>
+                            <p class="menu_message">启用后，数据管理和数据预览按钮将显示在菜单栏中。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 添加到设置容器
+        extensionsSettings.insertAdjacentHTML('beforeend', settingsHtml);
+        
+        // 绑定事件
+        const enabledCheckbox = parentDoc.getElementById('data-manage-extension-enabled');
+        if (enabledCheckbox) {
+            // 设置初始状态
+            enabledCheckbox.checked = isExtensionEnabled();
+            
+            // 绑定变化事件
+            enabledCheckbox.addEventListener('change', function() {
+                setExtensionEnabled(this.checked);
+                showToast(this.checked ? '数据管理扩展已启用' : '数据管理扩展已禁用', 'success');
+            });
+        }
+        
+        // 绑定折叠/展开事件
+        const drawerToggle = parentDoc.querySelector('#data-manage-extension-settings .inline-drawer-toggle');
+        if (drawerToggle) {
+            drawerToggle.addEventListener('click', function() {
+                const drawer = this.closest('.inline-drawer');
+                const content = drawer.querySelector('.inline-drawer-content');
+                const icon = this.querySelector('.inline-drawer-icon');
+                
+                if (content.style.display === 'none' || !content.style.display) {
+                    content.style.display = 'block';
+                    icon.classList.remove('down');
+                    icon.classList.add('up');
+                } else {
+                    content.style.display = 'none';
+                    icon.classList.remove('up');
+                    icon.classList.add('down');
+                }
+            });
+        }
+        
+        console.log('扩展设置UI已添加到设置菜单');
+    } catch (error) {
+        console.error('加载扩展设置UI失败:', error);
+    }
+}
+
+// 初始化扩展
+function initializeExtension() {
+    // 加载扩展设置
+    loadExtensionSettingsUI();
+    
+    // 如果扩展已启用，添加按钮
+    if (isExtensionEnabled()) {
+        addDataManageButton();
+    } else {
+        // 即使未启用，也更新UI以确保按钮隐藏
+        updateExtensionUI();
+    }
+}
+
+// 使用 jQuery 初始化（参考示例代码）
+if (typeof jQuery !== 'undefined') {
+    jQuery(async () => {
+        // 等待 SillyTavern 初始化
+        await new Promise(resolve => {
+            const checkSillyTavern = setInterval(() => {
+                if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
+                    clearInterval(checkSillyTavern);
+                    resolve();
+                }
+            }, 100);
+        });
+        
+        // 初始化扩展
+        initializeExtension();
+    });
 } else {
-    // DOM 已经加载完成，但可能需要等待 SillyTavern 初始化
-    // 使用 setTimeout 确保 SillyTavern 已经初始化
-    setTimeout(addDataManageButton, 100);
+    // 如果没有 jQuery，使用原生方式
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(initializeExtension, 500);
+        });
+    } else {
+        setTimeout(initializeExtension, 500);
+    }
 }
 
