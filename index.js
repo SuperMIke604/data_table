@@ -3303,7 +3303,9 @@ async function showDataPreview() {
             // 如果是对象，尝试查找表格数据
             for (const [key, value] of Object.entries(messageData)) {
                 if (value && typeof value === 'object' && value.content && Array.isArray(value.content)) {
-                    tablesHtml += generateTableHtml(key, value.content);
+                    // 使用表格名称而不是表格id（key）
+                    const tableName = value.name || key;
+                    tablesHtml += generateTableHtml(tableName, value.content);
                 }
             }
             
@@ -3981,6 +3983,14 @@ async function saveJsonTableToChatHistory(targetMessageIndex = -1) {
         console.warn('无法保存聊天记录：saveChat方法不可用');
     }
     
+    // 参考参考文档：保存后同步到世界书
+    try {
+        await updateReadableLorebookEntry(true);
+    } catch (error) {
+        console.error('同步到世界书失败:', error);
+        // 不阻止保存流程，只记录错误
+    }
+    
     showToast('数据库已成功保存到当前聊天记录', 'success');
     return true;
 }
@@ -4218,6 +4228,14 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
                 throw new Error('无法将更新后的数据库保存到聊天记录');
             }
             
+            // 参考参考文档：保存后同步到世界书
+            try {
+                await updateReadableLorebookEntry(true);
+            } catch (error) {
+                console.error('同步到世界书失败:', error);
+                // 不阻止更新流程，只记录错误
+            }
+            
             console.log('数据库增量更新成功！');
         }
         
@@ -4240,6 +4258,146 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
             }
         }
         currentAbortController = null;
+    }
+}
+
+/**
+ * 更新可读世界书条目 - 参考参考文档实现
+ */
+async function updateReadableLorebookEntry(createIfNeeded = false) {
+    if (!currentJsonTableData) {
+        console.warn('更新世界书条目失败: currentJsonTableData为空');
+        return;
+    }
+    
+    // 获取注入目标世界书
+    const primaryLorebookName = await getInjectionTargetLorebook();
+    if (!primaryLorebookName) {
+        console.warn('无法更新世界书条目: 未设置注入目标世界书');
+        return;
+    }
+    
+    // 获取 TavernHelper API
+    const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+    let TavernHelper_API = null;
+    
+    if (typeof TavernHelper !== 'undefined') {
+        TavernHelper_API = TavernHelper;
+    } else if (parentWin && parentWin.TavernHelper) {
+        TavernHelper_API = parentWin.TavernHelper;
+    }
+    
+    if (!TavernHelper_API || typeof TavernHelper_API.getLorebookEntries !== 'function') {
+        console.warn('无法更新世界书条目: TavernHelper API不可用');
+        return;
+    }
+    
+    try {
+        // 格式化数据为可读文本
+        const readableText = formatJsonToReadable(currentJsonTableData);
+        
+        const READABLE_LOREBOOK_COMMENT = 'TavernDB-ACU-ReadableDataTable';
+        const entries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
+        const db2Entry = entries.find(e => e.comment === READABLE_LOREBOOK_COMMENT);
+        
+        if (db2Entry) {
+            const newContent = `<main_story_info>\n\n${readableText}\n\n</main_story_info>`;
+            if (db2Entry.content !== newContent) {
+                const updatedDb2Entry = { uid: db2Entry.uid, content: newContent };
+                await TavernHelper_API.setLorebookEntries(primaryLorebookName, [updatedDb2Entry]);
+                console.log('成功更新全局可读数据库条目');
+            } else {
+                console.log('全局可读数据库条目已是最新');
+            }
+        } else if (createIfNeeded) {
+            const newDb2Entry = {
+                comment: READABLE_LOREBOOK_COMMENT,
+                content: `<main_story_info>\n\n${readableText}\n\n</main_story_info>`,
+                enabled: true,
+                type: 'constant',
+                order: 100,
+                prevent_recursion: true,
+            };
+            await TavernHelper_API.createLorebookEntries(primaryLorebookName, [newDb2Entry]);
+            console.log('成功创建全局可读数据库条目');
+            showToast('已创建全局可读数据库条目', 'success');
+        }
+    } catch (error) {
+        console.error('更新世界书条目失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 格式化JSON数据为可读文本 - 参考参考文档实现
+ */
+function formatJsonToReadable(jsonData) {
+    if (!jsonData) return '数据库为空。';
+    
+    let readableText = '';
+    const tableKeys = Object.keys(jsonData).filter(k => k.startsWith('sheet_'));
+    
+    tableKeys.forEach((sheetKey, tableIndex) => {
+        const table = jsonData[sheetKey];
+        if (!table || !table.name || !table.content) return;
+        
+        // 添加表格标题 [索引:表名]
+        readableText += `[${tableIndex}:${table.name}]\n`;
+        
+        // 添加列信息 Columns: [0:列名1], [1:列名2], ...
+        const headers = table.content[0] ? table.content[0].slice(1) : [];
+        if (headers.length > 0) {
+            const headerInfo = headers.map((h, i) => `[${i}:${h}]`).join('|');
+            readableText += `Columns: ${headerInfo}\n`;
+        }
+        
+        // 添加行数据 [行索引] 值1|值2|...
+        const rows = table.content.slice(1);
+        if (rows.length > 0) {
+            rows.forEach((row, rowIndex) => {
+                const rowData = row.slice(1);
+                readableText += `[${rowIndex}] ${rowData.join('|')}\n`;
+            });
+        }
+        
+        readableText += '\n';
+    });
+    
+    return readableText.trim();
+}
+
+/**
+ * 获取注入目标世界书名称
+ */
+async function getInjectionTargetLorebook() {
+    const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+    const injectionTarget = worldbookConfig.injectionTarget || 'character';
+    
+    if (injectionTarget === 'character') {
+        // 获取角色卡绑定的世界书
+        const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+        let TavernHelper_API = null;
+        
+        if (typeof TavernHelper !== 'undefined') {
+            TavernHelper_API = TavernHelper;
+        } else if (parentWin && parentWin.TavernHelper) {
+            TavernHelper_API = parentWin.TavernHelper;
+        }
+        
+        if (TavernHelper_API && typeof TavernHelper_API.getCharLorebooks === 'function') {
+            try {
+                const charLorebooks = await TavernHelper_API.getCharLorebooks({ type: 'all' });
+                if (charLorebooks && charLorebooks.primary) {
+                    return charLorebooks.primary;
+                }
+            } catch (error) {
+                console.error('获取角色卡世界书失败:', error);
+            }
+        }
+        return null;
+    } else {
+        // 返回手动选择的世界书名称
+        return injectionTarget;
     }
 }
 
