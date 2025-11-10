@@ -4298,8 +4298,13 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
             const messagesForContext = chat.slice(sliceStartIndex, lastMessageIndex + 1);
             
             // 3. 执行更新
+            // 参考参考文档：修复绑定逻辑，直接使用用户指定的结束楼层作为绑定目标
+            // 对于整个范围（如6-10层），数据应该保存在结束楼层（10层）
             const toastMessage = `正在处理手动更新 (${batchNumber}/${totalBatches})...`;
-            const saveTargetIndex = lastMessageIndex;
+            // 使用整个范围的结束楼层作为保存目标（参考参考文档）
+            const saveTargetIndex = floorEnd !== null && floorEnd !== undefined ? floorEnd : lastMessageIndex;
+            
+            console.log(`[批次 ${batchNumber}] 保存目标楼层: ${saveTargetIndex} (范围: ${floorStart}-${floorEnd}, 批次最后索引: ${lastMessageIndex})`);
             
             try {
                 const success = await proceedWithCardUpdate(messagesForContext, toastMessage, saveTargetIndex);
