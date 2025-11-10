@@ -18,7 +18,9 @@
     border-radius: 14px;
     box-shadow: none;
     padding: 20px;
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
     margin: 0 auto;
     box-sizing: border-box;
 }
@@ -443,7 +445,9 @@
 /* 响应式设计 */
 @media (max-width: 1024px) {
     .data-manage-popup {
-        width: 100%;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
         padding: 16px;
     }
     
@@ -465,7 +469,9 @@
     .data-manage-popup {
         padding: 16px;
         border-radius: 12px;
-        width: 100%;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
     }
     
     .data-manage-tabs-nav {

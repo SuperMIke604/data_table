@@ -2263,7 +2263,7 @@ function showDataOverview() {
             
             // 遍历聊天记录，查找包含数据库数据的消息 - 参考参考文档：楼层号直接使用数组索引
             let html = '<div class="overview-content">';
-            html += '<h3 style="color: var(--ios-text); margin-bottom: 20px;">聊天记录数据概览</h3>';
+            html += '<h3 style="color: #fff; margin-bottom: 20px;">聊天记录数据概览</h3>';
             
             for (let i = chat.length - 1; i >= 0; i--) {
                 const message = chat[i];
@@ -2311,31 +2311,27 @@ function showDataOverview() {
                     const displayStyle = isExpanded ? 'block' : 'none';
                     const buttonText = isExpanded ? '收起详情' : '展开详情';
                     
-                    // 使用包装器，让详情区域向下扩展，不挤占原有内容
-                    html += `<div class="message-data-card-wrapper" data-message-index="${i}" style="margin-bottom: 15px;">`;
-                    
+                    // 参考参考文档：完全按照参考文档的样式
                     html += `<div class="message-data-card" data-message-index="${i}" style="
-                        background: var(--ios-gray); border: 1px solid var(--ios-border); border-radius: 10px; 
-                        padding: 15px; color: var(--ios-text);
-                        display: flex; align-items: flex-start; gap: 10px;
+                        background: #1a1a1a; border: 1px solid #444; border-radius: 5px; 
+                        padding: 15px; margin-bottom: 15px; color: #e0e0e0;
                     ">`;
-                    html += `<div style="flex: 1; min-width: 0;">`;
                     html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
-                    html += `<h4 style="margin: 0; color: var(--ios-text);">楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
-                    html += `<span style="font-size: 12px; color: var(--ios-text-secondary);">${escapeHtml(timestamp)}</span>`;
+                    html += `<h4 style="margin: 0; color: #fff;">楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
+                    html += `<span style="font-size: 12px; color: #888;">${escapeHtml(timestamp)}</span>`;
                     html += `</div>`;
                     
                     // 显示数据统计
                     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
                     html += `<div style="margin-bottom: 10px;">`;
-                    html += `<p style="margin: 5px 0; color: var(--ios-text-secondary);">包含 ${tableKeys.length} 个数据表格</p>`;
+                    html += `<p style="margin: 5px 0; color: #ccc;">包含 ${tableKeys.length} 个数据表格</p>`;
                     
                     // 显示每个表格的简要信息
                     tableKeys.forEach(sheetKey => {
                         const table = messageData[sheetKey];
                         if (table && table.name && table.content) {
                             const rowCount = table.content.length - 1; // 减去表头
-                            html += `<div style="background: var(--ios-gray-dark); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 12px;">`;
+                            html += `<div style="background: #2a2a2a; padding: 8px; margin: 5px 0; border-radius: 3px; font-size: 12px;">`;
                             html += `<strong>${escapeHtml(table.name)}</strong>: ${rowCount} 条记录`;
                             if (table.sourceData && table.sourceData.note) {
                                 html += ` - ${escapeHtml(table.sourceData.note)}`;
@@ -2346,27 +2342,22 @@ function showDataOverview() {
                     
                     html += `</div>`;
                     
-                    // 操作按钮 - 缩小宽度，优先展示内容
-                    html += `<div style="text-align: right; flex-shrink: 0; width: 140px; margin-left: 10px;">`;
+                    // 操作按钮 - 参考参考文档
+                    html += `<div style="text-align: right;">`;
                     html += `<button class="toggle-details-btn" data-message-index="${i}" style="
-                        background: var(--ios-blue); color: white; border: none; padding: 4px 8px; 
-                        border-radius: 6px; cursor: pointer; margin-bottom: 4px; font-size: 11px;
-                        transition: all 0.2s; white-space: nowrap; display: block; width: 100%;
+                        background: #007bff; color: white; border: none; padding: 5px 10px; 
+                        border-radius: 3px; cursor: pointer; margin-right: 5px; font-size: 12px;
                     ">${buttonText}</button>`;
                     html += `<button class="delete-message-btn" data-message-index="${i}" style="
-                        background: #dc3545; color: white; border: none; padding: 4px 8px; 
-                        border-radius: 6px; cursor: pointer; font-size: 11px;
-                        transition: all 0.2s; white-space: nowrap; display: block; width: 100%;
-                    ">删除</button>`;
+                        background: #dc3545; color: white; border: none; padding: 5px 10px; 
+                        border-radius: 3px; cursor: pointer; font-size: 12px;
+                    ">删除记录</button>`;
                     html += `</div>`;
-                    html += `</div>`; // 关闭 flex 内容容器
-                    html += `</div>`; // 关闭 message-data-card
                     
-                    // 详情展开区域（向下扩展，不挤占原有内容）- 参考参考文档
                     html += `<div class="message-details" data-message-index="${i}" style="
-                        display: ${displayStyle}; margin-top: 0; margin-bottom: 0;
-                        border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
-                        border-radius: 0 0 6px 6px; padding: 15px;
+                        display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
+                        border-top: 1px solid #444; background: #0f0f0f; 
+                        border-radius: 3px; padding: 15px;
                     ">`;
                     html += `<div class="details-content">`;
                     if (isExpanded) {
@@ -2375,20 +2366,30 @@ function showDataOverview() {
                         html += `<!-- 详情内容将在这里动态加载 -->`;
                     }
                     html += `</div>`;
-                    html += `</div>`; // 关闭 message-details
-                    html += `</div>`; // 关闭 message-data-card-wrapper
+                    html += `</div>`;
+                    html += `</div>`;
                 }
             }
             
             if (dataCount === 0) {
-                html += '<p style="text-align: center; color: var(--ios-text-secondary); font-style: italic; padding: 20px;">暂无数据库记录</p>';
+                html += '<p style="text-align: center; color: #888; font-style: italic;">暂无数据库记录</p>';
             } else {
-                html += `<div style="margin-top: 20px; padding: 10px; background: var(--ios-gray-dark); border-radius: 8px; text-align: center;">`;
-                html += `<p style="margin: 0; color: var(--ios-text-secondary);">共找到 ${dataCount} 条数据库记录</p>`;
+                html += `<div style="margin-top: 20px; padding: 10px; background: #2a2a2a; border-radius: 5px; text-align: center;">`;
+                html += `<p style="margin: 0; color: #ccc;">共找到 ${dataCount} 条数据库记录</p>`;
                 html += `</div>`;
             }
             
             html += '</div>';
+            
+            // 添加样式 - 参考参考文档
+            html += `
+                <style>
+                    .overview-content { font-family: Arial, sans-serif; }
+                    .message-data-card:hover { border-color: #555; }
+                    .toggle-details-btn:hover { background: #0056b3 !important; }
+                    .delete-message-btn:hover { background: #c82333 !important; }
+                </style>
+            `;
             
             overviewContainer.innerHTML = html;
             
@@ -2966,36 +2967,37 @@ function loadMessageDetails(messageIndex, messageData) {
     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
     
     if (tableKeys.length === 0) {
-        html += '<p style="color: var(--ios-text-secondary); text-align: center; padding: 20px;">没有数据表格</p>';
+        html += '<p style="color: #888; text-align: center;">没有数据表格</p>';
     } else {
         tableKeys.forEach(sheetKey => {
             const table = messageData[sheetKey];
             if (!table || !table.name || !table.content) return;
             
-            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px;">`;
+            // 参考参考文档：完全按照参考文档的样式
+            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px; border: 1px solid #444; border-radius: 5px; padding: 15px; background: #1a1a1a;">`;
             html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
-            html += `<h4 class="table-title" style="margin: 0; color: var(--ios-text);">${escapeHtml(table.name)}</h4>`;
+            html += `<h4 class="table-title" style="margin: 0; color: #fff;">${escapeHtml(table.name)}</h4>`;
             html += `<button class="delete-table-btn" data-sheet-key="${sheetKey}" data-message-index="${messageIndex}" style="
                 background: #dc3545; color: white; border: none; padding: 5px 10px; 
-                border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;
+                border-radius: 3px; cursor: pointer; font-size: 12px;
             ">删除表格</button>`;
             html += `</div>`;
             
             // 显示表格元数据
             if (table.sourceData && table.sourceData.note) {
-                html += `<div class="table-metadata" style="margin-bottom: 10px;">`;
-                html += `<p style="margin: 5px 0; color: var(--ios-text-secondary);">备注: ${escapeHtml(table.sourceData.note)}</p>`;
+                html += `<div class="table-metadata" style="background: #2a2a2a; padding: 10px; margin: 10px 0; border-radius: 3px; font-size: 12px; color: #ccc;">`;
+                html += `<p style="margin: 5px 0;">备注: ${escapeHtml(table.sourceData.note)}</p>`;
                 html += `</div>`;
             }
             
             // 显示表格内容（可编辑）- 参考参考文档的展示规则
-            html += `<div class="table-scroll-container" style="overflow-x: auto;">`;
-            html += `<table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">`;
+            html += `<div class="table-scroll-container">`;
+            html += `<table class="data-table" style="width: 100%; border-collapse: collapse; margin-top: 10px;">`;
             
             // 表头 - 参考参考文档：简化为两列：内容和操作
             html += '<thead><tr>';
-            html += `<th style="background-color: var(--ios-gray-dark); padding: 8px; text-align: left; border: 1px solid var(--ios-border);">条目内容</th>`;
-            html += `<th style="background-color: var(--ios-gray-dark); padding: 8px; text-align: center; border: 1px solid var(--ios-border); width: 80px;">操作</th>`;
+            html += `<th style="border: 1px solid #444; padding: 8px; text-align: left; color: #e0e0e0;">条目内容</th>`;
+            html += `<th style="width: 80px; text-align: center; border: 1px solid #444; padding: 8px; color: #e0e0e0;">操作</th>`;
             html += '</tr></thead>';
             
             // 数据行
@@ -3009,25 +3011,25 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `<tr data-row-index="${rowIndex}" data-sheet-key="${sheetKey}">`;
                 
                 // 单个输入框 - 包含整行数据（用 | 分隔）
-                html += `<td class="editable-cell" style="padding: 8px; border: 1px solid var(--ios-border);">`;
+                html += `<td class="editable-cell" style="border: 1px solid #444; padding: 8px;">`;
                 html += `<textarea class="cell-input" `;
                 html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" `;
-                html += `style="width: 100%; min-height: 40px; padding: 6px; border: 1px solid var(--ios-border); border-radius: 6px; background-color: var(--ios-gray); color: var(--ios-text); font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;">${escapeHtml(combinedValue)}</textarea>`;
+                html += `style="width: 100%; min-height: 40px; padding: 6px; border: 1px solid #444; border-radius: 3px; background: #1a1a1a; color: #e0e0e0; font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;">${escapeHtml(combinedValue)}</textarea>`;
                 html += `</td>`;
                 
                 // 操作列 - 参考参考文档：按钮上下排列
-                html += `<td style="text-align: center; vertical-align: middle; padding: 8px; border: 1px solid var(--ios-border);">`;
+                html += `<td style="text-align: center; vertical-align: middle; border: 1px solid #444; padding: 8px;">`;
                 html += `<div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">`;
                 html += `<button class="save-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
                     background: #28a745; color: white; border: none; padding: 4px 8px; 
-                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
+                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px;
                 ">保存</button>`;
                 html += `<button class="delete-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
                     background: #dc3545; color: white; border: none; padding: 4px 8px; 
-                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px; transition: all 0.2s;
+                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px;
                 ">删除</button>`;
                 html += `</div>`;
                 html += `</td>`;
@@ -4660,24 +4662,40 @@ async function loadExtensionSettingsUI() {
             });
         }
         
-        // 绑定折叠/展开事件
+        // 绑定折叠/展开事件 - 参考参考文档：使用 SillyTavern 的内置机制
+        // 注意：SillyTavern 会自动处理 inline-drawer 的折叠/展开，我们只需要确保事件不被阻止
         const drawerToggle = parentDoc.querySelector('#data-manage-extension-settings .inline-drawer-toggle');
         if (drawerToggle) {
-            drawerToggle.addEventListener('click', function() {
+            // 移除可能存在的旧事件监听器
+            const newDrawerToggle = drawerToggle.cloneNode(true);
+            drawerToggle.parentNode.replaceChild(newDrawerToggle, drawerToggle);
+            
+            // 不添加自定义事件监听器，让 SillyTavern 的内置机制处理
+            // 如果需要自定义行为，可以使用 capture 阶段，但不阻止默认行为
+            newDrawerToggle.addEventListener('click', function(e) {
+                // 不阻止默认行为，让 SillyTavern 的内置机制处理
+                // 只更新图标状态
                 const drawer = this.closest('.inline-drawer');
-                const content = drawer.querySelector('.inline-drawer-content');
-                const icon = this.querySelector('.inline-drawer-icon');
+                if (!drawer) return;
                 
-                if (content.style.display === 'none' || !content.style.display) {
-                    content.style.display = 'block';
-                    icon.classList.remove('down');
-                    icon.classList.add('up');
-                } else {
-                    content.style.display = 'none';
-                    icon.classList.remove('up');
-                    icon.classList.add('down');
-                }
-            });
+                const icon = this.querySelector('.inline-drawer-icon');
+                if (!icon) return;
+                
+                // 延迟检查状态，确保 SillyTavern 的内置机制已经处理
+                setTimeout(() => {
+                    const content = drawer.querySelector('.inline-drawer-content');
+                    if (content) {
+                        const isOpen = content.style.display !== 'none' && content.style.display !== '';
+                        if (isOpen) {
+                            icon.classList.remove('down');
+                            icon.classList.add('up');
+                        } else {
+                            icon.classList.remove('up');
+                            icon.classList.add('down');
+                        }
+                    }
+                }, 10);
+            }, false); // 使用冒泡阶段，不阻止默认行为
         }
         
         console.log('扩展设置UI已添加到设置菜单');
