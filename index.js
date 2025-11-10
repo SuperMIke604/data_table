@@ -58,6 +58,12 @@ const DEFAULT_SETTINGS = {
 // 当前配置
 let currentSettings = { ...DEFAULT_SETTINGS };
 
+// 当前数据库数据（内存中的数据库状态）
+let currentJsonTableData = null;
+
+// 用于中止正在进行的AI请求
+let currentAbortController = null;
+
 /**
  * 保存配置到本地存储
  */
@@ -3133,6 +3139,498 @@ function setupPopupScripts() {
 }
 
 /**
+ * 准备AI输入 - 准备表格数据、消息文本、世界书内容
+ */
+async function prepareAIInput(messages) {
+    if (!currentJsonTableData) {
+        console.error('prepareAIInput: 无法准备AI输入，currentJsonTableData为空');
+        return null;
+    }
+    
+    // 获取世界书内容（暂时返回空字符串，后续可以完善）
+    const worldbookContent = '';
+    
+    // 1. 格式化当前JSON表格数据为可读文本（用于$0占位符）
+    let tableDataText = '';
+    const tableKeys = Object.keys(currentJsonTableData).filter(k => k.startsWith('sheet_'));
+    
+    tableKeys.forEach((sheetKey, tableIndex) => {
+        const table = currentJsonTableData[sheetKey];
+        if (!table || !table.name || !table.content) return;
+        
+        tableDataText += `[${tableIndex}:${table.name}]\n`;
+        const headers = table.content[0] ? table.content[0].slice(1).map((h, i) => `[${i}:${h}]`).join('|') : 'No Headers';
+        tableDataText += `  Columns: ${headers}\n`;
+        
+        const allRows = table.content.slice(1);
+        let rowsToProcess = allRows;
+        let startIndex = 0;
+        
+        // 如果是总结表并且行数超过配置的最大条目数，则只提取最新的N条
+        if (table.name.trim() === '总结表' && allRows.length > (currentSettings.summaryTableMaxEntries || 10)) {
+            startIndex = allRows.length - (currentSettings.summaryTableMaxEntries || 10);
+            rowsToProcess = allRows.slice(-(currentSettings.summaryTableMaxEntries || 10));
+            tableDataText += `  - Note: Showing last ${rowsToProcess.length} of ${allRows.length} entries.\n`;
+        }
+        
+        if (rowsToProcess.length > 0) {
+            rowsToProcess.forEach((row, index) => {
+                const originalRowIndex = startIndex + index;
+                const rowData = row.slice(1).join('|');
+                tableDataText += `  [${originalRowIndex}] ${rowData}\n`;
+            });
+        } else {
+            tableDataText += '  (No data rows)\n';
+        }
+        tableDataText += '\n';
+    });
+    
+    // 2. 格式化消息文本（用于$1占位符）
+    let messagesText = '当前最新对话内容:\n';
+    if (messages && messages.length > 0) {
+        const context = SillyTavern.getContext();
+        const name1 = context?.name1 || '用户';
+        
+        messagesText += messages.map(msg => {
+            const prefix = msg.is_user ? name1 : (msg.name || '角色');
+            let content = msg.mes || msg.message || '';
+            
+            // 清理内容：移除标记和标签
+            if (currentSettings.removeMarkers) {
+                const markerIndex = content.indexOf(currentSettings.removeMarkers);
+                if (markerIndex !== -1) {
+                    const beforeMarker = content.substring(0, markerIndex);
+                    const afterMarker = content.substring(markerIndex);
+                    const tagIndex = afterMarker.indexOf('<');
+                    if (tagIndex !== -1) {
+                        content = beforeMarker + afterMarker.substring(tagIndex);
+                    } else {
+                        content = beforeMarker;
+                    }
+                }
+            }
+            
+            if (currentSettings.removeTags) {
+                const tags = currentSettings.removeTags.split(',').map(t => t.trim());
+                tags.forEach(tag => {
+                    const regex = new RegExp(`<${tag}[^>]*>.*?</${tag}>`, 'gis');
+                    content = content.replace(regex, '');
+                });
+            }
+            
+            // 如果是用户消息，添加标签
+            if (msg.is_user && currentSettings.userMessageTags) {
+                const tags = currentSettings.userMessageTags.split(',').map(t => t.trim());
+                tags.forEach(tag => {
+                    if (tag) {
+                        content = `<${tag}>${content}</${tag}>`;
+                    }
+                });
+            }
+            
+            return `${prefix}: ${content}`;
+        }).join('\n');
+    } else {
+        messagesText += '(无最新对话内容)';
+    }
+    
+    return { tableDataText, messagesText, worldbookContent };
+}
+
+/**
+ * 调用自定义OpenAI API
+ */
+async function callCustomOpenAI(dynamicContent) {
+    // 创建新的AbortController用于本次请求
+    currentAbortController = new AbortController();
+    const abortSignal = currentAbortController.signal;
+    
+    // 组装最终的消息数组
+    const messages = [];
+    const charCardPrompt = currentSettings.charCardPrompt || DEFAULT_CHAR_CARD_PROMPT;
+    
+    let promptSegments = [];
+    if (Array.isArray(charCardPrompt)) {
+        promptSegments = charCardPrompt;
+    } else if (typeof charCardPrompt === 'string') {
+        promptSegments = [{ role: 'USER', content: charCardPrompt }];
+    }
+    
+    // 在每个段落中替换占位符
+    promptSegments.forEach(segment => {
+        let finalContent = segment.content || '';
+        finalContent = finalContent.replace(/\$0/g, dynamicContent.tableDataText || '');
+        finalContent = finalContent.replace(/\$1/g, dynamicContent.messagesText || '');
+        finalContent = finalContent.replace(/\$4/g, dynamicContent.worldbookContent || '');
+        
+        // 转换role为小写（API要求）
+        messages.push({ 
+            role: (segment.role || 'user').toLowerCase(), 
+            content: finalContent 
+        });
+    });
+    
+    console.log('准备发送到API的消息:', messages);
+    
+    const apiConfig = currentSettings.apiConfig || {};
+    
+    // 根据API模式选择调用方式
+    if (currentSettings.apiMode === 'tavern') {
+        // 使用酒馆连接预设
+        const profileId = currentSettings.tavernProfile;
+        if (!profileId) {
+            throw new Error('未选择酒馆连接预设');
+        }
+        
+        const context = SillyTavern.getContext();
+        if (!context || !context.extensionSettings || !context.extensionSettings.connectionManager) {
+            throw new Error('无法访问连接管理器');
+        }
+        
+        const profiles = context.extensionSettings.connectionManager.profiles || [];
+        const targetProfile = profiles.find(p => p.id === profileId);
+        
+        if (!targetProfile) {
+            throw new Error(`无法找到ID为 "${profileId}" 的连接预设`);
+        }
+        
+        if (!targetProfile.api) {
+            throw new Error(`预设 "${targetProfile.name || targetProfile.id}" 没有配置API`);
+        }
+        
+        // 使用ConnectionManagerRequestService发送请求
+        if (!context.ConnectionManagerRequestService || !context.ConnectionManagerRequestService.sendRequest) {
+            throw new Error('ConnectionManagerRequestService不可用');
+        }
+        
+        const response = await context.ConnectionManagerRequestService.sendRequest(
+            profileId,
+            messages,
+            apiConfig.max_tokens || 4096
+        );
+        
+        if (response && response.ok && response.result?.choices?.[0]?.message?.content) {
+            return response.result.choices[0].message.content.trim();
+        } else if (response && typeof response.content === 'string') {
+            return response.content.trim();
+        } else {
+            const errorMsg = response?.error || JSON.stringify(response);
+            throw new Error(`酒馆预设API调用返回无效响应: ${errorMsg}`);
+        }
+        
+    } else {
+        // 使用自定义API
+        if (apiConfig.useMainApi) {
+            // 模式A: 使用主API
+            const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
+            let TavernHelper = null;
+            
+            if (parentWin && parentWin.TavernHelper) {
+                TavernHelper = parentWin.TavernHelper;
+            } else if (window.TavernHelper) {
+                TavernHelper = window.TavernHelper;
+            }
+            
+            if (!TavernHelper || typeof TavernHelper.generateRaw !== 'function') {
+                throw new Error('TavernHelper.generateRaw 函数不存在。请检查酒馆版本。');
+            }
+            
+            const response = await TavernHelper.generateRaw({
+                ordered_prompts: messages,
+                should_stream: false, // 数据库更新不需要流式输出
+            });
+            
+            if (typeof response !== 'string') {
+                throw new Error('主API调用未返回预期的文本响应');
+            }
+            
+            return response.trim();
+            
+        } else {
+            // 模式B: 使用独立配置的API
+            if (!apiConfig.url || !apiConfig.model) {
+                throw new Error('自定义API的URL或模型未配置');
+            }
+            
+            const generateUrl = `/api/backends/chat-completions/generate`;
+            const context = SillyTavern.getContext();
+            const headers = { 
+                ...(context.getRequestHeaders ? context.getRequestHeaders() : {}), 
+                'Content-Type': 'application/json' 
+            };
+            
+            const body = JSON.stringify({
+                messages: messages,
+                model: apiConfig.model,
+                temperature: apiConfig.temperature || 0.9,
+                frequency_penalty: 0,
+                presence_penalty: 0.12,
+                top_p: apiConfig.top_p || 0.9,
+                max_tokens: apiConfig.max_tokens || 120000,
+                stream: false,
+                chat_completion_source: 'custom',
+                group_names: [],
+                include_reasoning: false,
+                reasoning_effort: 'medium',
+                enable_web_search: false,
+                request_images: false,
+                custom_prompt_post_processing: 'strict',
+                reverse_proxy: apiConfig.url,
+                proxy_password: '',
+                custom_url: apiConfig.url,
+                custom_include_headers: apiConfig.apiKey ? `Authorization: Bearer ${apiConfig.apiKey}` : ''
+            });
+            
+            console.log('调用自定义API:', generateUrl, 'Model:', apiConfig.model);
+            
+            const response = await fetch(generateUrl, { 
+                method: 'POST', 
+                headers, 
+                body, 
+                signal: abortSignal 
+            });
+            
+            if (!response.ok) {
+                const errTxt = await response.text();
+                throw new Error(`API请求失败: ${response.status} ${response.statusText} - ${errTxt}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+                return data.choices[0].message.content.trim();
+            }
+            
+            throw new Error('API响应格式不正确或内容为空');
+        }
+    }
+}
+
+/**
+ * 解析并应用表格编辑指令
+ */
+function parseAndApplyTableEdits(aiResponse) {
+    if (!currentJsonTableData) {
+        console.error('无法应用编辑，currentJsonTableData未加载');
+        return false;
+    }
+    
+    // 清理AI响应
+    let cleanedResponse = aiResponse.trim();
+    // 移除JS风格的字符串拼接
+    cleanedResponse = cleanedResponse.replace(/'/g, '');
+    // 将 "\\n" 转换为真实的换行符
+    cleanedResponse = cleanedResponse.replace(/\\n/g, '\n');
+    // 修复转义的双引号
+    cleanedResponse = cleanedResponse.replace(/\\\\"/g, '\\"');
+    
+    // 提取tableEdit块
+    const editBlockMatch = cleanedResponse.match(/<tableEdit>([\s\S]*?)<\/tableEdit>/);
+    if (!editBlockMatch || !editBlockMatch[1]) {
+        console.warn('AI响应中未找到有效的 <tableEdit> 块');
+        return true; // 不是失败，只是没有编辑要应用
+    }
+    
+    const editsString = editBlockMatch[1].replace(/<!--|-->/g, '').trim();
+    if (!editsString) {
+        console.log('空的 <tableEdit> 块，没有编辑要应用');
+        return true;
+    }
+    
+    // 重组指令（处理多行指令）
+    const originalLines = editsString.split('\n');
+    const commandLines = [];
+    let commandReconstructor = '';
+    
+    originalLines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine === '') return;
+        
+        if (trimmedLine.startsWith('insertRow') || trimmedLine.startsWith('deleteRow') || trimmedLine.startsWith('updateRow')) {
+            if (commandReconstructor) {
+                commandLines.push(commandReconstructor);
+            }
+            commandReconstructor = trimmedLine;
+        } else {
+            commandReconstructor += trimmedLine;
+        }
+    });
+    
+    if (commandReconstructor) {
+        commandLines.push(commandReconstructor);
+    }
+    
+    let appliedEdits = 0;
+    
+    // 获取所有表格
+    const sheets = Object.keys(currentJsonTableData)
+                         .filter(k => k.startsWith('sheet_'))
+                         .map(k => currentJsonTableData[k]);
+    
+    commandLines.forEach(line => {
+        // 移除行尾注释
+        const commandLineWithoutComment = line.split('//')[0].trim();
+        if (!commandLineWithoutComment) {
+            return;
+        }
+        
+        // 解析指令
+        const match = commandLineWithoutComment.match(/^(insertRow|deleteRow|updateRow)\s*\((.*)\);?$/);
+        if (!match) {
+            console.warn(`跳过格式错误或截断的指令行: "${commandLineWithoutComment}"`);
+            return;
+        }
+        
+        const command = match[1];
+        const argsString = match[2];
+        
+        try {
+            const firstBracket = argsString.indexOf('{');
+            let args;
+            
+            if (firstBracket === -1) {
+                // 没有JSON对象，是简单的deleteRow指令
+                args = JSON.parse(`[${argsString}]`);
+            } else {
+                // 包含JSON对象的指令 (insertRow, updateRow)
+                const paramsPart = argsString.substring(0, firstBracket).trim();
+                const jsonPart = argsString.substring(firstBracket);
+                
+                // 解析前面的参数
+                const initialArgs = JSON.parse(`[${paramsPart.replace(/,$/, '')}]`);
+                
+                // 解析JSON部分
+                try {
+                    const jsonData = JSON.parse(jsonPart);
+                    args = [...initialArgs, jsonData];
+                } catch (jsonError) {
+                    // 尝试清理JSON
+                    let sanitizedJson = jsonPart;
+                    // 移除尾随逗号
+                    sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
+                    // 修复悬空键
+                    sanitizedJson = sanitizedJson.replace(/,\s*("[^"]*"\s*)}/g, '}');
+                    
+                    try {
+                        const jsonData = JSON.parse(sanitizedJson);
+                        args = [...initialArgs, jsonData];
+                    } catch (finalError) {
+                        console.error(`无法解析JSON: "${jsonPart}"`, finalError);
+                        return;
+                    }
+                }
+            }
+            
+            // 应用指令
+            switch (command) {
+                case 'insertRow': {
+                    const [tableIndex, data] = args;
+                    const table = sheets[tableIndex];
+                    if (table && table.content && typeof data === 'object') {
+                        const newRow = [null];
+                        const headers = table.content[0].slice(1);
+                        headers.forEach((_, colIndex) => {
+                            newRow.push(data[colIndex] || (data[String(colIndex)] || ''));
+                        });
+                        table.content.push(newRow);
+                        console.log(`应用insertRow到表格 ${tableIndex} (${table.name})，数据:`, data);
+                        appliedEdits++;
+                    }
+                    break;
+                }
+                case 'deleteRow': {
+                    const [tableIndex, rowIndex] = args;
+                    const table = sheets[tableIndex];
+                    if (table && table.content && table.content.length > rowIndex + 1) {
+                        table.content.splice(rowIndex + 1, 1);
+                        console.log(`应用deleteRow到表格 ${tableIndex} (${table.name})，索引 ${rowIndex}`);
+                        appliedEdits++;
+                    }
+                    break;
+                }
+                case 'updateRow': {
+                    const [tableIndex, rowIndex, data] = args;
+                    const table = sheets[tableIndex];
+                    if (table && table.content && table.content.length > rowIndex + 1 && typeof data === 'object') {
+                        Object.keys(data).forEach(colIndexStr => {
+                            const colIndex = parseInt(colIndexStr, 10);
+                            if (!isNaN(colIndex) && table.content[rowIndex + 1].length > colIndex + 1) {
+                                table.content[rowIndex + 1][colIndex + 1] = data[colIndexStr];
+                            }
+                        });
+                        console.log(`应用updateRow到表格 ${tableIndex} (${table.name})，索引 ${rowIndex}，数据:`, data);
+                        appliedEdits++;
+                    }
+                    break;
+                }
+            }
+        } catch (e) {
+            console.error(`解析或应用指令失败: "${line}"`, e);
+        }
+    });
+    
+    showToast(`从AI响应中成功应用了 ${appliedEdits} 个数据库更新`, 'info');
+    return true;
+}
+
+/**
+ * 保存JSON表格到聊天记录
+ */
+async function saveJsonTableToChatHistory(targetMessageIndex = -1) {
+    if (!currentJsonTableData) {
+        console.error('保存到聊天记录失败: currentJsonTableData为空');
+        return false;
+    }
+    
+    const context = SillyTavern.getContext();
+    if (!context || !context.chat) {
+        console.error('保存失败: 聊天记录为空');
+        return false;
+    }
+    
+    const chat = context.chat;
+    let targetMessage = null;
+    let finalIndex = -1;
+    
+    // 优先使用传入的目标索引
+    if (targetMessageIndex !== -1 && chat[targetMessageIndex] && !chat[targetMessageIndex].is_user) {
+        targetMessage = chat[targetMessageIndex];
+        finalIndex = targetMessageIndex;
+    } else {
+        // 作为备用，查找最新的AI消息
+        console.log('未提供有效的目标索引，查找最新的AI消息来保存数据库');
+        for (let i = chat.length - 1; i >= 0; i--) {
+            if (!chat[i].is_user) {
+                targetMessage = chat[i];
+                finalIndex = i;
+                break;
+            }
+        }
+    }
+    
+    if (!targetMessage) {
+        console.warn('保存失败: 聊天记录中未找到AI消息来附加数据');
+        return false;
+    }
+    
+    // 使用深拷贝来存储数据快照，防止所有消息引用同一个对象
+    targetMessage.TavernDB_ACU_Data = JSON.parse(JSON.stringify(currentJsonTableData));
+    console.log(`已将数据库附加到索引 ${finalIndex} 的消息。正在保存聊天记录...`);
+    
+    // 保存聊天记录
+    if (context.saveChat) {
+        await context.saveChat();
+    } else if (context.saveChatDebounced) {
+        context.saveChatDebounced();
+    } else {
+        console.warn('无法保存聊天记录：saveChat方法不可用');
+    }
+    
+    showToast('数据库已成功保存到当前聊天记录', 'success');
+    return true;
+}
+
+/**
  * 按楼层范围更新数据库
  */
 async function updateDatabaseByFloorRange(floorStart, floorEnd) {
@@ -3169,22 +3667,156 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
         
         showToast(`开始更新 ${indicesToUpdate.length} 条消息的数据库...`, 'info');
         
-        // 这里需要实现实际的更新逻辑
-        // 由于更新功能比较复杂，需要调用API、解析响应、保存数据等
-        // 暂时显示提示信息
-        showToast('数据库更新功能正在开发中，请参考参考文档实现完整的更新逻辑', 'info');
+        // 按批次处理更新
+        const batchSize = currentSettings.updateBatchSize || 1;
+        const batches = [];
+        for (let i = 0; i < indicesToUpdate.length; i += batchSize) {
+            batches.push(indicesToUpdate.slice(i, i + batchSize));
+        }
         
-        console.log('需要更新的消息索引:', indicesToUpdate);
-        console.log('更新配置:', {
-            floorStart,
-            floorEnd,
-            batchSize: currentSettings.updateBatchSize,
-            autoUpdateFrequency: currentSettings.autoUpdateFrequency
-        });
+        console.log(`处理 ${indicesToUpdate.length} 个更新，分为 ${batches.length} 个批次，每批 ${batchSize} 个`);
+        
+        let overallSuccess = true;
+        
+        for (let i = 0; i < batches.length; i++) {
+            const batchIndices = batches[i];
+            const batchNumber = i + 1;
+            const totalBatches = batches.length;
+            const firstMessageIndex = batchIndices[0];
+            const lastMessageIndex = batchIndices[batchIndices.length - 1];
+            
+            showToast(`正在处理批次 ${batchNumber}/${totalBatches}...`, 'info');
+            
+            // 1. 加载基础数据库：从当前批次开始的位置往前找最近的记录
+            let foundDb = false;
+            for (let j = firstMessageIndex - 1; j >= 0; j--) {
+                const msg = chat[j];
+                if (!msg.is_user && msg.TavernDB_ACU_Data) {
+                    currentJsonTableData = JSON.parse(JSON.stringify(msg.TavernDB_ACU_Data));
+                    console.log(`[批次 ${batchNumber}] 从消息索引 ${j} 加载数据库状态`);
+                    foundDb = true;
+                    break;
+                }
+            }
+            
+            if (!foundDb) {
+                console.log(`[批次 ${batchNumber}] 未找到之前的数据库，需要从模板初始化`);
+                // 这里可以从模板初始化，暂时跳过
+                showToast('未找到基础数据库，请先初始化数据库', 'warning');
+                overallSuccess = false;
+                break;
+            }
+            
+            // 2. 准备要处理的消息（包含用户消息和AI回复）
+            const firstMessageIndexAdjusted = Math.max(0, firstMessageIndex - 1);
+            let sliceStartIndex = firstMessageIndexAdjusted;
+            
+            // 确保包含用户消息
+            if (sliceStartIndex > 0 && chat[sliceStartIndex] && !chat[sliceStartIndex].is_user && chat[sliceStartIndex - 1]?.is_user) {
+                sliceStartIndex--;
+                console.log(`[批次 ${batchNumber}] 调整切片起始索引到 ${sliceStartIndex} 以包含用户消息`);
+            }
+            
+            const messagesForContext = chat.slice(sliceStartIndex, lastMessageIndex + 1);
+            
+            // 3. 执行更新
+            const toastMessage = `正在处理手动更新 (${batchNumber}/${totalBatches})...`;
+            const saveTargetIndex = lastMessageIndex;
+            
+            try {
+                const success = await proceedWithCardUpdate(messagesForContext, toastMessage, saveTargetIndex);
+                
+                if (!success) {
+                    showToast(`批处理在第 ${batchNumber} 批时失败`, 'error');
+                    overallSuccess = false;
+                    break;
+                }
+            } catch (error) {
+                console.error(`批次 ${batchNumber} 处理失败:`, error);
+                showToast(`批次 ${batchNumber} 处理失败: ${error.message}`, 'error');
+                overallSuccess = false;
+                break;
+            }
+        }
+        
+        if (overallSuccess) {
+            showToast('所有批次更新完成', 'success');
+        }
         
     } catch (error) {
         console.error('更新数据库失败:', error);
         throw error;
+    }
+}
+
+/**
+ * 执行卡片更新流程
+ */
+async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在填表，请稍候...', saveTargetIndex = -1) {
+    let success = false;
+    const maxRetries = 3;
+    
+    try {
+        showToast(batchToastMessage, 'info');
+        
+        // 准备AI输入
+        console.log('准备AI输入...');
+        const dynamicContent = await prepareAIInput(messagesToUse);
+        if (!dynamicContent) {
+            throw new Error('无法准备AI输入，数据库未加载');
+        }
+        
+        // 调用API（最多重试3次）
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            console.log(`第 ${attempt}/${maxRetries} 次调用AI进行增量更新...`);
+            
+            const aiResponse = await callCustomOpenAI(dynamicContent);
+            
+            if (currentAbortController && currentAbortController.signal.aborted) {
+                throw new DOMException('Aborted by user', 'AbortError');
+            }
+            
+            if (!aiResponse || !aiResponse.includes('<tableEdit>') || !aiResponse.includes('</tableEdit>')) {
+                console.warn(`第 ${attempt} 次尝试失败：AI响应中未找到完整有效的 <tableEdit> 标签`);
+                if (attempt === maxRetries) {
+                    throw new Error(`AI在 ${maxRetries} 次尝试后仍未能返回有效指令`);
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒后重试
+                continue;
+            }
+            
+            // 解析并应用AI返回的更新
+            console.log('解析并应用AI返回的更新...');
+            const parseSuccess = parseAndApplyTableEdits(aiResponse);
+            if (!parseSuccess) {
+                throw new Error('解析或应用AI更新时出错');
+            }
+            
+            success = true;
+            break;
+        }
+        
+        if (success) {
+            // 保存到聊天记录
+            console.log('正在将更新后的数据库保存到聊天记录...');
+            const saveSuccess = await saveJsonTableToChatHistory(saveTargetIndex);
+            if (!saveSuccess) {
+                throw new Error('无法将更新后的数据库保存到聊天记录');
+            }
+            
+            console.log('数据库增量更新成功！');
+        }
+        
+        return success;
+        
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.log('请求被用户中止');
+        } else {
+            console.error(`数据库增量更新流程失败: ${error.message}`, error);
+            showToast(`更新失败: ${error.message}`, 'error');
+        }
+        return false;
     }
 }
 
