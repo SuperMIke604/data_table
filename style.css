@@ -2,6 +2,7 @@
 .data-manage-popup {
     --ios-blue: #007AFF;
     --ios-blue-hover: #0051D5;
+    --ios-blue-active: #0041B5;
     --ios-gray: #F2F2F7;
     --ios-gray-dark: #E5E5EA;
     --ios-text: #000000;
@@ -17,7 +18,12 @@
     border-radius: 14px;
     box-shadow: 0 4px 20px var(--ios-shadow);
     padding: 20px;
-    max-width: 800px;
+    width: 60%;
+    max-width: 1200px;
+    min-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    overflow-x: hidden;
     margin: 0 auto;
 }
 
@@ -63,15 +69,17 @@
 }
 
 .data-manage-tab-button.active {
-    color: var(--ios-blue);
-    border-bottom-color: var(--ios-blue);
-    background-color: var(--ios-gray);
+    color: white;
+    border-bottom-color: var(--ios-blue-active);
+    background-color: var(--ios-blue-active);
 }
 
 /* Tab内容 */
 .data-manage-tab-content {
     display: none;
     animation: fadeIn 0.3s ease;
+    overflow-y: auto;
+    max-height: calc(90vh - 200px);
 }
 
 .data-manage-tab-content.active {
@@ -276,6 +284,8 @@
     .data-manage-popup {
         padding: 16px;
         border-radius: 12px;
+        width: 95%;
+        min-width: 320px;
     }
     
     .data-manage-tabs-nav {
@@ -288,11 +298,17 @@
     }
     
     .data-manage-tab-button.active {
-        border-bottom-color: var(--ios-blue);
+        border-bottom-color: var(--ios-blue-active);
+        background-color: var(--ios-blue-active);
+        color: white;
     }
     
     .data-manage-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .data-manage-tab-content {
+        max-height: calc(90vh - 250px);
     }
 }
 
