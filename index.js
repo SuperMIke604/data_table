@@ -3732,19 +3732,29 @@ async function prepareAIInput(messages) {
             const prefix = msg.is_user ? name1 : (msg.name || '角色');
             let content = msg.mes || msg.message || '';
             
-            // 清理内容：移除标记和标签
+            // 清理内容：移除标记和标签 - 参考参考文档
             
-            if (currentSettings.removeTags) {
-                const tags = currentSettings.removeTags.split(',').map(t => t.trim());
-                tags.forEach(tag => {
-                    const regex = new RegExp(`<${tag}[^>]*>.*?</${tag}>`, 'gis');
-                    content = content.replace(regex, '');
-                });
+            // 参考参考文档：使用 removeTaggedContent_ACU 的实现方式
+            if (currentSettings.removeTags && typeof content === 'string' && content.trim() !== '') {
+                const tagsToRemove = currentSettings.removeTags.split('|')
+                    .map(tag => tag.trim())
+                    .filter(tag => tag);
+                
+                if (tagsToRemove.length > 0) {
+                    let cleanedText = content;
+                    tagsToRemove.forEach(tag => {
+                        // 创建一个正则表达式来匹配 <tag>...</tag> and <tag/>
+                        // g for global, i for case-insensitive
+                        const regex = new RegExp(`<${tag}>[\\s\\S]*?<\\/${tag}>|<${tag}\\/>`, 'gi');
+                        cleanedText = cleanedText.replace(regex, '');
+                    });
+                    content = cleanedText;
+                }
             }
             
-            // 如果是用户消息，添加标签
+            // 如果是用户消息，添加标签 - 参考参考文档
             if (msg.is_user && currentSettings.userMessageTags) {
-                const tags = currentSettings.userMessageTags.split(',').map(t => t.trim());
+                const tags = currentSettings.userMessageTags.split('|').map(t => t.trim()).filter(t => t);
                 tags.forEach(tag => {
                     if (tag) {
                         content = `<${tag}>${content}</${tag}>`;
