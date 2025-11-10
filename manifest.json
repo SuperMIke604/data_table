@@ -1,12 +1,14 @@
 {
-    "display_name": "Notebook",
+    "display_name": "数据管理",
     "loading_order": 100,
     "requires": [],
     "optional": [],
-    "js": "dist/index.js",
+    "dependencies": [],
+    "js": "index.js",
     "css": "",
-    "author": "Cohee1207",
+    "author": "Your Name",
     "version": "1.0.0",
-    "homePage": "https://github.com/SillyTavern/Extension-Notebook",
+    "homePage": "https://github.com/your/extension",
     "auto_update": true
 }
+
