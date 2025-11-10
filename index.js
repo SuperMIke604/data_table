@@ -290,19 +290,21 @@ function updateStatusDisplay() {
         }
         
         const chat = context.chat;
-        const totalMessages = chat.length - 1; // 排除楼层0
+        // 参考参考文档：楼层号直接使用数组索引，不需要减1
+        const totalMessages = chat.length;
         
-        // 计算已记录的楼层数（这里简化处理，实际应该检查每条消息是否有数据库记录）
-        let recordedCount = 0;
-        for (let i = chat.length - 1; i > 0; i--) {
-            // 检查消息是否有数据库记录标记（根据实际数据结构调整）
+        // 计算已记录的楼层数 - 参考参考文档：查找最新的有数据库记录的消息索引
+        let recordedCount = -1;
+        for (let i = chat.length - 1; i >= 0; i--) {
+            // 检查消息是否有数据库记录标记
             if (chat[i] && chat[i].TavernDB_ACU_Data) {
-                recordedCount = i;
+                recordedCount = i; // 楼层号就是数组索引
                 break;
             }
         }
         
-        const unrecordedCount = totalMessages - recordedCount;
+        // 计算未记录的楼层数
+        const unrecordedCount = recordedCount === -1 ? totalMessages : (totalMessages - 1 - recordedCount);
         
         // 更新显示
         const statusDisplay = parentDoc.getElementById('data-manage-status-display');
@@ -745,12 +747,13 @@ function openDataManagePopup() {
                         <div style="display: flex; flex-direction: column; gap: 15px;">
                             <div class="data-manage-input-group">
                                 <label for="data-manage-floor-start">起始楼层:</label>
-                                <input type="number" id="data-manage-floor-start" placeholder="开始楼层" min="1" style="max-width: 150px;">
+                                <input type="number" id="data-manage-floor-start" placeholder="开始楼层" min="0" style="max-width: 150px;">
                             </div>
                             <div class="data-manage-input-group">
                                 <label for="data-manage-floor-end">结束楼层:</label>
-                                <input type="number" id="data-manage-floor-end" placeholder="结束楼层" min="1" style="max-width: 150px;">
+                                <input type="number" id="data-manage-floor-end" placeholder="结束楼层" min="0" style="max-width: 150px;">
                             </div>
+                            <p class="data-manage-notes">楼层号从0开始（参考参考文档规则）</p>
                             <button id="data-manage-update-card" class="primary" style="width:100%;">按楼层范围更新数据库</button>
                             <div class="data-manage-checkbox-group">
                                 <input type="checkbox" id="data-manage-auto-update-enabled">
@@ -1104,11 +1107,12 @@ function setupStatusTabListeners(parentDoc) {
     const updateBtn = parentDoc.getElementById('data-manage-update-card');
     if (updateBtn) {
         updateBtn.addEventListener('click', function() {
+            // 参考参考文档：楼层号直接使用数组索引（从0开始）
             const floorStart = parseInt(parentDoc.getElementById('data-manage-floor-start')?.value || '0');
             const floorEnd = parseInt(parentDoc.getElementById('data-manage-floor-end')?.value || '0');
             
-            if (!floorStart || !floorEnd || floorStart < 1 || floorEnd < 1) {
-                showToast('请输入有效的楼层范围', 'warning');
+            if (isNaN(floorStart) || isNaN(floorEnd) || floorStart < 0 || floorEnd < 0) {
+                showToast('请输入有效的楼层范围（楼层号从0开始）', 'warning');
                 return;
             }
             
@@ -2257,11 +2261,11 @@ function showDataOverview() {
             overviewArea.style.display = 'block';
             overviewContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载数据概览...</em>';
             
-            // 遍历聊天记录，查找包含数据库数据的消息（排除楼层0）
+            // 遍历聊天记录，查找包含数据库数据的消息 - 参考参考文档：楼层号直接使用数组索引
             let html = '<div class="overview-content">';
             html += '<h3 style="color: var(--ios-text); margin-bottom: 20px;">聊天记录数据概览</h3>';
             
-            for (let i = chat.length - 1; i > 0; i--) {
+            for (let i = chat.length - 1; i >= 0; i--) {
                 const message = chat[i];
                 let messageData = null;
                 
@@ -2297,13 +2301,22 @@ function showDataOverview() {
                 
                 if (messageData) {
                     dataCount++;
+                    // 参考参考文档：楼层号直接使用数组索引（i就是楼层号）
                     const messageIndex = i;
                     const timestamp = new Date(message.send_date || message.timestamp || Date.now()).toLocaleString();
                     const messageType = message.is_user ? '用户消息' : 'AI回复';
                     
+                    // 详情展开区域（根据状态决定是否显示）
+                    const isExpanded = expandedDetails.has(i);
+                    const displayStyle = isExpanded ? 'block' : 'none';
+                    const buttonText = isExpanded ? '收起详情' : '展开详情';
+                    
+                    // 使用包装器，让详情区域向下扩展，不挤占原有内容
+                    html += `<div class="message-data-card-wrapper" data-message-index="${i}" style="margin-bottom: 15px;">`;
+                    
                     html += `<div class="message-data-card" data-message-index="${i}" style="
                         background: var(--ios-gray); border: 1px solid var(--ios-border); border-radius: 10px; 
-                        padding: 15px; margin-bottom: 15px; color: var(--ios-text);
+                        padding: 15px; color: var(--ios-text);
                         display: flex; align-items: flex-start; gap: 10px;
                     ">`;
                     html += `<div style="flex: 1; min-width: 0;">`;
@@ -2333,11 +2346,6 @@ function showDataOverview() {
                     
                     html += `</div>`;
                     
-                    // 详情展开区域（根据状态决定是否显示）
-                    const isExpanded = expandedDetails.has(i);
-                    const displayStyle = isExpanded ? 'block' : 'none';
-                    const buttonText = isExpanded ? '收起详情' : '展开详情';
-                    
                     // 操作按钮 - 缩小宽度，优先展示内容
                     html += `<div style="text-align: right; flex-shrink: 0; width: 140px; margin-left: 10px;">`;
                     html += `<button class="toggle-details-btn" data-message-index="${i}" style="
@@ -2352,11 +2360,13 @@ function showDataOverview() {
                     ">删除</button>`;
                     html += `</div>`;
                     html += `</div>`; // 关闭 flex 内容容器
+                    html += `</div>`; // 关闭 message-data-card
                     
+                    // 详情展开区域（向下扩展，不挤占原有内容）- 参考参考文档
                     html += `<div class="message-details" data-message-index="${i}" style="
-                        display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
+                        display: ${displayStyle}; margin-top: 0; margin-bottom: 0;
                         border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
-                        border-radius: 6px; padding: 15px;
+                        border-radius: 0 0 6px 6px; padding: 15px;
                     ">`;
                     html += `<div class="details-content">`;
                     if (isExpanded) {
@@ -2365,8 +2375,8 @@ function showDataOverview() {
                         html += `<!-- 详情内容将在这里动态加载 -->`;
                     }
                     html += `</div>`;
-                    html += `</div>`;
-                    html += `</div>`;
+                    html += `</div>`; // 关闭 message-details
+                    html += `</div>`; // 关闭 message-data-card-wrapper
                 }
             }
             
@@ -4164,23 +4174,45 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
         
         const chat = context.chat;
         
+        // 参考参考文档：楼层号直接使用数组索引
+        // 1. 获取所有AI消息的索引（楼层号直接使用数组索引）
+        const allAiMessageIndices = chat
+            .map((msg, index) => !msg.is_user ? index : -1)
+            .filter(index => index !== -1);
+        
+        if (allAiMessageIndices.length === 0) {
+            showToast('没有找到AI消息可供处理', 'info');
+            return;
+        }
+        
+        // 2. 根据用户输入的楼层范围筛选消息 - 参考参考文档
+        let messagesToProcessIndices = [];
+        
         // 验证楼层范围
-        if (floorStart < 1 || floorEnd < 1 || floorStart > chat.length || floorEnd > chat.length) {
+        if (floorStart < 0 || floorEnd < 0 || floorStart > chat.length - 1 || floorEnd > chat.length - 1) {
             throw new Error('楼层范围无效');
         }
         
-        // 查找要更新的消息索引（楼层从1开始，数组索引从0开始）
-        const indicesToUpdate = [];
-        for (let i = floorStart; i <= floorEnd; i++) {
-            const messageIndex = i - 1; // 转换为数组索引
-            if (messageIndex >= 0 && messageIndex < chat.length) {
-                const message = chat[messageIndex];
-                // 只更新AI回复的消息
-                if (message && !message.is_user) {
-                    indicesToUpdate.push(messageIndex);
-                }
+        if (floorEnd === null || floorEnd === undefined) {
+            // 只指定起始楼层，处理从该楼层到最新的所有AI消息
+            // 特殊处理：当起始楼层为0时，包含0层
+            if (floorStart === 0) {
+                messagesToProcessIndices = allAiMessageIndices.filter(floorNum => floorNum >= 0);
+            } else {
+                messagesToProcessIndices = allAiMessageIndices.filter(floorNum => floorNum >= floorStart);
+            }
+        } else {
+            // 指定了楼层范围，处理该范围内的AI消息
+            // 特殊处理：当起始楼层为0时，包含0层
+            if (floorStart === 0) {
+                messagesToProcessIndices = allAiMessageIndices.filter(floorNum => floorNum >= 0 && floorNum <= floorEnd);
+            } else {
+                messagesToProcessIndices = allAiMessageIndices.filter(floorNum => floorNum >= floorStart && floorNum <= floorEnd);
             }
         }
+        
+        // 楼层号已经是数组索引，直接使用
+        const indicesToUpdate = messagesToProcessIndices;
         
         if (indicesToUpdate.length === 0) {
             showToast('指定楼层范围内没有需要更新的消息', 'warning');
