@@ -41,6 +41,14 @@ const DEFAULT_SETTINGS = {
         temperature: 0.9            // 温度
     },
     tavernProfile: '',             // 酒馆连接预设ID
+    
+    // 世界书配置
+    worldbookConfig: {
+        source: 'character',        // 世界书来源: 'character' 或 'manual'
+        injectionTarget: 'character', // 数据注入目标: 'character' 或世界书文件名
+        manualSelection: [],        // 手动选择的世界书列表
+        enabledEntries: {}          // 启用的世界书条目: {'worldbook_name': ['entry_uid1', 'entry_uid2']}
+    },
 };
 
 // 当前配置
@@ -331,6 +339,9 @@ function loadSettingsToUI() {
     
     // 加载API配置到UI
     loadApiSettingsToUI(settings);
+    
+    // 加载世界书配置到UI
+    loadWorldbookSettingsToUI(settings);
 }
 
 /**
@@ -675,11 +686,17 @@ function openDataManagePopup() {
                 <div class="data-manage-card">
                     <h3>世界书设置</h3>
                     <div style="margin-bottom: 15px;">
-                        <label>数据源:</label>
+                        <label for="data-manage-injection-target">数据注入目标:</label>
+                        <select id="data-manage-injection-target" style="width: 100%; margin-top: 8px;"></select>
+                        <p class="data-manage-notes">选择数据库条目（如全局、人物、大纲等）将被创建或更新到哪个世界书里。</p>
+                    </div>
+                    <hr style="border-color: var(--ios-border); margin: 15px 0;">
+                    <div style="margin-bottom: 15px;">
+                        <label>世界书来源 (用于AI读取上下文):</label>
                         <div style="display: flex; gap: 20px; margin-top: 10px;">
                             <label style="display: flex; align-items: center; gap: 8px;">
-                                <input type="radio" name="data-manage-worldbook-source" value="auto" checked>
-                                <span>自动选择</span>
+                                <input type="radio" name="data-manage-worldbook-source" value="character" checked>
+                                <span>角色卡绑定</span>
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px;">
                                 <input type="radio" name="data-manage-worldbook-source" value="manual">
@@ -688,17 +705,23 @@ function openDataManagePopup() {
                         </div>
                     </div>
                     <div id="data-manage-worldbook-manual-block" style="display: none; margin-top: 15px;">
-                        <label for="data-manage-worldbook-select">选择世界书:</label>
-                        <select id="data-manage-worldbook-select"></select>
-                        <label for="data-manage-injection-target" style="margin-top: 15px;">注入目标:</label>
-                        <select id="data-manage-injection-target">
-                            <option value="system">系统提示</option>
-                            <option value="user">用户消息</option>
-                            <option value="assistant">助手消息</option>
-                        </select>
+                        <label>选择世界书 (可多选):</label>
+                        <div class="data-manage-input-group" style="margin-top: 8px;">
+                            <div id="data-manage-worldbook-select" style="flex: 1; min-height: 100px; max-height: 200px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 8px; background-color: var(--ios-gray);"></div>
+                            <button id="data-manage-refresh-worldbooks" class="secondary" title="刷新世界书列表">刷新</button>
+                        </div>
                     </div>
-                    <div class="data-manage-button-group" style="margin-top: 15px;">
-                        <button id="data-manage-save-worldbook" class="primary">保存世界书配置</button>
+                    <div style="margin-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <label style="margin-bottom: 0;">启用的世界书条目:</label>
+                            <div class="data-manage-button-group" style="margin: 0; gap: 8px;">
+                                <button id="data-manage-worldbook-select-all" class="secondary" style="padding: 6px 12px; font-size: 13px;">全选</button>
+                                <button id="data-manage-worldbook-deselect-all" class="secondary" style="padding: 6px 12px; font-size: 13px;">全不选</button>
+                            </div>
+                        </div>
+                        <div id="data-manage-worldbook-entry-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);">
+                            <em style="color: var(--ios-text-secondary);">正在加载条目...</em>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -706,14 +729,37 @@ function openDataManagePopup() {
             <div id="data-manage-tab-data" class="data-manage-tab-content">
                 <div class="data-manage-card">
                     <h3>数据管理</h3>
+                    <p class="data-manage-notes">导入/导出当前对话的数据库，或管理全局模板。</p>
                     <div class="data-manage-button-group">
-                        <button id="data-manage-show-overview" class="primary">显示数据概览</button>
-                        <button id="data-manage-refresh-data" class="secondary">刷新数据</button>
-                        <button id="data-manage-export-data" class="secondary">导出数据</button>
+                        <button id="data-manage-import-combined" class="primary">合并导入(模板+指令)</button>
+                        <button id="data-manage-export-combined" class="primary">合并导出(模板+指令)</button>
                     </div>
-                    <div id="data-manage-overview-area" style="display: none; margin-top: 20px;">
-                        <div class="data-manage-status-display">
-                            数据概览内容将显示在这里
+                    <hr style="border-color: var(--ios-border); margin: 15px 0;">
+                    <div class="data-manage-button-group">
+                        <button id="data-manage-export-json" class="secondary">导出JSON数据</button>
+                        <button id="data-manage-import-template" class="secondary">导入新模板</button>
+                        <button id="data-manage-export-template" class="secondary">导出当前模板</button>
+                        <button id="data-manage-reset-template" class="secondary">恢复默认模板</button>
+                    </div>
+                    <div class="data-manage-button-group" style="margin-top: 10px;">
+                        <button id="data-manage-visualize-template" class="secondary">可视化当前模板</button>
+                        <button id="data-manage-show-overview" class="secondary">数据概览</button>
+                    </div>
+                    <div id="data-manage-template-visualization" style="display: none; margin-top: 15px;">
+                        <div class="data-manage-button-group" style="margin-bottom: 10px;">
+                            <button id="data-manage-save-visualized-template" class="primary">保存模板</button>
+                            <button id="data-manage-refresh-template-display" class="secondary">刷新显示</button>
+                        </div>
+                        <textarea id="data-manage-template-textarea" style="width: 100%; min-height: 300px; font-family: monospace; background-color: var(--ios-gray); color: var(--ios-text); padding: 12px; border: 1px solid var(--ios-border); border-radius: 8px; resize: vertical;"></textarea>
+                    </div>
+                    <div id="data-manage-overview-area" style="display: none; margin-top: 15px;">
+                        <div class="data-manage-button-group" style="margin-bottom: 10px;">
+                            <button id="data-manage-refresh-overview" class="secondary">刷新概览</button>
+                            <button id="data-manage-export-overview-data" class="secondary">导出数据</button>
+                            <button id="data-manage-close-overview" class="secondary">关闭</button>
+                        </div>
+                        <div id="data-manage-overview-container" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);">
+                            <em style="color: var(--ios-text-secondary);">数据概览内容将显示在这里</em>
                         </div>
                     </div>
                 </div>
@@ -827,6 +873,12 @@ function switchTab(tabName) {
     if (tabName === 'api') {
         loadTavernApiProfiles();
         updateApiStatusDisplay();
+    }
+    
+    // 如果切换到世界书Tab，加载世界书列表
+    if (tabName === 'worldbook') {
+        populateInjectionTargetSelector();
+        updateWorldbookSourceView();
     }
 }
 
@@ -1416,69 +1468,712 @@ function setupApiTabListeners(parentDoc) {
 }
 
 /**
+ * 加载世界书配置到UI
+ */
+function loadWorldbookSettingsToUI(settings) {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const worldbookConfig = settings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+    
+    // 世界书来源
+    const sourceRadios = parentDoc.querySelectorAll('input[name="data-manage-worldbook-source"]');
+    sourceRadios.forEach(radio => {
+        if (radio.value === (worldbookConfig.source || 'character')) {
+            radio.checked = true;
+        }
+    });
+    
+    // 触发来源切换以更新UI
+    if (sourceRadios.length > 0) {
+        const event = new Event('change', { bubbles: true });
+        sourceRadios[0].dispatchEvent(event);
+    }
+}
+
+/**
+ * 获取世界书列表
+ */
+async function getWorldBooks() {
+    try {
+        const context = SillyTavern.getContext();
+        
+        // 尝试使用 TavernHelper API
+        if (context && typeof context.getLorebooks === 'function' && typeof context.getLorebookEntries === 'function') {
+            const bookNames = context.getLorebooks();
+            const books = [];
+            for (const name of bookNames) {
+                let entries = await context.getLorebookEntries(name);
+                if (entries && Array.isArray(entries)) {
+                    entries = entries.map(entry => ({ ...entry, book: name }));
+                }
+                books.push({ name, entries: entries || [] });
+            }
+            return books;
+        }
+        
+        // 回退到 SillyTavern API
+        if (context && typeof context.getWorldBooks === 'function') {
+            return await context.getWorldBooks();
+        }
+        
+        return [];
+    } catch (error) {
+        console.error('获取世界书列表失败:', error);
+        return [];
+    }
+}
+
+/**
+ * 填充注入目标选择器
+ */
+async function populateInjectionTargetSelector() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const select = parentDoc.getElementById('data-manage-injection-target');
+    if (!select) return;
+    
+    try {
+        const books = await getWorldBooks();
+        select.innerHTML = '<option value="character">角色卡绑定世界书</option>';
+        
+        books.forEach(book => {
+            const option = parentDoc.createElement('option');
+            option.value = book.name;
+            option.textContent = book.name;
+            select.appendChild(option);
+        });
+        
+        // 设置当前选中的值
+        const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+        select.value = worldbookConfig.injectionTarget || 'character';
+        
+        // 监听变化
+        select.addEventListener('change', function() {
+            if (!currentSettings.worldbookConfig) {
+                currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+            }
+            currentSettings.worldbookConfig.injectionTarget = this.value;
+            saveSettings();
+        });
+    } catch (error) {
+        console.error('填充注入目标选择器失败:', error);
+        select.innerHTML = '<option value="character">加载列表失败</option>';
+    }
+}
+
+/**
+ * 填充世界书列表（手动选择模式）
+ */
+async function populateWorldbookList() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const container = parentDoc.getElementById('data-manage-worldbook-select');
+    if (!container) return;
+    
+    container.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载...</em>';
+    
+    try {
+        const books = await getWorldBooks();
+        container.innerHTML = '';
+        
+        if (books.length === 0) {
+            container.innerHTML = '<em style="color: var(--ios-text-secondary);">未找到世界书</em>';
+            return;
+        }
+        
+        const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+        const manualSelection = worldbookConfig.manualSelection || [];
+        
+        books.forEach(book => {
+            const isSelected = manualSelection.includes(book.name);
+            const item = parentDoc.createElement('div');
+            item.className = 'data-manage-worldbook-item';
+            item.style.cssText = `
+                padding: 8px 12px;
+                margin: 4px 0;
+                border: 1px solid var(--ios-border);
+                border-radius: 8px;
+                background-color: ${isSelected ? 'var(--ios-blue-active)' : 'var(--ios-surface)'};
+                color: ${isSelected ? 'white' : 'var(--ios-text)'};
+                cursor: pointer;
+                transition: all 0.2s ease;
+            `;
+            item.textContent = book.name;
+            item.dataset.bookName = book.name;
+            
+            if (isSelected) {
+                item.classList.add('selected');
+            }
+            
+            item.addEventListener('click', function() {
+                const bookName = this.dataset.bookName;
+                let selection = worldbookConfig.manualSelection || [];
+                
+                if (this.classList.contains('selected')) {
+                    selection = selection.filter(name => name !== bookName);
+                    this.classList.remove('selected');
+                    this.style.backgroundColor = 'var(--ios-surface)';
+                    this.style.color = 'var(--ios-text)';
+                } else {
+                    selection.push(bookName);
+                    this.classList.add('selected');
+                    this.style.backgroundColor = 'var(--ios-blue-active)';
+                    this.style.color = 'white';
+                }
+                
+                if (!currentSettings.worldbookConfig) {
+                    currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+                }
+                currentSettings.worldbookConfig.manualSelection = selection;
+                saveSettings();
+                
+                populateWorldbookEntryList();
+            });
+            
+            container.appendChild(item);
+        });
+    } catch (error) {
+        console.error('填充世界书列表失败:', error);
+        container.innerHTML = '<em style="color: var(--ios-text-secondary);">加载失败</em>';
+    }
+}
+
+/**
+ * 填充世界书条目列表
+ */
+async function populateWorldbookEntryList() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const container = parentDoc.getElementById('data-manage-worldbook-entry-list');
+    if (!container) return;
+    
+    container.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载条目...</em>';
+    
+    const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+    const source = worldbookConfig.source || 'character';
+    let bookNames = [];
+    
+    try {
+        // 获取世界书名称列表
+        if (source === 'character') {
+            const context = SillyTavern.getContext();
+            // 尝试获取角色卡绑定的世界书
+            if (context && typeof context.getCharLorebooks === 'function') {
+                const charLorebooks = await context.getCharLorebooks({ type: 'all' });
+                if (charLorebooks.primary) bookNames.push(charLorebooks.primary);
+                if (charLorebooks.additional?.length) bookNames.push(...charLorebooks.additional);
+            }
+        } else if (source === 'manual') {
+            bookNames = worldbookConfig.manualSelection || [];
+        }
+        
+        if (bookNames.length === 0) {
+            container.innerHTML = '<em style="color: var(--ios-text-secondary);">未找到世界书</em>';
+            return;
+        }
+        
+        const allBooks = await getWorldBooks();
+        let html = '';
+        let settingsChanged = false;
+        
+        for (const bookName of bookNames) {
+            const bookData = allBooks.find(b => b.name === bookName);
+            if (bookData && bookData.entries) {
+                // 如果该世界书没有设置，默认启用所有条目
+                if (typeof worldbookConfig.enabledEntries[bookName] === 'undefined') {
+                    worldbookConfig.enabledEntries[bookName] = bookData.entries.map(entry => entry.uid || entry.id);
+                    settingsChanged = true;
+                }
+                
+                const enabledEntries = worldbookConfig.enabledEntries[bookName] || [];
+                html += `<div style="margin-bottom: 8px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid var(--ios-border);">${escapeHtml(bookName)}</div>`;
+                
+                bookData.entries.forEach(entry => {
+                    const entryUid = entry.uid || entry.id;
+                    const isEnabled = enabledEntries.includes(entryUid);
+                    const entryName = entry.name || entryUid || '未命名条目';
+                    const checkboxId = `worldbook-entry-${bookName}-${entryUid}`.replace(/[^a-zA-Z0-9-]/g, '-');
+                    
+                    html += `
+                        <div class="data-manage-checkbox-group" style="margin-bottom: 4px;">
+                            <input type="checkbox" id="${checkboxId}" data-book="${escapeHtml(bookName)}" data-uid="${escapeHtml(entryUid)}" ${isEnabled ? 'checked' : ''}>
+                            <label for="${checkboxId}" style="margin: 0; cursor: pointer; flex: 1;">${escapeHtml(entryName)}</label>
+                        </div>
+                    `;
+                });
+            }
+        }
+        
+        if (settingsChanged) {
+            if (!currentSettings.worldbookConfig) {
+                currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+            }
+            currentSettings.worldbookConfig.enabledEntries = worldbookConfig.enabledEntries;
+            saveSettings();
+        }
+        
+        container.innerHTML = html;
+        
+        // 绑定复选框事件
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const bookName = this.dataset.book;
+                const entryUid = this.dataset.uid;
+                
+                if (!currentSettings.worldbookConfig) {
+                    currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+                }
+                if (!currentSettings.worldbookConfig.enabledEntries[bookName]) {
+                    currentSettings.worldbookConfig.enabledEntries[bookName] = [];
+                }
+                
+                const enabledList = currentSettings.worldbookConfig.enabledEntries[bookName];
+                const index = enabledList.indexOf(entryUid);
+                
+                if (this.checked) {
+                    if (index === -1) {
+                        enabledList.push(entryUid);
+                    }
+                } else {
+                    if (index !== -1) {
+                        enabledList.splice(index, 1);
+                    }
+                }
+                
+                saveSettings();
+            });
+        });
+    } catch (error) {
+        console.error('填充世界书条目列表失败:', error);
+        container.innerHTML = '<em style="color: var(--ios-text-secondary);">加载失败</em>';
+    }
+}
+
+/**
+ * 更新世界书来源视图
+ */
+async function updateWorldbookSourceView() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+    const source = worldbookConfig.source || 'character';
+    const manualBlock = parentDoc.getElementById('data-manage-worldbook-manual-block');
+    
+    if (source === 'manual') {
+        if (manualBlock) manualBlock.style.display = 'block';
+        await populateWorldbookList();
+    } else {
+        if (manualBlock) manualBlock.style.display = 'none';
+    }
+    
+    await populateWorldbookEntryList();
+}
+
+/**
  * 设置世界书Tab的事件监听器
  */
 function setupWorldbookTabListeners(parentDoc) {
-    // 数据源切换
+    // 世界书来源切换
     const sourceRadios = parentDoc.querySelectorAll('input[name="data-manage-worldbook-source"]');
     sourceRadios.forEach(radio => {
-        radio.addEventListener('change', function() {
+        radio.addEventListener('change', async function() {
             const source = this.value;
-            const manualBlock = parentDoc.getElementById('data-manage-worldbook-manual-block');
             
-            if (source === 'manual') {
-                if (manualBlock) manualBlock.style.display = 'block';
-            } else {
-                if (manualBlock) manualBlock.style.display = 'none';
+            if (!currentSettings.worldbookConfig) {
+                currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
             }
+            currentSettings.worldbookConfig.source = source;
+            saveSettings();
+            
+            await updateWorldbookSourceView();
         });
     });
     
-    // 保存世界书配置
-    const saveBtn = parentDoc.getElementById('data-manage-save-worldbook');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function() {
-            console.log('保存世界书配置');
-            alert('保存世界书配置功能待实现');
+    // 刷新世界书列表
+    const refreshBtn = parentDoc.getElementById('data-manage-refresh-worldbooks');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async function() {
+            await populateWorldbookList();
+            showToast('世界书列表已刷新', 'success');
+        });
+    }
+    
+    // 全选条目
+    const selectAllBtn = parentDoc.getElementById('data-manage-worldbook-select-all');
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function() {
+            const container = parentDoc.getElementById('data-manage-worldbook-entry-list');
+            if (!container) return;
+            
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                checkbox.dispatchEvent(new Event('change'));
+            });
+            
+            showToast('已全选所有条目', 'success');
+        });
+    }
+    
+    // 全不选条目
+    const deselectAllBtn = parentDoc.getElementById('data-manage-worldbook-deselect-all');
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function() {
+            const container = parentDoc.getElementById('data-manage-worldbook-entry-list');
+            if (!container) return;
+            
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                checkbox.dispatchEvent(new Event('change'));
+            });
+            
+            showToast('已取消全选', 'info');
         });
     }
 }
 
 /**
- * 设置数据管理Tab的事件监听器
+ * 显示数据概览
  */
+function showDataOverview() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const overviewArea = parentDoc.getElementById('data-manage-overview-area');
+    const overviewContainer = parentDoc.getElementById('data-manage-overview-container');
+    
+    if (!overviewArea || !overviewContainer) return;
+    
+    if (overviewArea.style.display === 'none' || !overviewArea.style.display) {
+        overviewArea.style.display = 'block';
+        overviewContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载数据概览...</em>';
+        
+        // TODO: 实现实际的数据概览逻辑
+        setTimeout(() => {
+            overviewContainer.innerHTML = `
+                <div style="color: var(--ios-text);">
+                    <h4 style="margin: 0 0 10px 0;">数据概览</h4>
+                    <p style="color: var(--ios-text-secondary);">数据概览功能待实现。这里将显示当前对话的数据库统计信息。</p>
+                </div>
+            `;
+        }, 500);
+    } else {
+        overviewArea.style.display = 'none';
+    }
+}
+
+/**
+ * 导出数据为JSON
+ */
+function exportDataAsJSON() {
+    try {
+        const dataToExport = {
+            settings: currentSettings,
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+        };
+        
+        const jsonStr = JSON.stringify(dataToExport, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `data-manage-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('数据已导出为JSON文件', 'success');
+    } catch (error) {
+        console.error('导出数据失败:', error);
+        showToast('导出数据失败', 'error');
+    }
+}
+
+/**
+ * 合并导出（模板+指令）
+ */
+function exportCombinedSettings() {
+    try {
+        const combinedData = {
+            template: currentSettings,
+            prompt: currentSettings.charCardPrompt,
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+        };
+        
+        const jsonStr = JSON.stringify(combinedData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `data-manage-combined-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('合并设置已导出', 'success');
+    } catch (error) {
+        console.error('导出合并设置失败:', error);
+        showToast('导出失败', 'error');
+    }
+}
+
+/**
+ * 合并导入（模板+指令）
+ */
+function importCombinedSettings() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(readerEvent) {
+            try {
+                const importedData = JSON.parse(readerEvent.target.result);
+                
+                if (importedData.template) {
+                    Object.assign(currentSettings, importedData.template);
+                }
+                if (importedData.prompt) {
+                    currentSettings.charCardPrompt = importedData.prompt;
+                }
+                
+                if (saveSettings()) {
+                    loadSettingsToUI();
+                    showToast('合并设置已导入', 'success');
+                } else {
+                    showToast('导入失败', 'error');
+                }
+            } catch (error) {
+                console.error('导入合并设置失败:', error);
+                showToast('文件格式错误', 'error');
+            }
+        };
+        reader.readAsText(file, 'UTF-8');
+    };
+    input.click();
+}
+
+/**
+ * 可视化当前模板
+ */
+function visualizeTemplate() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const visualizationArea = parentDoc.getElementById('data-manage-template-visualization');
+    const textarea = parentDoc.getElementById('data-manage-template-textarea');
+    
+    if (!visualizationArea || !textarea) return;
+    
+    if (visualizationArea.style.display === 'none' || !visualizationArea.style.display) {
+        visualizationArea.style.display = 'block';
+        
+        const templateData = {
+            settings: currentSettings,
+            prompt: currentSettings.charCardPrompt
+        };
+        
+        textarea.value = JSON.stringify(templateData, null, 2);
+    } else {
+        visualizationArea.style.display = 'none';
+    }
+}
+
+/**
+ * 保存可视化模板
+ */
+function saveVisualizedTemplate() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const textarea = parentDoc.getElementById('data-manage-template-textarea');
+    if (!textarea) return;
+    
+    try {
+        const templateData = JSON.parse(textarea.value);
+        
+        if (templateData.settings) {
+            Object.assign(currentSettings, templateData.settings);
+        }
+        if (templateData.prompt) {
+            currentSettings.charCardPrompt = templateData.prompt;
+        }
+        
+        if (saveSettings()) {
+            loadSettingsToUI();
+            showToast('模板已保存', 'success');
+        } else {
+            showToast('保存失败', 'error');
+        }
+    } catch (error) {
+        console.error('保存模板失败:', error);
+        showToast('JSON格式错误', 'error');
+    }
+}
+
 function setupDataTabListeners(parentDoc) {
     // 显示数据概览
     const showOverviewBtn = parentDoc.getElementById('data-manage-show-overview');
     if (showOverviewBtn) {
-        showOverviewBtn.addEventListener('click', function() {
+        showOverviewBtn.addEventListener('click', showDataOverview);
+    }
+    
+    // 关闭概览
+    const closeOverviewBtn = parentDoc.getElementById('data-manage-close-overview');
+    if (closeOverviewBtn) {
+        closeOverviewBtn.addEventListener('click', function() {
             const overviewArea = parentDoc.getElementById('data-manage-overview-area');
-            if (overviewArea) {
-                if (overviewArea.style.display === 'none') {
-                    overviewArea.style.display = 'block';
-                    console.log('显示数据概览');
+            if (overviewArea) overviewArea.style.display = 'none';
+        });
+    }
+    
+    // 刷新概览
+    const refreshOverviewBtn = parentDoc.getElementById('data-manage-refresh-overview');
+    if (refreshOverviewBtn) {
+        refreshOverviewBtn.addEventListener('click', function() {
+            showDataOverview();
+            showToast('数据概览已刷新', 'success');
+        });
+    }
+    
+    // 导出概览数据
+    const exportOverviewBtn = parentDoc.getElementById('data-manage-export-overview-data');
+    if (exportOverviewBtn) {
+        exportOverviewBtn.addEventListener('click', exportDataAsJSON);
+    }
+    
+    // 导出JSON数据
+    const exportJsonBtn = parentDoc.getElementById('data-manage-export-json');
+    if (exportJsonBtn) {
+        exportJsonBtn.addEventListener('click', exportDataAsJSON);
+    }
+    
+    // 合并导出
+    const exportCombinedBtn = parentDoc.getElementById('data-manage-export-combined');
+    if (exportCombinedBtn) {
+        exportCombinedBtn.addEventListener('click', exportCombinedSettings);
+    }
+    
+    // 合并导入
+    const importCombinedBtn = parentDoc.getElementById('data-manage-import-combined');
+    if (importCombinedBtn) {
+        importCombinedBtn.addEventListener('click', importCombinedSettings);
+    }
+    
+    // 导入模板
+    const importTemplateBtn = parentDoc.getElementById('data-manage-import-template');
+    if (importTemplateBtn) {
+        importTemplateBtn.addEventListener('click', function() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(readerEvent) {
+                    try {
+                        const templateData = JSON.parse(readerEvent.target.result);
+                        Object.assign(currentSettings, templateData);
+                        
+                        if (saveSettings()) {
+                            loadSettingsToUI();
+                            showToast('模板已导入', 'success');
+                        } else {
+                            showToast('导入失败', 'error');
+                        }
+                    } catch (error) {
+                        console.error('导入模板失败:', error);
+                        showToast('文件格式错误', 'error');
+                    }
+                };
+                reader.readAsText(file, 'UTF-8');
+            };
+            input.click();
+        });
+    }
+    
+    // 导出模板
+    const exportTemplateBtn = parentDoc.getElementById('data-manage-export-template');
+    if (exportTemplateBtn) {
+        exportTemplateBtn.addEventListener('click', function() {
+            try {
+                const jsonStr = JSON.stringify(currentSettings, null, 2);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `data-manage-template-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast('模板已导出', 'success');
+            } catch (error) {
+                console.error('导出模板失败:', error);
+                showToast('导出失败', 'error');
+            }
+        });
+    }
+    
+    // 恢复默认模板
+    const resetTemplateBtn = parentDoc.getElementById('data-manage-reset-template');
+    if (resetTemplateBtn) {
+        resetTemplateBtn.addEventListener('click', function() {
+            if (confirm('确定要恢复默认模板吗？当前设置将被覆盖。')) {
+                currentSettings = { ...DEFAULT_SETTINGS };
+                if (saveSettings()) {
+                    loadSettingsToUI();
+                    showToast('模板已恢复为默认值', 'info');
                 } else {
-                    overviewArea.style.display = 'none';
+                    showToast('恢复失败', 'error');
                 }
             }
         });
     }
     
-    // 刷新数据
-    const refreshBtn = parentDoc.getElementById('data-manage-refresh-data');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', function() {
-            console.log('刷新数据');
-            alert('刷新数据功能待实现');
-        });
+    // 可视化模板
+    const visualizeTemplateBtn = parentDoc.getElementById('data-manage-visualize-template');
+    if (visualizeTemplateBtn) {
+        visualizeTemplateBtn.addEventListener('click', visualizeTemplate);
     }
     
-    // 导出数据
-    const exportBtn = parentDoc.getElementById('data-manage-export-data');
-    if (exportBtn) {
-        exportBtn.addEventListener('click', function() {
-            console.log('导出数据');
-            alert('导出数据功能待实现');
+    // 保存可视化模板
+    const saveVisualizedBtn = parentDoc.getElementById('data-manage-save-visualized-template');
+    if (saveVisualizedBtn) {
+        saveVisualizedBtn.addEventListener('click', saveVisualizedTemplate);
+    }
+    
+    // 刷新模板显示
+    const refreshTemplateBtn = parentDoc.getElementById('data-manage-refresh-template-display');
+    if (refreshTemplateBtn) {
+        refreshTemplateBtn.addEventListener('click', function() {
+            visualizeTemplate();
+            showToast('模板显示已刷新', 'success');
         });
     }
 }
