@@ -489,6 +489,56 @@ function addDataManageButton() {
     extensionsMenu.appendChild(buttonElement);
     
     console.log('数据管理按钮已添加到 wand menu');
+    
+    // 添加数据预览按钮
+    addDataPreviewButton(extensionsMenu, parentDoc);
+}
+
+/**
+ * 添加数据预览按钮到菜单
+ */
+function addDataPreviewButton(extensionsMenu, parentDoc) {
+    // 检查按钮是否已存在，避免重复添加
+    if (parentDoc.getElementById('dataPreviewButton')) {
+        return;
+    }
+
+    // 创建按钮元素
+    const buttonElement = parentDoc.createElement('div');
+    buttonElement.id = 'dataPreviewButton';
+    buttonElement.className = 'list-group-item flex-container flexGap5 interactable';
+    buttonElement.setAttribute('title', '数据预览');
+    buttonElement.tabIndex = 0;
+
+    // 创建图标元素
+    const iconElement = parentDoc.createElement('i');
+    iconElement.className = 'fa-solid fa-eye';
+    iconElement.style.marginRight = '5px';
+
+    // 创建文本元素
+    const textElement = parentDoc.createElement('span');
+    textElement.textContent = '数据预览';
+
+    // 组装按钮
+    buttonElement.appendChild(iconElement);
+    buttonElement.appendChild(textElement);
+
+    // 添加点击事件
+    buttonElement.addEventListener('click', function(e) {
+        e.stopPropagation();
+        console.log('数据预览按钮被点击');
+        showDataPreview();
+    });
+
+    // 将按钮添加到菜单（插入到数据管理按钮之前）
+    const dataManageButton = parentDoc.getElementById('dataManageButton');
+    if (dataManageButton) {
+        extensionsMenu.insertBefore(buttonElement, dataManageButton);
+    } else {
+        extensionsMenu.appendChild(buttonElement);
+    }
+    
+    console.log('数据预览按钮已添加到 wand menu');
 }
 
 /**
@@ -2176,6 +2226,181 @@ function setupDataTabListeners(parentDoc) {
             showToast('模板显示已刷新', 'success');
         });
     }
+}
+
+/**
+ * 显示数据预览
+ */
+async function showDataPreview() {
+    try {
+        const context = SillyTavern.getContext();
+        
+        if (!context || !context.chat || context.chat.length === 0) {
+            showToast('没有聊天记录可查看', 'warning');
+            return;
+        }
+
+        const chat = context.chat;
+        
+        // 从后往前查找包含数据库数据的消息
+        let messageIndex = -1;
+        let messageData = null;
+        let messageType = '';
+        let timestamp = '';
+        
+        for (let i = chat.length - 1; i >= 0; i--) {
+            const message = chat[i];
+            if (message && message.mes) {
+                // 尝试解析消息中的JSON数据
+                try {
+                    const mesText = message.mes;
+                    // 查找JSON格式的数据
+                    const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                    if (jsonMatch) {
+                        const jsonData = JSON.parse(jsonMatch[1]);
+                        if (jsonData && typeof jsonData === 'object') {
+                            messageIndex = i + 1;
+                            messageData = jsonData;
+                            messageType = message.name || '未知';
+                            timestamp = message.send_date || new Date().toISOString();
+                            break;
+                        }
+                    }
+                    
+                    // 尝试直接解析为JSON
+                    try {
+                        const jsonData = JSON.parse(mesText);
+                        if (jsonData && typeof jsonData === 'object') {
+                            messageIndex = i + 1;
+                            messageData = jsonData;
+                            messageType = message.name || '未知';
+                            timestamp = message.send_date || new Date().toISOString();
+                            break;
+                        }
+                    } catch (e) {
+                        // 不是JSON格式，继续查找
+                    }
+                } catch (e) {
+                    // 解析失败，继续查找
+                }
+            }
+        }
+        
+        if (messageIndex === -1 || !messageData) {
+            showToast('未找到包含数据库数据的消息', 'warning');
+            return;
+        }
+        
+        // 生成表格HTML
+        let tablesHtml = '';
+        
+        if (typeof messageData === 'object') {
+            // 如果是对象，尝试查找表格数据
+            for (const [key, value] of Object.entries(messageData)) {
+                if (value && typeof value === 'object' && value.content && Array.isArray(value.content)) {
+                    tablesHtml += generateTableHtml(key, value.content);
+                }
+            }
+            
+            // 如果没有找到表格数据，显示整个对象
+            if (!tablesHtml) {
+                tablesHtml = `<div class="data-manage-card" style="margin-bottom: 16px;">
+                    <h3>数据内容</h3>
+                    <pre style="background-color: var(--ios-gray); padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(JSON.stringify(messageData, null, 2))}</pre>
+                </div>`;
+            }
+        }
+        
+        // 创建预览弹窗HTML
+        const previewHtml = `
+            <div class="data-manage-popup" style="max-width: 100%;">
+                <h2>数据预览</h2>
+                <div class="data-manage-card">
+                    <h3>消息信息</h3>
+                    <p><strong>楼层:</strong> ${messageIndex}</p>
+                    <p><strong>类型:</strong> ${escapeHtml(messageType)}</p>
+                    <p><strong>时间:</strong> ${escapeHtml(timestamp)}</p>
+                </div>
+                ${tablesHtml}
+            </div>
+        `;
+        
+        // 使用SillyTavern的弹窗API
+        if (context && context.callGenericPopup) {
+            context.callGenericPopup(previewHtml, context.POPUP_TYPE?.DISPLAY || 'display', '数据预览', {
+                okButton: '关闭',
+                cancelButton: false,
+                callback: function(action) {
+                    console.log('数据预览弹窗关闭:', action);
+                }
+            });
+        } else {
+            // 如果没有callGenericPopup，使用简单的弹窗
+            const popup = window.open('', 'dataPreviewPopup', 'width=900,height=700,scrollbars=yes');
+            popup.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>数据预览</title>
+                    <link rel="stylesheet" href="style.css">
+                </head>
+                <body>
+                    ${previewHtml}
+                </body>
+                </html>
+            `);
+        }
+        
+        showToast(`已显示楼层 ${messageIndex} 的数据预览`, 'success');
+        
+    } catch (error) {
+        console.error('显示数据预览失败:', error);
+        showToast(`显示数据预览失败: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * 生成表格HTML
+ */
+function generateTableHtml(tableName, content) {
+    if (!content || content.length === 0) {
+        return `<div class="data-manage-card" style="margin-bottom: 16px;">
+            <h3>${escapeHtml(tableName)}</h3>
+            <p class="data-manage-notes">表格内容为空</p>
+        </div>`;
+    }
+    
+    let html = `<div class="data-manage-card" style="margin-bottom: 16px;">
+        <h3>${escapeHtml(tableName)}</h3>
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
+                <thead>
+                    <tr style="background-color: var(--ios-gray-dark);">`;
+    
+    // 表头
+    const headers = content[0];
+    if (headers && headers.length > 0) {
+        headers.forEach(header => {
+            html += `<th style="padding: 12px 8px; text-align: left; border: 1px solid var(--ios-border); font-weight: 600; white-space: nowrap;">${escapeHtml(header || '')}</th>`;
+        });
+    }
+    
+    html += `</tr></thead><tbody>`;
+    
+    // 数据行
+    for (let i = 1; i < content.length; i++) {
+        const row = content[i];
+        html += `<tr style="background-color: ${i % 2 === 0 ? 'var(--ios-gray)' : 'var(--ios-surface)'};">`;
+        row.forEach(cell => {
+            const cellContent = cell || '';
+            const cellClass = cellContent === '' ? 'data-manage-notes' : '';
+            html += `<td style="padding: 10px 8px; border: 1px solid var(--ios-border); vertical-align: top; word-break: break-word;" class="${cellClass}">${escapeHtml(cellContent)}</td>`;
+        });
+        html += `</tr>`;
+    }
+    
+    html += `</tbody></table></div></div>`;
+    return html;
 }
 
 /**
