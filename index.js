@@ -3,6 +3,17 @@
 // ==================== 配置管理模块 ====================
 
 const STORAGE_KEY = 'dataManageSettings';
+const DEFAULT_CHAR_CARD_PROMPT = [
+    {
+        role: 'USER',
+        content: ''
+    },
+    {
+        role: 'assistant',
+        content: ''
+    }
+];
+
 const DEFAULT_SETTINGS = {
     // 更新配置
     autoUpdateFrequency: 0,        // 最新N层不更新
@@ -15,6 +26,9 @@ const DEFAULT_SETTINGS = {
     // 核心操作
     autoUpdateEnabled: false,      // 启用自动更新
     autoHideMessages: true,        // 数据整理完成后自动隐藏相关楼层
+    
+    // AI指令预设
+    charCardPrompt: DEFAULT_CHAR_CARD_PROMPT,  // 数据库更新预设
 };
 
 // 当前配置
@@ -161,6 +175,110 @@ function updateStatusDisplay() {
 }
 
 /**
+ * 转义HTML
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * 渲染提示词片段
+ */
+function renderPromptSegments(segments) {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const container = parentDoc.getElementById('data-manage-prompt-segments');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // 确保 segments 是一个数组
+    if (!Array.isArray(segments)) {
+        if (typeof segments === 'string' && segments.trim()) {
+            try {
+                segments = JSON.parse(segments);
+            } catch (e) {
+                console.warn('无法解析提示词为JSON，作为单个文本块处理');
+            }
+        }
+        
+        if (!Array.isArray(segments) || segments.length === 0) {
+            segments = [...DEFAULT_CHAR_CARD_PROMPT];
+        }
+    }
+    
+    // 如果为空，添加默认片段
+    if (segments.length === 0) {
+        segments = [...DEFAULT_CHAR_CARD_PROMPT];
+    }
+    
+    segments.forEach((segment, index) => {
+        const isDeletable = segment.deletable !== false;
+        const segmentId = `data-manage-prompt-segment-${index}`;
+        
+        const segmentDiv = parentDoc.createElement('div');
+        segmentDiv.id = segmentId;
+        segmentDiv.className = 'data-manage-prompt-segment';
+        segmentDiv.innerHTML = `
+            <div class="data-manage-prompt-segment-toolbar">
+                <select class="data-manage-prompt-segment-role">
+                    <option value="assistant" ${segment.role === 'AI' || segment.role === 'assistant' ? 'selected' : ''}>AI</option>
+                    <option value="SYSTEM" ${segment.role === 'SYSTEM' ? 'selected' : ''}>系统</option>
+                    <option value="USER" ${segment.role === 'USER' ? 'selected' : ''}>用户</option>
+                </select>
+                ${isDeletable ? `<button class="data-manage-prompt-segment-delete-btn" data-index="${index}">-</button>` : ''}
+            </div>
+            <textarea class="data-manage-prompt-segment-content" rows="4">${escapeHtml(segment.content || '')}</textarea>
+        `;
+        
+        container.appendChild(segmentDiv);
+        
+        // 绑定删除按钮事件
+        if (isDeletable) {
+            const deleteBtn = segmentDiv.querySelector('.data-manage-prompt-segment-delete-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', function() {
+                    segmentDiv.remove();
+                });
+            }
+        }
+    });
+}
+
+/**
+ * 从UI获取提示词片段
+ */
+function getPromptSegmentsFromUI() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const container = parentDoc.getElementById('data-manage-prompt-segments');
+    if (!container) return [];
+    
+    const segments = [];
+    const segmentElements = container.querySelectorAll('.data-manage-prompt-segment');
+    
+    segmentElements.forEach(segmentEl => {
+        const role = segmentEl.querySelector('.data-manage-prompt-segment-role')?.value || 'USER';
+        const content = segmentEl.querySelector('.data-manage-prompt-segment-content')?.value || '';
+        const isDeletable = segmentEl.querySelector('.data-manage-prompt-segment-delete-btn') !== null;
+        
+        segments.push({
+            role: role,
+            content: content,
+            deletable: isDeletable
+        });
+    });
+    
+    return segments;
+}
+
+/**
  * 加载配置到UI
  */
 function loadSettingsToUI() {
@@ -191,6 +309,13 @@ function loadSettingsToUI() {
     
     if (autoUpdateCheckbox) autoUpdateCheckbox.checked = settings.autoUpdateEnabled || false;
     if (autoHideCheckbox) autoHideCheckbox.checked = settings.autoHideMessages !== false;
+    
+    // 渲染提示词片段
+    if (settings.charCardPrompt) {
+        renderPromptSegments(settings.charCardPrompt);
+    } else {
+        renderPromptSegments(DEFAULT_CHAR_CARD_PROMPT);
+    }
 }
 
 /**
@@ -346,7 +471,7 @@ function openDataManagePopup() {
                         <div>
                             <label for="data-manage-remove-tags">自定义删除标签 (竖线分隔):</label>
                             <div class="data-manage-input-group">
-                                <input type="text" id="data-manage-remove-tags" placeholder="e.g., plot,status">
+                                <input type="text" id="data-manage-remove-tags" placeholder="e.g., plot|status">
                                 <button id="data-manage-save-remove-tags" class="secondary">保存</button>
                             </div>
                         </div>
@@ -737,27 +862,103 @@ function setupStatusTabListeners(parentDoc) {
  * 设置AI指令预设Tab的事件监听器
  */
 function setupPromptTabListeners(parentDoc) {
+    // 保存提示词预设
     const saveBtn = parentDoc.getElementById('data-manage-save-prompt');
     if (saveBtn) {
         saveBtn.addEventListener('click', function() {
-            console.log('保存AI指令预设');
-            alert('保存AI指令预设功能待实现');
+            const segments = getPromptSegmentsFromUI();
+            
+            if (!segments || segments.length === 0 || (segments.length === 1 && !segments[0].content.trim())) {
+                showToast('更新预设不能为空', 'warning');
+                return;
+            }
+            
+            currentSettings.charCardPrompt = segments;
+            if (saveSettings()) {
+                showToast('更新预设已保存', 'success');
+            } else {
+                showToast('保存失败', 'error');
+            }
         });
     }
     
+    // 读取JSON模板
     const loadBtn = parentDoc.getElementById('data-manage-load-prompt-json');
     if (loadBtn) {
         loadBtn.addEventListener('click', function() {
-            console.log('读取JSON模板');
-            alert('读取JSON模板功能待实现');
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(readerEvent) {
+                    const content = readerEvent.target.result;
+                    let jsonData;
+                    
+                    try {
+                        jsonData = JSON.parse(content);
+                    } catch (error) {
+                        console.error('导入提示词模板失败：JSON解析错误', error);
+                        showToast('文件不是有效的JSON格式', 'error');
+                        return;
+                    }
+                    
+                    try {
+                        // 验证：必须是包含 role 和 content 的对象数组
+                        if (!Array.isArray(jsonData) || jsonData.some(item => typeof item.role === 'undefined' || typeof item.content === 'undefined')) {
+                            throw new Error('JSON格式不正确。它必须是一个包含 "role" 和 "content" 键的对象的数组。');
+                        }
+                        
+                        // 规范化角色并添加 deletable 属性
+                        const segments = jsonData.map(item => {
+                            let normalizedRole = 'USER';
+                            if (item.role) {
+                                const roleLower = item.role.toLowerCase();
+                                if (roleLower === 'system') {
+                                    normalizedRole = 'SYSTEM';
+                                } else if (roleLower === 'assistant' || roleLower === 'ai') {
+                                    normalizedRole = 'assistant';
+                                } else if (roleLower === 'user') {
+                                    normalizedRole = 'USER';
+                                }
+                            }
+                            return {
+                                ...item,
+                                role: normalizedRole,
+                                deletable: item.deletable !== false
+                            };
+                        });
+                        
+                        renderPromptSegments(segments);
+                        showToast('提示词模板已成功加载', 'success');
+                        console.log('提示词模板已从JSON文件加载');
+                    } catch (error) {
+                        console.error('导入提示词模板失败：结构验证失败', error);
+                        showToast(`导入失败: ${error.message}`, 'error');
+                    }
+                };
+                reader.readAsText(file, 'UTF-8');
+            };
+            input.click();
         });
     }
     
+    // 恢复默认
     const resetBtn = parentDoc.getElementById('data-manage-reset-prompt');
     if (resetBtn) {
         resetBtn.addEventListener('click', function() {
-            console.log('恢复默认');
-            alert('恢复默认功能待实现');
+            if (confirm('确定要恢复默认提示词预设吗？当前设置将被覆盖。')) {
+                currentSettings.charCardPrompt = [...DEFAULT_CHAR_CARD_PROMPT];
+                if (saveSettings()) {
+                    renderPromptSegments(DEFAULT_CHAR_CARD_PROMPT);
+                    showToast('更新预设已恢复为默认值', 'info');
+                } else {
+                    showToast('恢复失败', 'error');
+                }
+            }
         });
     }
     
@@ -766,8 +967,46 @@ function setupPromptTabListeners(parentDoc) {
     addSegmentBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             const position = this.getAttribute('data-position');
+            const container = parentDoc.getElementById('data-manage-prompt-segments');
+            if (!container) return;
+            
+            const newSegment = {
+                role: 'USER',
+                content: '',
+                deletable: true
+            };
+            
+            const segmentDiv = parentDoc.createElement('div');
+            segmentDiv.className = 'data-manage-prompt-segment';
+            const index = container.children.length;
+            segmentDiv.id = `data-manage-prompt-segment-${index}`;
+            segmentDiv.innerHTML = `
+                <div class="data-manage-prompt-segment-toolbar">
+                    <select class="data-manage-prompt-segment-role">
+                        <option value="assistant">AI</option>
+                        <option value="SYSTEM">系统</option>
+                        <option value="USER" selected>用户</option>
+                    </select>
+                    <button class="data-manage-prompt-segment-delete-btn" data-index="${index}">-</button>
+                </div>
+                <textarea class="data-manage-prompt-segment-content" rows="4"></textarea>
+            `;
+            
+            // 绑定删除按钮事件
+            const deleteBtn = segmentDiv.querySelector('.data-manage-prompt-segment-delete-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', function() {
+                    segmentDiv.remove();
+                });
+            }
+            
+            if (position === 'top') {
+                container.insertBefore(segmentDiv, container.firstChild);
+            } else {
+                container.appendChild(segmentDiv);
+            }
+            
             console.log(`添加对话轮次: ${position}`);
-            alert('添加对话轮次功能待实现');
         });
     });
 }
