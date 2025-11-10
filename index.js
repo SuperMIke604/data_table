@@ -1951,7 +1951,8 @@ async function populateWorldbookEntryList() {
                 bookData.entries.forEach(entry => {
                     const entryUid = entry.uid || entry.id;
                     const isEnabled = enabledEntries.includes(entryUid);
-                    const entryName = entry.name || entryUid || '未命名条目';
+                    // 参考参考资料：使用 entry.comment 作为条目名称，如果没有则使用 uid
+                    const entryName = entry.comment || entry.name || entryUid || `条目 ${entryUid}`;
                     const checkboxId = `worldbook-entry-${bookName}-${entryUid}`.replace(/[^a-zA-Z0-9-]/g, '-');
                     
                     html += `
@@ -2177,7 +2178,9 @@ function showDataOverview() {
                     html += `<div class="message-data-card" data-message-index="${i}" style="
                         background: var(--ios-gray); border: 1px solid var(--ios-border); border-radius: 10px; 
                         padding: 15px; margin-bottom: 15px; color: var(--ios-text);
+                        display: flex; align-items: flex-start; gap: 10px;
                     ">`;
+                    html += `<div style="flex: 1; min-width: 0;">`;
                     html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
                     html += `<h4 style="margin: 0; color: var(--ios-text);">楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
                     html += `<span style="font-size: 12px; color: var(--ios-text-secondary);">${escapeHtml(timestamp)}</span>`;
@@ -2209,19 +2212,20 @@ function showDataOverview() {
                     const displayStyle = isExpanded ? 'block' : 'none';
                     const buttonText = isExpanded ? '收起详情' : '展开详情';
                     
-                    // 操作按钮
-                    html += `<div style="text-align: right;">`;
+                    // 操作按钮 - 缩小宽度，优先展示内容
+                    html += `<div style="text-align: right; flex-shrink: 0; width: 140px; margin-left: 10px;">`;
                     html += `<button class="toggle-details-btn" data-message-index="${i}" style="
-                        background: var(--ios-blue); color: white; border: none; padding: 6px 12px; 
-                        border-radius: 6px; cursor: pointer; margin-right: 5px; font-size: 12px;
-                        transition: all 0.2s;
+                        background: var(--ios-blue); color: white; border: none; padding: 4px 8px; 
+                        border-radius: 6px; cursor: pointer; margin-bottom: 4px; font-size: 11px;
+                        transition: all 0.2s; white-space: nowrap; display: block; width: 100%;
                     ">${buttonText}</button>`;
                     html += `<button class="delete-message-btn" data-message-index="${i}" style="
-                        background: #dc3545; color: white; border: none; padding: 6px 12px; 
-                        border-radius: 6px; cursor: pointer; font-size: 12px;
-                        transition: all 0.2s;
-                    ">删除记录</button>`;
+                        background: #dc3545; color: white; border: none; padding: 4px 8px; 
+                        border-radius: 6px; cursor: pointer; font-size: 11px;
+                        transition: all 0.2s; white-space: nowrap; display: block; width: 100%;
+                    ">删除</button>`;
                     html += `</div>`;
+                    html += `</div>`; // 关闭 flex 内容容器
                     
                     html += `<div class="message-details" data-message-index="${i}" style="
                         display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
@@ -3265,6 +3269,17 @@ async function showDataPreview() {
         
         for (let i = chat.length - 1; i >= 0; i--) {
             const message = chat[i];
+            
+            // 优先检查 TavernDB_ACU_Data 字段
+            if (message && message.TavernDB_ACU_Data) {
+                messageIndex = i + 1;
+                messageData = message.TavernDB_ACU_Data;
+                messageType = message.name || '未知';
+                timestamp = message.send_date || new Date().toISOString();
+                break;
+            }
+            
+            // 然后检查消息文本中的JSON数据
             if (message && message.mes) {
                 // 尝试解析消息中的JSON数据
                 try {
@@ -3273,7 +3288,7 @@ async function showDataPreview() {
                     const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
                     if (jsonMatch) {
                         const jsonData = JSON.parse(jsonMatch[1]);
-                        if (jsonData && typeof jsonData === 'object') {
+                        if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
                             messageIndex = i + 1;
                             messageData = jsonData;
                             messageType = message.name || '未知';
@@ -3285,7 +3300,7 @@ async function showDataPreview() {
                     // 尝试直接解析为JSON
                     try {
                         const jsonData = JSON.parse(mesText);
-                        if (jsonData && typeof jsonData === 'object') {
+                        if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
                             messageIndex = i + 1;
                             messageData = jsonData;
                             messageType = message.name || '未知';
