@@ -3,6 +3,7 @@
 // ==================== 配置管理模块 ====================
 
 const STORAGE_KEY = 'dataManageSettings';
+const STORAGE_KEY_TEMPLATE = 'dataManageTemplate'; // 独立存储模板
 const DEFAULT_CHAR_CARD_PROMPT = [
     {
         role: 'USER',
@@ -428,11 +429,21 @@ function loadApiSettingsToUI(settings) {
  * 显示提示消息
  */
 function showToast(message, type = 'info') {
-    const context = SillyTavern.getContext();
-    if (context && context.toastr) {
-        context.toastr[type](message, '数据管理');
+    const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
+    const toastr = parentWin.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+    
+    if (toastr) {
+        const finalOptions = { escapeHtml: false };
+        return toastr[type](message, '数据管理', finalOptions);
     } else {
-        alert(message);
+        const context = SillyTavern.getContext();
+        if (context && context.toastr) {
+            return context.toastr[type](message, '数据管理');
+        } else {
+            console.log(`Toast (${type}): ${message}`);
+            alert(message);
+            return null;
+        }
     }
 }
 
@@ -678,12 +689,12 @@ function openDataManagePopup() {
                     <h3>API设置</h3>
                     <div style="margin-bottom: 15px;">
                         <label>API模式:</label>
-                        <div style="display: flex; gap: 20px; margin-top: 10px;">
-                            <label style="display: flex; align-items: center; gap: 8px;">
+                        <div class="data-manage-radio-group">
+                            <label>
                                 <input type="radio" name="data-manage-api-mode" value="custom" checked>
                                 <span>自定义API</span>
                             </label>
-                            <label style="display: flex; align-items: center; gap: 8px;">
+                            <label>
                                 <input type="radio" name="data-manage-api-mode" value="tavern">
                                 <span>使用酒馆连接预设</span>
                             </label>
@@ -747,12 +758,12 @@ function openDataManagePopup() {
                     <hr style="border-color: var(--ios-border); margin: 15px 0;">
                     <div style="margin-bottom: 15px;">
                         <label>世界书来源 (用于AI读取上下文):</label>
-                        <div style="display: flex; gap: 20px; margin-top: 10px;">
-                            <label style="display: flex; align-items: center; gap: 8px;">
+                        <div class="data-manage-radio-group">
+                            <label>
                                 <input type="radio" name="data-manage-worldbook-source" value="character" checked>
                                 <span>角色卡绑定</span>
                             </label>
-                            <label style="display: flex; align-items: center; gap: 8px;">
+                            <label>
                                 <input type="radio" name="data-manage-worldbook-source" value="manual">
                                 <span>手动选择</span>
                             </label>
@@ -1842,7 +1853,6 @@ async function populateWorldbookEntryList() {
     try {
         // 获取世界书名称列表
         if (source === 'character') {
-            const context = SillyTavern.getContext();
             // 尝试使用 TavernHelper API 获取角色卡绑定的世界书
             const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
             let TavernHelper = parentWin.TavernHelper;
@@ -1862,25 +1872,12 @@ async function populateWorldbookEntryList() {
                 }
             }
             
-            // 回退到 SillyTavern API
-            if (bookNames.length === 0 && context && typeof context.getCharLorebooks === 'function') {
-                try {
-                    const charLorebooks = await context.getCharLorebooks({ type: 'all' });
-                    if (charLorebooks && charLorebooks.primary) bookNames.push(charLorebooks.primary);
-                    if (charLorebooks && charLorebooks.additional && charLorebooks.additional.length) {
-                        bookNames.push(...charLorebooks.additional);
-                    }
-                } catch (error) {
-                    console.error('使用SillyTavern API获取角色卡世界书失败:', error);
-                }
-            }
-            
             // 如果仍然没有获取到，尝试从角色卡数据中获取
-            if (bookNames.length === 0 && context && context.chat) {
-                try {
-                    const charData = context.chat;
-                    if (charData && charData.character) {
-                        const char = charData.character;
+            if (bookNames.length === 0) {
+                const context = SillyTavern.getContext();
+                if (context && context.chat && context.chat.character) {
+                    try {
+                        const char = context.chat.character;
                         if (char.lorebook && char.lorebook.length > 0) {
                             // 从角色卡数据中提取世界书名称
                             const lorebookNames = new Set();
@@ -1891,9 +1888,9 @@ async function populateWorldbookEntryList() {
                             });
                             bookNames = Array.from(lorebookNames);
                         }
+                    } catch (error) {
+                        console.error('从角色卡数据获取世界书失败:', error);
                     }
-                } catch (error) {
-                    console.error('从角色卡数据获取世界书失败:', error);
                 }
             }
         } else if (source === 'manual') {
@@ -2218,12 +2215,32 @@ function visualizeTemplate() {
     if (visualizationArea.style.display === 'none' || !visualizationArea.style.display) {
         visualizationArea.style.display = 'block';
         
-        const templateData = {
-            settings: currentSettings,
-            overviewTemplate: currentSettings.overviewTemplate || DEFAULT_SETTINGS.overviewTemplate || ''
-        };
+        // 从本地存储加载模板
+        const topLevelWindow = (window.parent && window.parent !== window) ? window.parent : window;
+        let templateContent = '';
         
-        textarea.value = JSON.stringify(templateData, null, 2);
+        try {
+            if (topLevelWindow.localStorage) {
+                const savedTemplate = topLevelWindow.localStorage.getItem(STORAGE_KEY_TEMPLATE);
+                if (savedTemplate) {
+                    // 尝试解析并格式化JSON
+                    try {
+                        const parsedTemplate = JSON.parse(savedTemplate);
+                        templateContent = JSON.stringify(parsedTemplate, null, 2);
+                    } catch (e) {
+                        templateContent = savedTemplate;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('加载模板失败:', error);
+        }
+        
+        if (!templateContent) {
+            templateContent = currentSettings.overviewTemplate || DEFAULT_SETTINGS.overviewTemplate || '';
+        }
+        
+        textarea.value = templateContent;
     } else {
         visualizationArea.style.display = 'none';
     }
@@ -2240,25 +2257,34 @@ function saveVisualizedTemplate() {
     const textarea = parentDoc.getElementById('data-manage-template-textarea');
     if (!textarea) return;
     
+    const content = textarea.value.trim();
+    if (!content) {
+        showToast('模板内容为空，无法保存', 'error');
+        return;
+    }
+    
     try {
-        const templateData = JSON.parse(textarea.value);
+        // 验证JSON格式
+        const parsedTemplate = JSON.parse(content);
         
-        if (templateData.settings) {
-            Object.assign(currentSettings, templateData.settings);
-        }
-        if (templateData.overviewTemplate) {
-            currentSettings.overviewTemplate = templateData.overviewTemplate;
+        // 保存到本地存储
+        const topLevelWindow = (window.parent && window.parent !== window) ? window.parent : window;
+        if (topLevelWindow.localStorage) {
+            topLevelWindow.localStorage.setItem(STORAGE_KEY_TEMPLATE, content);
         }
         
-        if (saveSettings()) {
-            loadSettingsToUI();
-            showToast('模板已保存', 'success');
-        } else {
-            showToast('保存失败', 'error');
-        }
+        // 同时更新设置中的overviewTemplate
+        currentSettings.overviewTemplate = content;
+        saveSettings();
+        
+        showToast('模板已保存', 'success');
     } catch (error) {
-        console.error('保存模板失败:', error);
-        showToast('JSON格式错误', 'error');
+        console.error('保存可视化模板失败:', error);
+        let errorMessage = '模板不是有效的JSON格式。请检查是否存在多余的逗号、缺失的括号或不正确的引号。';
+        if (error.message) {
+            errorMessage += ` (错误详情: ${error.message})`;
+        }
+        showToast(errorMessage, 'error');
     }
 }
 
