@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS = {
     charCardPrompt: DEFAULT_CHAR_CARD_PROMPT,  // 数据库更新预设
     
     // 数据概览模板（独立于AI指令预设）
-    overviewTemplate: DEFAULT_CHAR_CARD_PROMPT,  // 数据概览模板
+    overviewTemplate: '',  // 数据概览模板（字符串格式）
     
     // API配置
     apiMode: 'custom',             // API模式: 'custom' 或 'tavern'
@@ -718,6 +718,7 @@ function openDataManagePopup() {
                                     <input type="number" id="data-manage-temperature" min="0" max="2" step="0.05" placeholder="0.9">
                                 </div>
                             </div>
+                            <button id="data-manage-load-models" class="secondary" style="margin-top: 15px; width: 100%;">加载模型列表</button>
                             <label for="data-manage-api-model" style="margin-top: 15px;">选择模型:</label>
                             <select id="data-manage-api-model">
                                 <option value="">请先加载模型列表</option>
@@ -1503,6 +1504,127 @@ function setupApiTabListeners(parentDoc) {
         });
     }
     
+    // 加载模型列表
+    const loadModelsBtn = parentDoc.getElementById('data-manage-load-models');
+    if (loadModelsBtn) {
+        loadModelsBtn.addEventListener('click', async function() {
+            const apiUrlInput = parentDoc.getElementById('data-manage-api-url');
+            const apiKeyInput = parentDoc.getElementById('data-manage-api-key');
+            const apiModelSelect = parentDoc.getElementById('data-manage-api-model');
+            const statusDisplay = parentDoc.getElementById('data-manage-api-status');
+            
+            if (!apiUrlInput || !apiKeyInput || !apiModelSelect || !statusDisplay) {
+                showToast('加载模型列表失败：UI元素未初始化', 'error');
+                return;
+            }
+            
+            const apiUrl = apiUrlInput.value.trim();
+            const apiKey = apiKeyInput.value;
+            
+            if (!apiUrl) {
+                showToast('请输入API基础URL', 'warning');
+                statusDisplay.textContent = '状态: 请输入API基础URL';
+                statusDisplay.style.color = '#FF9500';
+                return;
+            }
+            
+            const statusUrl = `/api/backends/chat-completions/status`;
+            statusDisplay.textContent = '状态: 正在检查API端点状态...';
+            statusDisplay.style.color = '#007AFF';
+            showToast('正在检查自定义API端点状态...', 'info');
+            
+            try {
+                const body = {
+                    "reverse_proxy": apiUrl,
+                    "proxy_password": "",
+                    "chat_completion_source": "custom",
+                    "custom_url": apiUrl,
+                    "custom_include_headers": apiKey ? `Authorization: Bearer ${apiKey}` : ""
+                };
+                
+                const context = SillyTavern.getContext();
+                const headers = context?.getRequestHeaders ? context.getRequestHeaders() : {};
+                headers['Content-Type'] = 'application/json';
+                
+                const response = await fetch(statusUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(body)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMessage = `API端点状态检查失败: ${response.status} ${response.statusText}.`;
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage += ` 详情: ${errorJson.error || errorJson.message || errorText}`;
+                    } catch (e) {
+                        errorMessage += ` 详情: ${errorText}`;
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                const data = await response.json();
+                apiModelSelect.innerHTML = '';
+                let modelsFound = false;
+                let modelsList = [];
+                
+                if (data && data.models && Array.isArray(data.models)) {
+                    modelsList = data.models;
+                } else if (data && data.data && Array.isArray(data.data)) {
+                    modelsList = data.data;
+                } else if (Array.isArray(data)) {
+                    modelsList = data;
+                }
+                
+                if (modelsList.length > 0) {
+                    modelsFound = true;
+                    modelsList.forEach(model => {
+                        const modelName = typeof model === 'string' ? model : model.id;
+                        if (modelName) {
+                            const option = parentDoc.createElement('option');
+                            option.value = modelName;
+                            option.textContent = modelName;
+                            apiModelSelect.appendChild(option);
+                        }
+                    });
+                }
+                
+                if (modelsFound) {
+                    const apiConfig = currentSettings.apiConfig || {};
+                    if (apiConfig.model && Array.from(apiModelSelect.options).some(opt => opt.value === apiConfig.model)) {
+                        apiModelSelect.value = apiConfig.model;
+                    } else {
+                        const defaultOption = parentDoc.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = '请选择一个模型';
+                        defaultOption.disabled = true;
+                        defaultOption.selected = true;
+                        apiModelSelect.insertBefore(defaultOption, apiModelSelect.firstChild);
+                    }
+                    showToast('模型列表加载成功！', 'success');
+                    statusDisplay.style.color = '#34C759';
+                } else {
+                    const option = parentDoc.createElement('option');
+                    option.value = '';
+                    option.textContent = '未能解析模型数据或列表为空';
+                    apiModelSelect.appendChild(option);
+                    showToast('未能解析模型数据或列表为空', 'warning');
+                    statusDisplay.textContent = '状态: 未能解析模型数据或列表为空';
+                    statusDisplay.style.color = '#FF9500';
+                }
+            } catch (error) {
+                console.error('加载模型列表时出错:', error);
+                showToast(`加载模型列表失败: ${error.message}`, 'error');
+                apiModelSelect.innerHTML = '<option value="">加载模型失败</option>';
+                statusDisplay.textContent = `状态: 加载模型失败 - ${error.message}`;
+                statusDisplay.style.color = '#FF3B30';
+            }
+            
+            updateApiStatusDisplay();
+        });
+    }
+    
     // 刷新酒馆预设
     const refreshBtn = parentDoc.getElementById('data-manage-refresh-tavern');
     if (refreshBtn) {
@@ -1721,11 +1843,58 @@ async function populateWorldbookEntryList() {
         // 获取世界书名称列表
         if (source === 'character') {
             const context = SillyTavern.getContext();
-            // 尝试获取角色卡绑定的世界书
-            if (context && typeof context.getCharLorebooks === 'function') {
-                const charLorebooks = await context.getCharLorebooks({ type: 'all' });
-                if (charLorebooks.primary) bookNames.push(charLorebooks.primary);
-                if (charLorebooks.additional?.length) bookNames.push(...charLorebooks.additional);
+            // 尝试使用 TavernHelper API 获取角色卡绑定的世界书
+            const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
+            let TavernHelper = parentWin.TavernHelper;
+            if (!TavernHelper && typeof window.TavernHelper !== 'undefined') {
+                TavernHelper = window.TavernHelper;
+            }
+            
+            if (TavernHelper && typeof TavernHelper.getCharLorebooks === 'function') {
+                try {
+                    const charLorebooks = await TavernHelper.getCharLorebooks({ type: 'all' });
+                    if (charLorebooks && charLorebooks.primary) bookNames.push(charLorebooks.primary);
+                    if (charLorebooks && charLorebooks.additional && charLorebooks.additional.length) {
+                        bookNames.push(...charLorebooks.additional);
+                    }
+                } catch (error) {
+                    console.error('使用TavernHelper获取角色卡世界书失败:', error);
+                }
+            }
+            
+            // 回退到 SillyTavern API
+            if (bookNames.length === 0 && context && typeof context.getCharLorebooks === 'function') {
+                try {
+                    const charLorebooks = await context.getCharLorebooks({ type: 'all' });
+                    if (charLorebooks && charLorebooks.primary) bookNames.push(charLorebooks.primary);
+                    if (charLorebooks && charLorebooks.additional && charLorebooks.additional.length) {
+                        bookNames.push(...charLorebooks.additional);
+                    }
+                } catch (error) {
+                    console.error('使用SillyTavern API获取角色卡世界书失败:', error);
+                }
+            }
+            
+            // 如果仍然没有获取到，尝试从角色卡数据中获取
+            if (bookNames.length === 0 && context && context.chat) {
+                try {
+                    const charData = context.chat;
+                    if (charData && charData.character) {
+                        const char = charData.character;
+                        if (char.lorebook && char.lorebook.length > 0) {
+                            // 从角色卡数据中提取世界书名称
+                            const lorebookNames = new Set();
+                            char.lorebook.forEach(entry => {
+                                if (entry.worldbook) {
+                                    lorebookNames.add(entry.worldbook);
+                                }
+                            });
+                            bookNames = Array.from(lorebookNames);
+                        }
+                    }
+                } catch (error) {
+                    console.error('从角色卡数据获取世界书失败:', error);
+                }
             }
         } else if (source === 'manual') {
             bookNames = worldbookConfig.manualSelection || [];
@@ -2051,7 +2220,7 @@ function visualizeTemplate() {
         
         const templateData = {
             settings: currentSettings,
-            overviewTemplate: currentSettings.overviewTemplate || DEFAULT_CHAR_CARD_PROMPT
+            overviewTemplate: currentSettings.overviewTemplate || DEFAULT_SETTINGS.overviewTemplate || ''
         };
         
         textarea.value = JSON.stringify(templateData, null, 2);
