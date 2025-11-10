@@ -20,11 +20,12 @@
     padding: 20px;
     width: 80%;
     max-width: 1400px;
-    min-width: 800px;
+    min-width: 0;
     max-height: 90vh;
     overflow-y: auto;
     overflow-x: hidden;
     margin: 0 auto;
+    box-sizing: border-box;
 }
 
 /* 标题 */
@@ -42,11 +43,11 @@
 .data-manage-tabs-nav {
     display: flex;
     gap: 0;
-    border-bottom: 1px solid var(--ios-border);
     margin-bottom: 20px;
     background-color: var(--ios-surface);
-    border-radius: 10px 10px 0 0;
+    border-radius: 10px;
     overflow: hidden;
+    box-shadow: 0 1px 4px var(--ios-shadow);
 }
 
 .data-manage-tab-button {
@@ -118,7 +119,7 @@
 /* 网格布局 */
 .data-manage-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
     gap: 16px;
 }
 
@@ -226,15 +227,19 @@
     align-items: center;
     gap: 12px;
     margin-bottom: 16px;
+    flex-wrap: wrap;
 }
 
 .data-manage-input-group label {
-    min-width: 120px;
+    min-width: 0;
+    flex: 0 0 auto;
+    white-space: nowrap;
     margin-bottom: 0;
 }
 
 .data-manage-input-group input {
     flex: 1;
+    min-width: 0;
 }
 
 /* 复选框组 */
@@ -298,7 +303,8 @@
 }
 
 .data-manage-prompt-segment-role {
-    flex: 1;
+    flex: 0 0 auto;
+    min-width: 0;
     max-width: 150px;
     padding: 8px 12px;
     background-color: var(--ios-gray);
@@ -367,12 +373,33 @@
 }
 
 /* 响应式设计 */
+@media (max-width: 1024px) {
+    .data-manage-popup {
+        width: 95%;
+        min-width: 0;
+        padding: 16px;
+    }
+    
+    .data-manage-input-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .data-manage-input-group label {
+        margin-bottom: 8px;
+    }
+    
+    .data-manage-input-group input {
+        width: 100%;
+    }
+}
+
 @media (max-width: 768px) {
     .data-manage-popup {
         padding: 16px;
         border-radius: 12px;
         width: 95%;
-        min-width: 320px;
+        min-width: 0;
     }
     
     .data-manage-tabs-nav {

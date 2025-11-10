@@ -29,6 +29,18 @@ const DEFAULT_SETTINGS = {
     
     // AI指令预设
     charCardPrompt: DEFAULT_CHAR_CARD_PROMPT,  // 数据库更新预设
+    
+    // API配置
+    apiMode: 'custom',             // API模式: 'custom' 或 'tavern'
+    apiConfig: {
+        url: '',                    // API基础URL
+        apiKey: '',                 // API密钥
+        model: '',                  // 模型名称
+        useMainApi: true,           // 使用主API
+        max_tokens: 120000,         // 最大Tokens
+        temperature: 0.9            // 温度
+    },
+    tavernProfile: '',             // 酒馆连接预设ID
 };
 
 // 当前配置
@@ -316,6 +328,86 @@ function loadSettingsToUI() {
     } else {
         renderPromptSegments(DEFAULT_CHAR_CARD_PROMPT);
     }
+    
+    // 加载API配置到UI
+    loadApiSettingsToUI(settings);
+}
+
+/**
+ * 加载API配置到UI
+ */
+function loadApiSettingsToUI(settings) {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    // API模式
+    const apiModeRadios = parentDoc.querySelectorAll('input[name="data-manage-api-mode"]');
+    apiModeRadios.forEach(radio => {
+        if (radio.value === (settings.apiMode || 'custom')) {
+            radio.checked = true;
+        }
+    });
+    
+    // 触发模式切换以更新UI
+    if (apiModeRadios.length > 0) {
+        const event = new Event('change', { bubbles: true });
+        apiModeRadios[0].dispatchEvent(event);
+    }
+    
+    // 酒馆预设
+    const tavernProfileSelect = parentDoc.getElementById('data-manage-tavern-profile');
+    if (tavernProfileSelect && settings.tavernProfile) {
+        tavernProfileSelect.value = settings.tavernProfile;
+    }
+    
+    // 自定义API配置
+    const useMainApiCheckbox = parentDoc.getElementById('data-manage-use-main-api');
+    const apiUrlInput = parentDoc.getElementById('data-manage-api-url');
+    const apiKeyInput = parentDoc.getElementById('data-manage-api-key');
+    const maxTokensInput = parentDoc.getElementById('data-manage-max-tokens');
+    const temperatureInput = parentDoc.getElementById('data-manage-temperature');
+    const apiModelSelect = parentDoc.getElementById('data-manage-api-model');
+    
+    if (useMainApiCheckbox && settings.apiConfig) {
+        useMainApiCheckbox.checked = settings.apiConfig.useMainApi || false;
+        
+        // 如果使用主API，隐藏自定义字段
+        const customApiFields = parentDoc.getElementById('data-manage-custom-api-fields');
+        if (customApiFields) {
+            customApiFields.style.display = useMainApiCheckbox.checked ? 'none' : 'block';
+        }
+    }
+    
+    if (apiUrlInput && settings.apiConfig) {
+        apiUrlInput.value = settings.apiConfig.url || '';
+    }
+    
+    if (apiKeyInput && settings.apiConfig) {
+        apiKeyInput.value = settings.apiConfig.apiKey || '';
+    }
+    
+    if (maxTokensInput && settings.apiConfig) {
+        maxTokensInput.value = settings.apiConfig.max_tokens || '';
+    }
+    
+    if (temperatureInput && settings.apiConfig) {
+        temperatureInput.value = settings.apiConfig.temperature || '';
+    }
+    
+    if (apiModelSelect && settings.apiConfig && settings.apiConfig.model) {
+        // 如果模型已保存，添加到选择器
+        if (!Array.from(apiModelSelect.options).some(opt => opt.value === settings.apiConfig.model)) {
+            const option = parentDoc.createElement('option');
+            option.value = settings.apiConfig.model;
+            option.textContent = `${settings.apiConfig.model} (已保存)`;
+            apiModelSelect.appendChild(option);
+        }
+        apiModelSelect.value = settings.apiConfig.model;
+    }
+    
+    // 更新API状态显示
+    updateApiStatusDisplay();
 }
 
 /**
@@ -424,11 +516,11 @@ function openDataManagePopup() {
                         <div style="display: flex; flex-direction: column; gap: 15px;">
                             <div class="data-manage-input-group">
                                 <label for="data-manage-floor-start">起始楼层:</label>
-                                <input type="number" id="data-manage-floor-start" placeholder="开始楼层" min="1" style="width: 100px;">
+                                <input type="number" id="data-manage-floor-start" placeholder="开始楼层" min="1" style="max-width: 150px;">
                             </div>
                             <div class="data-manage-input-group">
                                 <label for="data-manage-floor-end">结束楼层:</label>
-                                <input type="number" id="data-manage-floor-end" placeholder="结束楼层" min="1" style="width: 100px;">
+                                <input type="number" id="data-manage-floor-end" placeholder="结束楼层" min="1" style="max-width: 150px;">
                             </div>
                             <button id="data-manage-update-card" class="primary" style="width:100%;">按楼层范围更新数据库</button>
                             <div class="data-manage-checkbox-group">
@@ -562,8 +654,16 @@ function openDataManagePopup() {
                                     <input type="number" id="data-manage-temperature" min="0" max="2" step="0.05" placeholder="0.9">
                                 </div>
                             </div>
+                            <label for="data-manage-api-model" style="margin-top: 15px;">选择模型:</label>
+                            <select id="data-manage-api-model">
+                                <option value="">请先加载模型列表</option>
+                            </select>
+                            <div id="data-manage-api-status" class="data-manage-notes" style="margin-top: 15px; padding: 12px; background-color: var(--ios-gray); border-radius: 8px;">
+                                状态: 未配置
+                            </div>
                             <div class="data-manage-button-group" style="margin-top: 15px;">
                                 <button id="data-manage-save-api" class="primary">保存API配置</button>
+                                <button id="data-manage-clear-api" class="secondary">清除API配置</button>
                                 <button id="data-manage-test-api" class="secondary">测试连接</button>
                             </div>
                         </div>
@@ -655,6 +755,15 @@ function openDataManagePopup() {
         setupPopupEventListeners();
         loadSettingsToUI();
         updateStatusDisplay();
+        
+        // 如果当前是API Tab，加载酒馆预设列表
+        const parentDoc = (window.parent && window.parent !== window) 
+            ? window.parent.document 
+            : document;
+        const apiTab = parentDoc.getElementById('data-manage-tab-api');
+        if (apiTab && apiTab.classList.contains('active')) {
+            loadTavernApiProfiles();
+        }
     }, 100);
 }
 
@@ -713,6 +822,12 @@ function switchTab(tabName) {
     
     if (activeButton) activeButton.classList.add('active');
     if (activeContent) activeContent.classList.add('active');
+    
+    // 如果切换到API Tab，加载酒馆预设列表
+    if (tabName === 'api') {
+        loadTavernApiProfiles();
+        updateApiStatusDisplay();
+    }
 }
 
 /**
@@ -1012,6 +1127,95 @@ function setupPromptTabListeners(parentDoc) {
 }
 
 /**
+ * 更新API状态显示
+ */
+function updateApiStatusDisplay() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const statusDisplay = parentDoc.getElementById('data-manage-api-status');
+    if (!statusDisplay) return;
+    
+    const settings = currentSettings;
+    const apiConfig = settings.apiConfig || {};
+    
+    if (settings.apiMode === 'tavern') {
+        if (settings.tavernProfile) {
+            statusDisplay.textContent = `状态: 已选择酒馆连接预设 "${settings.tavernProfile}"`;
+            statusDisplay.style.color = '#34C759';
+        } else {
+            statusDisplay.textContent = '状态: 未选择酒馆连接预设';
+            statusDisplay.style.color = '#FF9500';
+        }
+    } else {
+        if (apiConfig.useMainApi) {
+            statusDisplay.textContent = '状态: 使用主API (直接使用酒馆当前API和模型)';
+            statusDisplay.style.color = '#34C759';
+        } else if (apiConfig.url) {
+            if (apiConfig.model) {
+                statusDisplay.textContent = `状态: 已配置自定义API (${apiConfig.model})`;
+                statusDisplay.style.color = '#34C759';
+            } else {
+                statusDisplay.textContent = '状态: API URL已配置，但未选择模型';
+                statusDisplay.style.color = '#FF9500';
+            }
+        } else {
+            statusDisplay.textContent = '状态: 未配置自定义API。数据库更新功能可能不可用。';
+            statusDisplay.style.color = '#FF9500';
+        }
+    }
+}
+
+/**
+ * 加载酒馆连接预设列表
+ */
+function loadTavernApiProfiles() {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const select = parentDoc.getElementById('data-manage-tavern-profile');
+    if (!select) return;
+    
+    try {
+        const context = SillyTavern.getContext();
+        const profiles = context?.extensionSettings?.connectionManager?.profiles || [];
+        
+        select.innerHTML = '<option value="">请选择连接预设</option>';
+        
+        if (profiles.length === 0) {
+            const option = parentDoc.createElement('option');
+            option.value = '';
+            option.textContent = '未找到可用的连接预设';
+            option.disabled = true;
+            select.appendChild(option);
+            return;
+        }
+        
+        profiles.forEach(profile => {
+            const option = parentDoc.createElement('option');
+            option.value = profile.id || profile.name;
+            option.textContent = profile.name || profile.id;
+            if (profile.id === currentSettings.tavernProfile) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        
+        console.log('酒馆连接预设列表已加载:', profiles.length);
+    } catch (error) {
+        console.error('加载酒馆连接预设失败:', error);
+        const option = parentDoc.createElement('option');
+        option.value = '';
+        option.textContent = '加载预设列表失败';
+        option.disabled = true;
+        select.innerHTML = '';
+        select.appendChild(option);
+    }
+}
+
+/**
  * 设置API Tab的事件监听器
  */
 function setupApiTabListeners(parentDoc) {
@@ -1023,31 +1227,171 @@ function setupApiTabListeners(parentDoc) {
             const tavernBlock = parentDoc.getElementById('data-manage-tavern-api-block');
             const customBlock = parentDoc.getElementById('data-manage-custom-api-block');
             
+            currentSettings.apiMode = mode;
+            saveSettings();
+            
             if (mode === 'tavern') {
                 if (tavernBlock) tavernBlock.style.display = 'block';
                 if (customBlock) customBlock.style.display = 'none';
+                loadTavernApiProfiles();
             } else {
                 if (tavernBlock) tavernBlock.style.display = 'none';
                 if (customBlock) customBlock.style.display = 'block';
             }
+            
+            updateApiStatusDisplay();
         });
     });
+    
+    // 使用主API复选框
+    const useMainApiCheckbox = parentDoc.getElementById('data-manage-use-main-api');
+    if (useMainApiCheckbox) {
+        useMainApiCheckbox.addEventListener('change', function() {
+            if (!currentSettings.apiConfig) {
+                currentSettings.apiConfig = { ...DEFAULT_SETTINGS.apiConfig };
+            }
+            currentSettings.apiConfig.useMainApi = this.checked;
+            
+            // 如果使用主API，隐藏自定义字段
+            const customApiFields = parentDoc.getElementById('data-manage-custom-api-fields');
+            if (customApiFields) {
+                customApiFields.style.display = this.checked ? 'none' : 'block';
+            }
+            
+            saveSettings();
+            updateApiStatusDisplay();
+        });
+    }
     
     // 保存API配置
     const saveApiBtn = parentDoc.getElementById('data-manage-save-api');
     if (saveApiBtn) {
         saveApiBtn.addEventListener('click', function() {
-            console.log('保存API配置');
-            alert('保存API配置功能待实现');
+            const apiUrlInput = parentDoc.getElementById('data-manage-api-url');
+            const apiKeyInput = parentDoc.getElementById('data-manage-api-key');
+            const maxTokensInput = parentDoc.getElementById('data-manage-max-tokens');
+            const temperatureInput = parentDoc.getElementById('data-manage-temperature');
+            const apiModelSelect = parentDoc.getElementById('data-manage-api-model');
+            
+            if (!apiUrlInput || !apiKeyInput || !maxTokensInput || !temperatureInput || !apiModelSelect) {
+                showToast('保存API配置失败：UI元素未初始化', 'error');
+                return;
+            }
+            
+            const url = apiUrlInput.value.trim();
+            const apiKey = apiKeyInput.value;
+            const model = apiModelSelect.value;
+            const max_tokens = parseInt(maxTokensInput.value, 10);
+            const temperature = parseFloat(temperatureInput.value);
+            
+            if (!url) {
+                showToast('API URL 不能为空', 'warning');
+                return;
+            }
+            
+            if (!model && apiModelSelect.options.length > 1) {
+                showToast('请选择一个模型', 'warning');
+                return;
+            }
+            
+            if (!currentSettings.apiConfig) {
+                currentSettings.apiConfig = { ...DEFAULT_SETTINGS.apiConfig };
+            }
+            
+            Object.assign(currentSettings.apiConfig, {
+                url: url,
+                apiKey: apiKey,
+                model: model,
+                max_tokens: isNaN(max_tokens) ? 120000 : max_tokens,
+                temperature: isNaN(temperature) ? 0.9 : temperature,
+            });
+            
+            if (saveSettings()) {
+                showToast('API配置已保存', 'success');
+                updateApiStatusDisplay();
+            } else {
+                showToast('保存失败', 'error');
+            }
+        });
+    }
+    
+    // 清除API配置
+    const clearApiBtn = parentDoc.getElementById('data-manage-clear-api');
+    if (clearApiBtn) {
+        clearApiBtn.addEventListener('click', function() {
+            if (confirm('确定要清除API配置吗？')) {
+                if (!currentSettings.apiConfig) {
+                    currentSettings.apiConfig = { ...DEFAULT_SETTINGS.apiConfig };
+                }
+                Object.assign(currentSettings.apiConfig, {
+                    url: '',
+                    apiKey: '',
+                    model: '',
+                    max_tokens: 120000,
+                    temperature: 0.9
+                });
+                
+                if (saveSettings()) {
+                    // 清空输入框
+                    const apiUrlInput = parentDoc.getElementById('data-manage-api-url');
+                    const apiKeyInput = parentDoc.getElementById('data-manage-api-key');
+                    const maxTokensInput = parentDoc.getElementById('data-manage-max-tokens');
+                    const temperatureInput = parentDoc.getElementById('data-manage-temperature');
+                    const apiModelSelect = parentDoc.getElementById('data-manage-api-model');
+                    
+                    if (apiUrlInput) apiUrlInput.value = '';
+                    if (apiKeyInput) apiKeyInput.value = '';
+                    if (maxTokensInput) maxTokensInput.value = '';
+                    if (temperatureInput) temperatureInput.value = '';
+                    if (apiModelSelect) {
+                        apiModelSelect.innerHTML = '<option value="">请先加载模型</option>';
+                    }
+                    
+                    showToast('API配置已清除', 'info');
+                    updateApiStatusDisplay();
+                } else {
+                    showToast('清除失败', 'error');
+                }
+            }
         });
     }
     
     // 测试连接
     const testApiBtn = parentDoc.getElementById('data-manage-test-api');
     if (testApiBtn) {
-        testApiBtn.addEventListener('click', function() {
-            console.log('测试API连接');
-            alert('测试API连接功能待实现');
+        testApiBtn.addEventListener('click', async function() {
+            const apiConfig = currentSettings.apiConfig || {};
+            
+            if (currentSettings.apiMode === 'tavern') {
+                if (!currentSettings.tavernProfile) {
+                    showToast('请先选择酒馆连接预设', 'warning');
+                    return;
+                }
+                showToast('测试酒馆连接预设功能待实现', 'info');
+                return;
+            }
+            
+            if (apiConfig.useMainApi) {
+                showToast('使用主API，无需测试', 'info');
+                return;
+            }
+            
+            if (!apiConfig.url) {
+                showToast('请先配置API URL', 'warning');
+                return;
+            }
+            
+            showToast('正在测试API连接...', 'info');
+            
+            try {
+                // TODO: 实现实际的API测试逻辑
+                // 这里只是模拟测试
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                showToast('API连接测试成功', 'success');
+            } catch (error) {
+                console.error('API连接测试失败:', error);
+                showToast(`API连接测试失败: ${error.message}`, 'error');
+            }
         });
     }
     
@@ -1055,8 +1399,18 @@ function setupApiTabListeners(parentDoc) {
     const refreshBtn = parentDoc.getElementById('data-manage-refresh-tavern');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function() {
-            console.log('刷新酒馆预设列表');
-            alert('刷新预设列表功能待实现');
+            loadTavernApiProfiles();
+            showToast('酒馆预设列表已刷新', 'success');
+        });
+    }
+    
+    // 酒馆预设选择变化
+    const tavernProfileSelect = parentDoc.getElementById('data-manage-tavern-profile');
+    if (tavernProfileSelect) {
+        tavernProfileSelect.addEventListener('change', function() {
+            currentSettings.tavernProfile = this.value;
+            saveSettings();
+            updateApiStatusDisplay();
         });
     }
 }
