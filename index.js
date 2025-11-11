@@ -3329,74 +3329,35 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `</div>`;
             }
             
-            // 表格容器 - 优化滚动和显示
-            html += `<div class="table-scroll-container" style="
-                overflow-x: auto;
-                overflow-y: visible;
-                border: 1px solid var(--ios-gray-dark);
-                border-radius: 8px;
-                background: var(--ios-gray);
-            ">`;
-            html += `<table class="data-table" style="
-                width: 100%; 
-                border-collapse: collapse; 
-                margin: 0; 
-                table-layout: auto;
+            // 条目列表容器 - 卡片式布局，参考主数据样式
+            html += `<div class="entries-list-container" style="
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                margin-top: 12px;
             ">`;
             
-            // 表头 - 参考参考文档样式
-            html += '<thead><tr>';
-            html += `<th style="
-                border: 1px solid #444; 
-                padding: 8px 12px; 
-                text-align: left; 
-                color: #fff; 
-                background-color: #333; 
-                font-weight: bold; 
-                position: sticky; 
-                top: 0; 
-                z-index: 10;
-                white-space: normal; 
-                word-wrap: break-word; 
-                overflow-wrap: break-word;
-            ">条目内容</th>`;
-            html += `<th style="
-                width: 80px; 
-                min-width: 80px; 
-                max-width: 80px;
-                border: 1px solid #444; 
-                padding: 8px 12px; 
-                text-align: left; 
-                color: #fff; 
-                background-color: #333; 
-                font-weight: bold; 
-                position: sticky; 
-                top: 0; 
-                z-index: 10;
-            ">操作</th>`;
-            html += '</tr></thead>';
-            
-            // 数据行 - 参考参考文档样式
-            html += '<tbody>';
             const rows = table.content.slice(1);
             rows.forEach((row, rowIndex) => {
                 const rowData = row.slice(1);
                 // 将所有字段值用 | 分隔符合并为一个字符串
                 const combinedValue = rowData.map(cell => cell || '').join(' | ');
                 
-                html += `<tr data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
-                    background-color: ${rowIndex % 2 === 0 ? '#222' : '#1a1a1a'};
-                " onmouseover="this.style.backgroundColor='#333';" 
-                   onmouseout="this.style.backgroundColor='${rowIndex % 2 === 0 ? '#222' : '#1a1a1a'}';"
+                // 每个条目为一个卡片
+                html += `<div class="entry-card" data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
+                    background: #1a1a1a;
+                    border: 1px solid #444;
+                    border-radius: 8px;
+                    padding: 16px;
+                    transition: all 0.2s ease;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                " onmouseover="this.style.borderColor='#666'; this.style.boxShadow='0 4px 8px rgba(0, 0, 0, 0.2)';" 
+                   onmouseout="this.style.borderColor='#444'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.1)';"
                 >`;
                 
-                // 输入框单元格 - 参考参考文档样式
-                html += `<td class="editable-cell" style="
-                    padding: 2px !important; 
-                    vertical-align: top !important;
-                    width: 100% !important;
-                    border: 1px solid #444; 
-                    color: #e0e0e0;
+                // 输入框区域
+                html += `<div class="entry-input-container" style="
+                    margin-bottom: 12px;
                 ">`;
                 html += `<textarea class="cell-input" `;
                 html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
@@ -3406,45 +3367,34 @@ function loadMessageDetails(messageIndex, messageData) {
                     color: #e0e0e0 !important;
                     border: 1px solid #444 !important;
                     width: 100% !important;
-                    min-width: 200px !important;
-                    padding: 6px 8px !important;
-                    border-radius: 3px !important;
-                    font-size: 12px !important;
-                    transition: border-color 0.2s ease !important;
+                    min-width: 100% !important;
+                    padding: 12px !important;
+                    border-radius: 6px !important;
+                    font-size: 13px !important;
+                    transition: all 0.2s ease !important;
                     resize: vertical !important;
-                    min-height: 40px !important;
+                    min-height: 80px !important;
                     height: auto !important;
-                    overflow-y: hidden !important;
+                    overflow-y: auto !important;
                     white-space: pre-wrap !important;
                     word-wrap: break-word !important;
                     overflow-wrap: break-word !important;
-                    line-height: 1.4 !important;
-                    font-family: inherit !important;
+                    line-height: 1.6 !important;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
                     display: block !important;
                     box-sizing: border-box !important;
-                    overflow: hidden !important;
-                " onfocus="this.style.borderColor='#007bff'; this.style.outline='none'; this.style.boxShadow='0 0 0 2px rgba(0, 123, 255, 0.25)';" 
-                   onblur="this.style.borderColor='#444'; this.style.boxShadow='none';"
-                   onmouseover="this.style.borderColor='#666';"
+                " onfocus="this.style.borderColor='#007bff'; this.style.outline='none'; this.style.boxShadow='0 0 0 3px rgba(0, 123, 255, 0.2)'; this.style.background='#222';" 
+                   onblur="this.style.borderColor='#444'; this.style.boxShadow='none'; this.style.background='#1a1a1a';"
+                   onmouseover="if(document.activeElement !== this) this.style.borderColor='#555';"
                    onmouseout="if(document.activeElement !== this) this.style.borderColor='#444';"
                 >${escapeHtml(combinedValue)}</textarea>`;
-                html += `</td>`;
+                html += `</div>`;
                 
-                // 操作列 - 参考参考文档样式
-                html += `<td style="
-                    border: 1px solid #444; 
-                    padding: 8px 12px; 
-                    text-align: left; 
-                    color: #e0e0e0; 
-                    white-space: normal; 
-                    word-wrap: break-word; 
-                    overflow-wrap: break-word;
-                    vertical-align: middle;
-                ">`;
-                html += `<div style="
-                    display: flex; 
-                    flex-direction: column; 
-                    gap: 5px; 
+                // 操作按钮区域 - 水平排列
+                html += `<div class="entry-actions" style="
+                    display: flex;
+                    gap: 8px;
+                    justify-content: flex-end;
                     align-items: center;
                 ">`;
                 html += `<button class="save-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
@@ -3452,35 +3402,36 @@ function loadMessageDetails(messageIndex, messageData) {
                     background: #28a745; 
                     color: white; 
                     border: none; 
-                    border-radius: 3px; 
+                    border-radius: 6px; 
                     cursor: pointer; 
-                    padding: 3px 8px; 
-                    font-size: 11px;
-                    width: 60px;
-                " onmouseover="this.style.background='#218838';" 
-                   onmouseout="this.style.background='#28a745';"
+                    padding: 8px 16px; 
+                    font-size: 13px;
+                    font-weight: 500;
+                    transition: all 0.2s ease;
+                    min-width: 80px;
+                " onmouseover="this.style.background='#218838'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)';" 
+                   onmouseout="this.style.background='#28a745'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
                 >保存</button>`;
                 html += `<button class="delete-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
                     background: #dc3545; 
                     color: white; 
                     border: none; 
-                    border-radius: 3px; 
+                    border-radius: 6px; 
                     cursor: pointer; 
-                    padding: 3px 8px; 
-                    font-size: 11px;
-                    width: 60px;
-                " onmouseover="this.style.background='#c82333';" 
-                   onmouseout="this.style.background='#dc3545';"
+                    padding: 8px 16px; 
+                    font-size: 13px;
+                    font-weight: 500;
+                    transition: all 0.2s ease;
+                    min-width: 80px;
+                " onmouseover="this.style.background='#c82333'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)';" 
+                   onmouseout="this.style.background='#dc3545'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
                 >删除</button>`;
                 html += `</div>`;
-                html += `</td>`;
                 
-                html += '</tr>';
+                html += `</div>`;
             });
             
-            html += '</tbody>';
-            html += '</table>';
             html += `</div>`;
             
             html += `</div>`;
