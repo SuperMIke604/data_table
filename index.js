@@ -2625,30 +2625,14 @@ async function handleSaveRow(e) {
         }
         
         const message = context.chat[messageIndex];
-        if (!message) {
-            showToast('消息不存在', 'error');
+        if (!message || !message.TavernDB_ACU_Data) {
+            showToast('无法找到指定消息的数据', 'error');
             return;
         }
         
-        let messageData = null;
-        if (message.TavernDB_ACU_Data) {
-            messageData = message.TavernDB_ACU_Data;
-        } else if (message.mes) {
-            try {
-                const mesText = message.mes;
-                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
-                if (jsonMatch) {
-                    messageData = JSON.parse(jsonMatch[1]);
-                } else {
-                    try {
-                        messageData = JSON.parse(mesText);
-                    } catch (e) {}
-                }
-            } catch (e) {}
-        }
-        
-        if (!messageData || !messageData[sheetKey]) {
-            showToast('无法找到指定的表格', 'error');
+        const table = message.TavernDB_ACU_Data[sheetKey];
+        if (!table || !table.content || !table.content[rowIndex + 1]) {
+            showToast('无法找到指定的行数据', 'error');
             return;
         }
         
@@ -2661,7 +2645,7 @@ async function handleSaveRow(e) {
         const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
         if (!detailsArea) return;
         
-        // 获取输入框内容
+        // 获取该行的单个输入框（包含整行数据）
         const rowInput = detailsArea.querySelector(`tr[data-row-index="${rowIndex}"][data-sheet-key="${sheetKey}"] .cell-input`);
         if (!rowInput) {
             showToast('无法找到输入框', 'error');
@@ -2672,21 +2656,29 @@ async function handleSaveRow(e) {
         const inputValue = rowInput.value;
         const newRowData = inputValue ? inputValue.split(' | ').map(val => val.trim()) : [];
         
-        // 确保数组长度与原行数据一致
-        const table = messageData[sheetKey];
+        // 确保数组长度与原行数据一致（如果用户删除了分隔符，可能需要补充空值）
         const originalRowData = table.content[rowIndex + 1] ? table.content[rowIndex + 1].slice(1) : [];
         while (newRowData.length < originalRowData.length) {
             newRowData.push('');
         }
         
         // 创建深拷贝以更新数据
-        const newJsonData = JSON.parse(JSON.stringify(messageData));
+        const newJsonData = JSON.parse(JSON.stringify(message.TavernDB_ACU_Data));
         const newTable = newJsonData[sheetKey];
         
-        // 参考参考文档：先删除原始数据，再更新新数据
+        // 更新数据 - 先删除原始数据，再更新新数据
         const originalRow = newTable.content[rowIndex + 1];
         newTable.content.splice(rowIndex + 1, 1); // 删除原始行
         newTable.content.splice(rowIndex + 1, 0, [null, ...newRowData]); // 插入新行
+        
+        // 调试日志
+        console.log('保存数据详情:', {
+            sheetKey,
+            rowIndex,
+            messageIndex,
+            originalRow: originalRow ? originalRow.slice(1) : null,
+            newRowData
+        });
         
         // 更新全局数据（参考可视化编辑原理）
         currentJsonTableData = newJsonData;
@@ -2746,7 +2738,7 @@ async function handleSaveRow(e) {
             await updateReadableLorebookEntry(false);
         }
         
-        // 刷新显示
+        // 刷新当前详情区域
         const contentDiv = detailsArea.querySelector('.details-content');
         if (contentDiv) {
             contentDiv.innerHTML = loadMessageDetails(messageIndex, newJsonData);
@@ -2756,7 +2748,7 @@ async function handleSaveRow(e) {
         
         showToast('数据已保存', 'success');
     } catch (error) {
-        console.error('保存行失败:', error);
+        console.error('保存失败:', error);
         showToast(`保存失败: ${error.message}`, 'error');
     }
 }
@@ -2772,11 +2764,8 @@ async function handleDeleteRow(e) {
     const rowIndex = parseInt(e.target.getAttribute('data-row-index'));
     const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
     
-    if (!confirm(`确定要删除这一行数据吗？此操作不可恢复。`)) {
-        return;
-    }
-    
     try {
+        // 1. 从指定的消息获取源数据
         const context = SillyTavern.getContext();
         if (!context || !context.chat) {
             showToast('无法访问聊天记录', 'error');
@@ -2784,57 +2773,39 @@ async function handleDeleteRow(e) {
         }
         
         const message = context.chat[messageIndex];
-        if (!message) {
-            showToast('消息不存在', 'error');
+        if (!message || !message.TavernDB_ACU_Data) {
+            showToast('无法找到指定消息的数据', 'error');
             return;
         }
         
-        let messageData = null;
-        if (message.TavernDB_ACU_Data) {
-            messageData = message.TavernDB_ACU_Data;
-        } else if (message.mes) {
-            try {
-                const mesText = message.mes;
-                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
-                if (jsonMatch) {
-                    messageData = JSON.parse(jsonMatch[1]);
-                } else {
-                    try {
-                        messageData = JSON.parse(mesText);
-                    } catch (e) {}
-                }
-            } catch (e) {}
-        }
-        
-        if (!messageData || !messageData[sheetKey]) {
-            showToast('无法找到指定的表格', 'error');
+        const sourceData = message.TavernDB_ACU_Data;
+        const table = sourceData[sheetKey];
+        if (!table || !table.content || !table.content[rowIndex + 1]) {
+            showToast('无法找到指定的行数据', 'error');
             return;
         }
         
-        // 参考参考文档：从指定的消息获取源数据
-        const sourceData = message.TavernDB_ACU_Data || messageData;
-        const sourceTable = sourceData[sheetKey];
-        
-        if (!sourceTable || !sourceTable.content || !sourceTable.content[rowIndex + 1]) {
-            showToast('无法找到指定的行', 'error');
+        if (!confirm('确定要删除这一行吗？此操作不可撤销。')) {
             return;
         }
         
-        // 创建深拷贝
+        // 开始删除流程
+        // 2. 创建深拷贝
         const newJsonData = JSON.parse(JSON.stringify(sourceData));
         
-        // 删除行
+        // 3. 删除行
         newJsonData[sheetKey].content.splice(rowIndex + 1, 1);
         
-        // 更新全局数据
+        // 4. 更新全局数据
         currentJsonTableData = newJsonData;
         
-        // 保存到聊天记录（传递messageIndex以确保保存到原楼层）
+        // 5. 保存到聊天记录（传递messageIndex以确保保存到原楼层）
         await saveJsonTableToChatHistory(messageIndex);
         
         // 根据表格类型，只更新对应的世界书条目，避免更新其他表格
-        const tableName = sourceTable.name ? sourceTable.name.trim() : '';
+        const tableName = table.name ? table.name.trim() : '';
         if (tableName === '总结表') {
+            // 只更新总结表的世界书条目
             const primaryLorebookName = await getInjectionTargetLorebook();
             if (primaryLorebookName) {
                 const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
@@ -2845,10 +2816,11 @@ async function handleDeleteRow(e) {
                     TavernHelper_API = parentWin.TavernHelper;
                 }
                 if (TavernHelper_API) {
-                    await updateSummaryTableEntries(newTable, TavernHelper_API, primaryLorebookName);
+                    await updateSummaryTableEntries(newJsonData[sheetKey], TavernHelper_API, primaryLorebookName);
                 }
             }
         } else if (tableName === '故事主线') {
+            // 只更新主线事件表的世界书条目
             const primaryLorebookName = await getInjectionTargetLorebook();
             if (primaryLorebookName) {
                 const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
@@ -2859,10 +2831,11 @@ async function handleDeleteRow(e) {
                     TavernHelper_API = parentWin.TavernHelper;
                 }
                 if (TavernHelper_API) {
-                    await updateOutlineTableEntry(newTable, TavernHelper_API, primaryLorebookName);
+                    await updateOutlineTableEntry(newJsonData[sheetKey], TavernHelper_API, primaryLorebookName);
                 }
             }
         } else if (tableName === '重要角色表') {
+            // 只更新重要角色表的世界书条目
             const primaryLorebookName = await getInjectionTargetLorebook();
             if (primaryLorebookName) {
                 const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
@@ -2873,14 +2846,15 @@ async function handleDeleteRow(e) {
                     TavernHelper_API = parentWin.TavernHelper;
                 }
                 if (TavernHelper_API) {
-                    await updateImportantPersonsRelatedEntries(newTable, TavernHelper_API, primaryLorebookName);
+                    await updateImportantPersonsRelatedEntries(newJsonData[sheetKey], TavernHelper_API, primaryLorebookName);
                 }
             }
         } else {
+            // 对于其他表格，更新可读数据库条目（但不包含特殊表格）
             await updateReadableLorebookEntry(false);
         }
         
-        // 刷新显示
+        // 7. 刷新显示
         const parentDoc = (window.parent && window.parent !== window) 
             ? window.parent.document 
             : document;
@@ -3094,7 +3068,7 @@ function loadMessageDetails(messageIndex, messageData) {
             if (!table || !table.name || !table.content) return;
             
             // 配色参考弹窗主视觉（iOS风格）
-            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px; border: 1px solid var(--ios-border); border-radius: 10px; padding: 15px; background: var(--ios-gray);">`;
+            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px; border: 1px solid var(--ios-border); border-radius: 10px; padding: 0; background: var(--ios-gray);">`;
             html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
             html += `<h4 class="table-title" style="margin: 0; color: var(--ios-text);">${escapeHtml(table.name)}</h4>`;
             html += `<button class="delete-table-btn" data-sheet-key="${sheetKey}" data-message-index="${messageIndex}" style="
@@ -3135,7 +3109,7 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `<textarea class="cell-input" `;
                 html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" `;
-                html += `style="width: 100%; min-height: 40px; padding: 6px; border: 1px solid var(--ios-border); border-radius: 6px; background: var(--ios-surface); color: var(--ios-text); font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;">${escapeHtml(combinedValue)}</textarea>`;
+                html += `style="width: 100%; height: 120px; padding: 6px; border: 1px solid var(--ios-border); border-radius: 6px; background: var(--ios-surface); color: var(--ios-text); font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;">${escapeHtml(combinedValue)}</textarea>`;
                 html += `</td>`;
                 
                 // 操作列 - 按钮上下排列
