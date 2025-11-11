@@ -408,6 +408,8 @@ function renderPromptSegments(segments) {
                 deleteBtn.addEventListener('click', function() {
                     segmentDiv.remove();
                 });
+            
+            html += `</div>`;
             }
         }
     });
@@ -3338,25 +3340,19 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `</div>`;
             }
             
-            // 直接处理行数据，移除条目列表容器
+            // 条目列表容器 - 卡片式布局，参考主视觉
+            html += `<div class="entries-list-container" style="
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                margin-top: 12px;
+            ">`;
             
             const rows = table.content.slice(1);
             rows.forEach((row, rowIndex) => {
                 const rowData = row.slice(1);
                 // 将所有字段值用 | 分隔符合并为一个字符串
                 const combinedValue = rowData.map(cell => cell || '').join(' | ');
-                
-                // 每个条目为一个卡片 - 参考主视觉配色
-                html += `<div class="entry-card" data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
-                    background: var(--ios-surface);
-                    border: 1px solid var(--ios-border);
-                    border-radius: 12px;
-                    padding: 16px;
-                    transition: all 0.2s ease;
-                    box-shadow: 0 2px 8px var(--ios-shadow);
-                " onmouseover="this.style.borderColor='var(--ios-blue)'; this.style.boxShadow='0 4px 12px rgba(0, 122, 255, 0.15)';" 
-                   onmouseout="this.style.borderColor='var(--ios-border)'; this.style.boxShadow='0 2px 8px var(--ios-shadow)';"
-                >`;
                 
                 // 输入框区域 - 参考主视觉配色
                 html += `<div class="entry-input-container" style="
@@ -3430,8 +3426,6 @@ function loadMessageDetails(messageIndex, messageData) {
                 " onmouseover="this.style.background='#c82333'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)';" 
                    onmouseout="this.style.background='#dc3545'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
                 >删除</button>`;
-                html += `</div>`;
-                
                 html += `</div>`;
             });
             
