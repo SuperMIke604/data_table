@@ -2683,33 +2683,15 @@ async function handleSaveRow(e) {
         const newJsonData = JSON.parse(JSON.stringify(messageData));
         const newTable = newJsonData[sheetKey];
         
-        // 更新数据
-        if (newTable.content[rowIndex + 1]) {
-            newTable.content[rowIndex + 1] = [null, ...newRowData];
-        }
+        // 参考参考文档：先删除原始数据，再更新新数据
+        const originalRow = newTable.content[rowIndex + 1];
+        newTable.content.splice(rowIndex + 1, 1); // 删除原始行
+        newTable.content.splice(rowIndex + 1, 0, [null, ...newRowData]); // 插入新行
         
-        // 更新消息数据
-        if (message.TavernDB_ACU_Data) {
-            message.TavernDB_ACU_Data = newJsonData;
-        } else if (message.mes) {
-            // 更新消息文本中的JSON数据
-            try {
-                const mesText = message.mes;
-                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
-                if (jsonMatch) {
-                    message.mes = mesText.replace(/```json\s*[\s\S]*?\s*```/, `\`\`\`json\n${JSON.stringify(newJsonData, null, 2)}\n\`\`\``);
-                } else {
-                    message.mes = JSON.stringify(newJsonData);
-                }
-            } catch (e) {
-                console.error('更新消息文本失败:', e);
-            }
-        }
-        
-        // 更新全局数据
+        // 更新全局数据（参考可视化编辑原理）
         currentJsonTableData = newJsonData;
         
-        // 保存到聊天记录
+        // 保存到聊天记录（传递messageIndex以确保保存到原楼层）
         await saveJsonTableToChatHistory(messageIndex);
         
         // 根据表格类型，只更新对应的世界书条目，避免更新其他表格
@@ -2829,27 +2811,29 @@ async function handleDeleteRow(e) {
             return;
         }
         
-        const table = messageData[sheetKey];
-        if (!table.content || !table.content[rowIndex + 1]) {
+        // 参考参考文档：从指定的消息获取源数据
+        const sourceData = message.TavernDB_ACU_Data || messageData;
+        const sourceTable = sourceData[sheetKey];
+        
+        if (!sourceTable || !sourceTable.content || !sourceTable.content[rowIndex + 1]) {
             showToast('无法找到指定的行', 'error');
             return;
         }
         
-        // 创建深拷贝以更新数据
-        const newJsonData = JSON.parse(JSON.stringify(messageData));
-        const newTable = newJsonData[sheetKey];
+        // 创建深拷贝
+        const newJsonData = JSON.parse(JSON.stringify(sourceData));
         
         // 删除行
-        newTable.content.splice(rowIndex + 1, 1);
+        newJsonData[sheetKey].content.splice(rowIndex + 1, 1);
         
         // 更新全局数据
         currentJsonTableData = newJsonData;
         
-        // 保存到聊天记录
+        // 保存到聊天记录（传递messageIndex以确保保存到原楼层）
         await saveJsonTableToChatHistory(messageIndex);
         
         // 根据表格类型，只更新对应的世界书条目，避免更新其他表格
-        const tableName = newTable.name ? newTable.name.trim() : '';
+        const tableName = sourceTable.name ? sourceTable.name.trim() : '';
         if (tableName === '总结表') {
             const primaryLorebookName = await getInjectionTargetLorebook();
             if (primaryLorebookName) {
@@ -3098,7 +3082,7 @@ async function handleDeleteMessage(e) {
  * 加载消息详情内容
  */
 function loadMessageDetails(messageIndex, messageData) {
-    let html = '<div class="expanded-details-content">';
+    let html = '<div class="expanded-details-content" style="padding: 0;">';
     
     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
     
@@ -3552,7 +3536,7 @@ async function showDataPreview() {
             
             // 优先检查 TavernDB_ACU_Data 字段
             if (message && message.TavernDB_ACU_Data) {
-                messageIndex = i + 1;
+                messageIndex = i; // 直接使用数组索引，不计算0层
                 messageData = message.TavernDB_ACU_Data;
                 messageType = message.name || '未知';
                 timestamp = message.send_date || new Date().toISOString();
@@ -3569,7 +3553,7 @@ async function showDataPreview() {
                     if (jsonMatch) {
                         const jsonData = JSON.parse(jsonMatch[1]);
                         if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
-                            messageIndex = i + 1;
+                            messageIndex = i; // 直接使用数组索引，不计算0层
                             messageData = jsonData;
                             messageType = message.name || '未知';
                             timestamp = message.send_date || new Date().toISOString();
@@ -3581,7 +3565,7 @@ async function showDataPreview() {
                     try {
                         const jsonData = JSON.parse(mesText);
                         if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
-                            messageIndex = i + 1;
+                            messageIndex = i; // 直接使用数组索引，不计算0层
                             messageData = jsonData;
                             messageType = message.name || '未知';
                             timestamp = message.send_date || new Date().toISOString();
