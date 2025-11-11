@@ -3339,46 +3339,44 @@ function loadMessageDetails(messageIndex, messageData) {
             ">`;
             html += `<table class="data-table" style="
                 width: 100%; 
-                border-collapse: separate;
-                border-spacing: 0;
-                margin: 0;
+                border-collapse: collapse; 
+                margin: 0; 
+                table-layout: auto;
             ">`;
             
-            // 表头 - iOS风格
+            // 表头 - 参考参考文档样式
             html += '<thead><tr>';
             html += `<th style="
-                border: none;
-                border-bottom: 2px solid var(--ios-border);
-                padding: 12px 16px; 
+                border: 1px solid #444; 
+                padding: 8px 12px; 
                 text-align: left; 
-                color: var(--ios-text); 
-                background: var(--ios-gray-dark);
-                font-size: 14px;
-                font-weight: 600;
-                position: sticky;
-                top: 0;
+                color: #fff; 
+                background-color: #333; 
+                font-weight: bold; 
+                position: sticky; 
+                top: 0; 
                 z-index: 10;
+                white-space: normal; 
+                word-wrap: break-word; 
+                overflow-wrap: break-word;
             ">条目内容</th>`;
             html += `<th style="
-                width: 100px; 
-                min-width: 100px;
-                text-align: center; 
-                border: none;
-                border-bottom: 2px solid var(--ios-border);
-                border-left: 1px solid var(--ios-border);
-                padding: 12px 8px; 
-                color: var(--ios-text); 
-                background: var(--ios-gray-dark);
-                font-size: 14px;
-                font-weight: 600;
-                position: sticky;
-                top: 0;
-                right: 0;
+                width: 80px; 
+                min-width: 80px; 
+                max-width: 80px;
+                border: 1px solid #444; 
+                padding: 8px 12px; 
+                text-align: left; 
+                color: #fff; 
+                background-color: #333; 
+                font-weight: bold; 
+                position: sticky; 
+                top: 0; 
                 z-index: 10;
             ">操作</th>`;
             html += '</tr></thead>';
             
-            // 数据行 - 优先展示输入框
+            // 数据行 - 参考参考文档样式
             html += '<tbody>';
             const rows = table.content.slice(1);
             rows.forEach((row, rowIndex) => {
@@ -3387,31 +3385,94 @@ function loadMessageDetails(messageIndex, messageData) {
                 const combinedValue = rowData.map(cell => cell || '').join(' | ');
                 
                 html += `<tr data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
-                    transition: background-color 0.2s ease;
-                " onmouseover="this.style.backgroundColor='var(--ios-gray)';" 
-                   onmouseout="this.style.backgroundColor='transparent';"
+                    background-color: ${rowIndex % 2 === 0 ? '#222' : '#1a1a1a'};
+                " onmouseover="this.style.backgroundColor='#333';" 
+                   onmouseout="this.style.backgroundColor='${rowIndex % 2 === 0 ? '#222' : '#1a1a1a'}';"
                 >`;
                 
-                // 单个输入框 - 包含整行数据（用 | 分隔）
-                html += `<td class="editable-cell">`;
+                // 输入框单元格 - 参考参考文档样式
+                html += `<td class="editable-cell" style="
+                    padding: 2px !important; 
+                    vertical-align: top !important;
+                    width: 100% !important;
+                    border: 1px solid #444; 
+                    color: #e0e0e0;
+                ">`;
                 html += `<textarea class="cell-input" `;
                 html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
-                html += `data-message-index="${messageIndex}">${escapeHtml(combinedValue)}</textarea>`;
+                html += `data-message-index="${messageIndex}" `;
+                html += `style="
+                    background: #1a1a1a !important;
+                    color: #e0e0e0 !important;
+                    border: 1px solid #444 !important;
+                    width: 100% !important;
+                    min-width: 200px !important;
+                    padding: 6px 8px !important;
+                    border-radius: 3px !important;
+                    font-size: 12px !important;
+                    transition: border-color 0.2s ease !important;
+                    resize: vertical !important;
+                    min-height: 40px !important;
+                    height: auto !important;
+                    overflow-y: hidden !important;
+                    white-space: pre-wrap !important;
+                    word-wrap: break-word !important;
+                    overflow-wrap: break-word !important;
+                    line-height: 1.4 !important;
+                    font-family: inherit !important;
+                    display: block !important;
+                    box-sizing: border-box !important;
+                    overflow: hidden !important;
+                " onfocus="this.style.borderColor='#007bff'; this.style.outline='none'; this.style.boxShadow='0 0 0 2px rgba(0, 123, 255, 0.25)';" 
+                   onblur="this.style.borderColor='#444'; this.style.boxShadow='none';"
+                   onmouseover="this.style.borderColor='#666';"
+                   onmouseout="if(document.activeElement !== this) this.style.borderColor='#444';"
+                >${escapeHtml(combinedValue)}</textarea>`;
                 html += `</td>`;
                 
-                // 操作列 - 按钮上下排列
-                html += `<td style="text-align: center; vertical-align: middle;">`;
-                html += `<div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">`;
+                // 操作列 - 参考参考文档样式
+                html += `<td style="
+                    border: 1px solid #444; 
+                    padding: 8px 12px; 
+                    text-align: left; 
+                    color: #e0e0e0; 
+                    white-space: normal; 
+                    word-wrap: break-word; 
+                    overflow-wrap: break-word;
+                    vertical-align: middle;
+                ">`;
+                html += `<div style="
+                    display: flex; 
+                    flex-direction: column; 
+                    gap: 5px; 
+                    align-items: center;
+                ">`;
                 html += `<button class="save-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
-                    background: #28a745; color: white; border: none; padding: 4px 8px; 
-                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px;
-                ">保存</button>`;
+                    background: #28a745; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 3px; 
+                    cursor: pointer; 
+                    padding: 3px 8px; 
+                    font-size: 11px;
+                    width: 60px;
+                " onmouseover="this.style.background='#218838';" 
+                   onmouseout="this.style.background='#28a745';"
+                >保存</button>`;
                 html += `<button class="delete-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
-                    background: #dc3545; color: white; border: none; padding: 4px 8px; 
-                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px;
-                ">删除</button>`;
+                    background: #dc3545; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 3px; 
+                    cursor: pointer; 
+                    padding: 3px 8px; 
+                    font-size: 11px;
+                    width: 60px;
+                " onmouseover="this.style.background='#c82333';" 
+                   onmouseout="this.style.background='#dc3545';"
+                >删除</button>`;
                 html += `</div>`;
                 html += `</td>`;
                 
@@ -5442,6 +5503,23 @@ async function triggerAutomaticUpdateIfNeeded() {
             if (floorIndex >= 0) { // 确保楼层索引有效
                 indicesToActuallyUpdate.push(floorIndex);
             }
+        }
+    }
+    
+    // 修复：当 skipLatestN = 0 时，需要从楼层1开始处理updateBatchSize层
+    // 例如：totalActualMessages = 6, skipLatestN = 0, updateBatchSize = 6
+    // 应该处理楼层1到楼层6（共6层）
+    if (skipLatestN === 0 && indicesToActuallyUpdate.length === 0 && totalActualMessages >= updateBatchSize) {
+        // 重新计算：从楼层1开始，处理updateBatchSize层
+        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
+            indicesToActuallyUpdate.push(i + 1); // 楼层号从1开始
+        }
+    } else if (skipLatestN === 0 && startIndex === -1 && totalActualMessages >= updateBatchSize) {
+        // 如果startIndex被设置为-1（包含楼层0），但skipLatestN=0时不应该包含楼层0
+        // 重新计算：从楼层1开始，处理updateBatchSize层
+        indicesToActuallyUpdate.length = 0; // 清空之前的结果
+        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
+            indicesToActuallyUpdate.push(i + 1); // 楼层号从1开始
         }
     }
     
