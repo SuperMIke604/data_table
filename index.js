@@ -3263,7 +3263,7 @@ async function handleDeleteMessage(e) {
  * 加载消息详情内容
  */
 function loadMessageDetails(messageIndex, messageData) {
-    let html = '<div class="expanded-details-content" style="padding: 15px 0;">';
+    let html = '<div class="expanded-details-content" style="padding: 0;">';
     
     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
     
