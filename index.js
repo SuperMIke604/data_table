@@ -3392,83 +3392,26 @@ function loadMessageDetails(messageIndex, messageData) {
                    onmouseout="this.style.backgroundColor='transparent';"
                 >`;
                 
-                // 输入框单元格 - 优先展示，优化样式
-                html += `<td class="editable-cell" style="
-                    border: none;
-                    border-bottom: 1px solid var(--ios-gray-dark);
-                    padding: 12px 16px;
-                    vertical-align: top;
-                ">`;
+                // 单个输入框 - 包含整行数据（用 | 分隔）
+                html += `<td class="editable-cell">`;
                 html += `<textarea class="cell-input" `;
                 html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
-                html += `data-message-index="${messageIndex}" `;
-                html += `style="
-                    width: 100%; 
-                    min-height: 120px;
-                    height: 120px;
-                    padding: 12px; 
-                    border: 1px solid var(--ios-border); 
-                    border-radius: 8px; 
-                    background: var(--ios-surface); 
-                    color: var(--ios-text); 
-                    font-size: 14px; 
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-                    resize: vertical; 
-                    box-sizing: border-box;
-                    transition: all 0.2s ease;
-                    line-height: 1.5;
-                " onfocus="this.style.borderColor='var(--ios-blue)'; this.style.boxShadow='0 0 0 3px rgba(0, 122, 255, 0.1)'; this.style.background='var(--ios-surface)';" 
-                   onblur="this.style.borderColor='var(--ios-border)'; this.style.boxShadow='none';"
-                >${escapeHtml(combinedValue)}</textarea>`;
+                html += `data-message-index="${messageIndex}">${escapeHtml(combinedValue)}</textarea>`;
                 html += `</td>`;
                 
-                // 操作列 - 按钮垂直排列，iOS风格
-                html += `<td style="
-                    text-align: center; 
-                    vertical-align: middle; 
-                    border: none;
-                    border-bottom: 1px solid var(--ios-gray-dark);
-                    border-left: 1px solid var(--ios-border);
-                    padding: 12px 8px;
-                    width: 100px;
-                    min-width: 100px;
-                ">`;
-                html += `<div style="
-                    display: flex; 
-                    flex-direction: column; 
-                    gap: 8px; 
-                    align-items: center;
-                ">`;
+                // 操作列 - 按钮上下排列
+                html += `<td style="text-align: center; vertical-align: middle;">`;
+                html += `<div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">`;
                 html += `<button class="save-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
-                    background: #28a745; 
-                    color: white; 
-                    border: none; 
-                    padding: 6px 12px; 
-                    border-radius: 8px; 
-                    cursor: pointer; 
-                    font-size: 12px;
-                    font-weight: 500;
-                    width: 70px;
-                    transition: all 0.2s ease;
-                " onmouseover="this.style.background='#218838'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.2)';" 
-                   onmouseout="this.style.background='#28a745'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
-                >保存</button>`;
+                    background: #28a745; color: white; border: none; padding: 4px 8px; 
+                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px;
+                ">保存</button>`;
                 html += `<button class="delete-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" style="
-                    background: #dc3545; 
-                    color: white; 
-                    border: none; 
-                    padding: 6px 12px; 
-                    border-radius: 8px; 
-                    cursor: pointer; 
-                    font-size: 12px;
-                    font-weight: 500;
-                    width: 70px;
-                    transition: all 0.2s ease;
-                " onmouseover="this.style.background='#c82333'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.2)';" 
-                   onmouseout="this.style.background='#dc3545'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
-                >删除</button>`;
+                    background: #dc3545; color: white; border: none; padding: 4px 8px; 
+                    border-radius: 3px; cursor: pointer; font-size: 11px; width: 60px;
+                ">删除</button>`;
                 html += `</div>`;
                 html += `</td>`;
                 
