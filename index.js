@@ -2343,7 +2343,7 @@ function showDataOverview() {
                     // 详情展开区域（在操作按钮之前）
                     html += `<div class="message-details" data-message-index="${i}" style="
                         display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
-                        border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
+                        border-top: 1px solid var(--ios-border); background: transparent; 
                         border-radius: 6px; padding: 0; margin-bottom: 15px;
                     ">`;
                     html += `<div class="details-content" style="padding: 0;">`;
@@ -4722,8 +4722,13 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
                             }
                             
                             // 移除toast
-                            if (parentWin.toastr && loadingToast) {
-                                parentWin.toastr.clear(loadingToast);
+                            if (parentWin.toastr) {
+                                if (loadingToast) {
+                                    parentWin.toastr.clear(loadingToast);
+                                } else {
+                                    // 兜底：清除所有进行中的toast
+                                    parentWin.toastr.clear();
+                                }
                             }
                             
                             // 显示确认消息
