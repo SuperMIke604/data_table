@@ -2706,6 +2706,64 @@ async function handleSaveRow(e) {
             }
         }
         
+        // 更新全局数据
+        currentJsonTableData = newJsonData;
+        
+        // 保存到聊天记录
+        await saveJsonTableToChatHistory(messageIndex);
+        
+        // 根据表格类型，只更新对应的世界书条目，避免更新其他表格
+        const tableName = newTable.name ? newTable.name.trim() : '';
+        if (tableName === '总结表') {
+            // 只更新总结表的世界书条目
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
+                }
+                if (TavernHelper_API) {
+                    await updateSummaryTableEntries(newTable, TavernHelper_API, primaryLorebookName);
+                }
+            }
+        } else if (tableName === '故事主线') {
+            // 只更新主线事件表的世界书条目
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
+                }
+                if (TavernHelper_API) {
+                    await updateOutlineTableEntry(newTable, TavernHelper_API, primaryLorebookName);
+                }
+            }
+        } else if (tableName === '重要角色表') {
+            // 只更新重要角色表的世界书条目
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
+                }
+                if (TavernHelper_API) {
+                    await updateImportantPersonsRelatedEntries(newTable, TavernHelper_API, primaryLorebookName);
+                }
+            }
+        } else {
+            // 对于其他表格，更新可读数据库条目（但不包含特殊表格）
+            await updateReadableLorebookEntry(false);
+        }
+        
         // 刷新显示
         const contentDiv = detailsArea.querySelector('.details-content');
         if (contentDiv) {
@@ -2784,21 +2842,58 @@ async function handleDeleteRow(e) {
         // 删除行
         newTable.content.splice(rowIndex + 1, 1);
         
-        // 更新消息数据
-        if (message.TavernDB_ACU_Data) {
-            message.TavernDB_ACU_Data = newJsonData;
-        } else if (message.mes) {
-            try {
-                const mesText = message.mes;
-                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
-                if (jsonMatch) {
-                    message.mes = mesText.replace(/```json\s*[\s\S]*?\s*```/, `\`\`\`json\n${JSON.stringify(newJsonData, null, 2)}\n\`\`\``);
-                } else {
-                    message.mes = JSON.stringify(newJsonData);
+        // 更新全局数据
+        currentJsonTableData = newJsonData;
+        
+        // 保存到聊天记录
+        await saveJsonTableToChatHistory(messageIndex);
+        
+        // 根据表格类型，只更新对应的世界书条目，避免更新其他表格
+        const tableName = newTable.name ? newTable.name.trim() : '';
+        if (tableName === '总结表') {
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
                 }
-            } catch (e) {
-                console.error('更新消息文本失败:', e);
+                if (TavernHelper_API) {
+                    await updateSummaryTableEntries(newTable, TavernHelper_API, primaryLorebookName);
+                }
             }
+        } else if (tableName === '故事主线') {
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
+                }
+                if (TavernHelper_API) {
+                    await updateOutlineTableEntry(newTable, TavernHelper_API, primaryLorebookName);
+                }
+            }
+        } else if (tableName === '重要角色表') {
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
+                }
+                if (TavernHelper_API) {
+                    await updateImportantPersonsRelatedEntries(newTable, TavernHelper_API, primaryLorebookName);
+                }
+            }
+        } else {
+            await updateReadableLorebookEntry(false);
         }
         
         // 刷新显示
@@ -2877,27 +2972,66 @@ async function handleDeleteTable(e) {
             return;
         }
         
+        // 获取表格名称（在删除前）
+        const actualTableName = table.name ? table.name.trim() : '';
+        
         // 创建深拷贝以更新数据
         const newJsonData = JSON.parse(JSON.stringify(messageData));
         
         // 删除表格
         delete newJsonData[sheetKey];
         
-        // 更新消息数据
-        if (message.TavernDB_ACU_Data) {
-            message.TavernDB_ACU_Data = newJsonData;
-        } else if (message.mes) {
-            try {
-                const mesText = message.mes;
-                const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
-                if (jsonMatch) {
-                    message.mes = mesText.replace(/```json\s*[\s\S]*?\s*```/, `\`\`\`json\n${JSON.stringify(newJsonData, null, 2)}\n\`\`\``);
-                } else {
-                    message.mes = JSON.stringify(newJsonData);
+        // 更新全局数据
+        currentJsonTableData = newJsonData;
+        
+        // 保存到聊天记录
+        await saveJsonTableToChatHistory(messageIndex);
+        
+        // 根据表格类型，删除对应的世界书条目
+        if (actualTableName === '总结表') {
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
                 }
-            } catch (e) {
-                console.error('更新消息文本失败:', e);
+                if (TavernHelper_API) {
+                    await updateSummaryTableEntries(null, TavernHelper_API, primaryLorebookName);
+                }
             }
+        } else if (actualTableName === '故事主线') {
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
+                }
+                if (TavernHelper_API) {
+                    await updateOutlineTableEntry(null, TavernHelper_API, primaryLorebookName);
+                }
+            }
+        } else if (actualTableName === '重要角色表') {
+            const primaryLorebookName = await getInjectionTargetLorebook();
+            if (primaryLorebookName) {
+                const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                let TavernHelper_API = null;
+                if (typeof TavernHelper !== 'undefined') {
+                    TavernHelper_API = TavernHelper;
+                } else if (parentWin && parentWin.TavernHelper) {
+                    TavernHelper_API = parentWin.TavernHelper;
+                }
+                if (TavernHelper_API) {
+                    await updateImportantPersonsRelatedEntries(null, TavernHelper_API, primaryLorebookName);
+                }
+            }
+        } else {
+            await updateReadableLorebookEntry(false);
         }
         
         // 刷新概览
@@ -4466,6 +4600,7 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
 
 /**
  * 更新可读世界书条目 - 参考参考文档实现
+ * 参考参考文档：需要分别处理重要角色表、总结表、故事主线表和可读数据表
  */
 async function updateReadableLorebookEntry(createIfNeeded = false) {
     if (!currentJsonTableData) {
@@ -4496,9 +4631,15 @@ async function updateReadableLorebookEntry(createIfNeeded = false) {
     }
     
     try {
-        // 格式化数据为可读文本
-        const readableText = formatJsonToReadable(currentJsonTableData);
+        // 参考参考文档：使用 formatJsonToReadable 分离特殊表格
+        const { readableText, importantPersonsTable, summaryTable, outlineTable } = formatJsonToReadable(currentJsonTableData);
         
+        // 参考参考文档：分别更新各个特殊表格的世界书条目
+        await updateImportantPersonsRelatedEntries(importantPersonsTable, TavernHelper_API, primaryLorebookName);
+        await updateSummaryTableEntries(summaryTable, TavernHelper_API, primaryLorebookName);
+        await updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLorebookName);
+        
+        // 更新可读数据表（不包含特殊表格）
         const READABLE_LOREBOOK_COMMENT = 'TavernDB-ACU-ReadableDataTable';
         const entries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
         const db2Entry = entries.find(e => e.comment === READABLE_LOREBOOK_COMMENT);
@@ -4534,11 +4675,23 @@ async function updateReadableLorebookEntry(createIfNeeded = false) {
 /**
  * 格式化JSON数据为可读文本 - 参考参考文档实现
  * 重要角色表、总结表、故事主线表不应该展示在 TavernDB-ACU-ReadableDataTable 中
+ * 返回分离后的数据：readableText（普通表格）、importantPersonsTable、summaryTable、outlineTable
  */
 function formatJsonToReadable(jsonData) {
-    if (!jsonData) return '数据库为空。';
+    if (!jsonData) {
+        return { 
+            readableText: '数据库为空。', 
+            importantPersonsTable: null, 
+            summaryTable: null, 
+            outlineTable: null 
+        };
+    }
     
     let readableText = '';
+    let importantPersonsTable = null;
+    let summaryTable = null;
+    let outlineTable = null;
+    
     const tableKeys = Object.keys(jsonData).filter(k => k.startsWith('sheet_'));
     
     // 用于跟踪实际处理的表格索引（排除特殊表格后）
@@ -4548,13 +4701,18 @@ function formatJsonToReadable(jsonData) {
         const table = jsonData[sheetKey];
         if (!table || !table.name || !table.content) return;
         
-        // 参考参考文档：排除特殊表格 - 这些表格不应该包含在 ReadableDataTable 中
+        // 参考参考文档：提取特殊表格 - 这些表格不应该包含在 ReadableDataTable 中
         const tableName = table.name.trim();
         switch (tableName) {
             case '重要角色表':
+                importantPersonsTable = table;
+                return; // 跳过，不包含在可读数据表中
             case '总结表':
+                summaryTable = table;
+                return; // 跳过，不包含在可读数据表中
             case '故事主线':
-                return; // 跳过这些表格，不包含在可读数据表中
+                outlineTable = table;
+                return; // 跳过，不包含在可读数据表中
             default:
                 // 处理所有其他表格
                 break;
@@ -4583,7 +4741,233 @@ function formatJsonToReadable(jsonData) {
         actualTableIndex++; // 只有处理了表格才增加索引
     });
     
-    return readableText.trim();
+    return {
+        readableText: readableText.trim(),
+        importantPersonsTable,
+        summaryTable,
+        outlineTable
+    };
+}
+
+/**
+ * 更新总结表世界书条目 - 参考参考文档实现
+ */
+async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primaryLorebookName) {
+    if (!TavernHelper_API) return;
+    if (!primaryLorebookName) {
+        console.warn('无法更新总结表条目: 未设置注入目标世界书');
+        return;
+    }
+
+    const SUMMARY_COMMENT = 'TavernDB-ACU-SummaryTable';
+
+    try {
+        const allEntries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
+        const existingEntry = allEntries.find(e => e.comment === SUMMARY_COMMENT);
+
+        // 如果没有总结表数据，删除条目（如果存在）
+        if (!summaryTable || summaryTable.content.length < 2) {
+            if (existingEntry) {
+                await TavernHelper_API.deleteLorebookEntries(primaryLorebookName, [existingEntry.uid]);
+                console.log('已删除总结表条目（无数据）');
+            }
+            return;
+        }
+
+        // 获取最新N行（展示最新N条数据，N由用户配置）
+        const MAX_SHOW_ENTRIES = currentSettings.summaryTableMaxEntries || 10;
+        const summaryRows = summaryTable.content.slice(1);
+        const totalRows = summaryRows.length;
+        const startIndex = Math.max(0, totalRows - MAX_SHOW_ENTRIES);
+        const latestRows = summaryRows.slice(startIndex);
+
+        // 格式化最新N行（保持现有展示逻辑）
+        const headers = summaryTable.content[0] ? summaryTable.content[0].slice(1) : [];
+        let content = `[0:事件详情]\n`;
+        
+        if (headers.length > 0) {
+            const headerInfo = headers.map((h, i) => `[${i}:${h}]`).join('|');
+            content += `Columns: ${headerInfo}\n`;
+        }
+
+        latestRows.forEach((row, rowIndex) => {
+            const rowData = row.slice(1);
+            const actualIndex = startIndex + rowIndex;
+            content += `[${actualIndex}] ${rowData.join('|')}\n`;
+        });
+
+        const finalContent = `<event_details>\n\n${content.trim()}\n\n</event_details>`;
+
+        if (existingEntry) {
+            if (existingEntry.content !== finalContent) {
+                const updatedEntry = { 
+                    uid: existingEntry.uid, 
+                    content: finalContent, 
+                    enabled: true, 
+                    type: 'constant', 
+                    prevent_recursion: true 
+                };
+                await TavernHelper_API.setLorebookEntries(primaryLorebookName, [updatedEntry]);
+                console.log('成功更新总结表世界书条目');
+            }
+        } else {
+            const newEntry = {
+                comment: SUMMARY_COMMENT,
+                content: finalContent,
+                enabled: true,
+                type: 'constant',
+                order: 100, // 高优先级（略低于主线表）
+                prevent_recursion: true,
+            };
+            await TavernHelper_API.createLorebookEntries(primaryLorebookName, [newEntry]);
+            console.log('总结表世界书条目不存在，已创建新条目');
+        }
+    } catch(error) {
+        console.error('更新总结表世界书条目失败:', error);
+    }
+}
+
+/**
+ * 更新重要角色表相关世界书条目 - 参考参考文档实现
+ */
+async function updateImportantPersonsRelatedEntries(importantPersonsTable, TavernHelper_API, primaryLorebookName) {
+    if (!TavernHelper_API) return;
+    if (!primaryLorebookName) {
+        console.warn('无法更新重要角色表条目: 未设置注入目标世界书');
+        return;
+    }
+
+    const PERSON_ENTRY_PREFIX = '重要人物条目';
+
+    try {
+        const allEntries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
+        
+        // --- 1. 全量删除 ---
+        // 找出所有由插件管理的旧条目 (人物条目)
+        const uidsToDelete = allEntries
+            .filter(e => e.comment && e.comment.startsWith(PERSON_ENTRY_PREFIX))
+            .map(e => e.uid);
+
+        if (uidsToDelete.length > 0) {
+            await TavernHelper_API.deleteLorebookEntries(primaryLorebookName, uidsToDelete);
+            console.log(`已删除 ${uidsToDelete.length} 个旧的人物相关世界书条目`);
+        }
+
+        // --- 2. 全量重建 ---
+        const personRows = (importantPersonsTable?.content?.length > 1) ? importantPersonsTable.content.slice(1) : [];
+        if (personRows.length === 0) {
+            console.log('没有重要角色需要创建条目');
+            return; // 如果没有人物，删除后直接返回
+        }
+
+        const headers = importantPersonsTable.content[0].slice(1);
+        const nameColumnIndex = headers.indexOf('姓名') !== -1 ? headers.indexOf('姓名') : headers.indexOf('角色名');
+        if (nameColumnIndex === -1) {
+            console.error('无法在重要角色表中找到"姓名"或"角色名"列，无法处理人物条目');
+            return;
+        }
+
+        const personEntriesToCreate = [];
+        const personNames = [];
+
+        // 2.1 准备要创建的人物条目
+        personRows.forEach((row, i) => {
+            const rowData = row.slice(1);
+            const personName = rowData[nameColumnIndex];
+            if (!personName) return;
+            personNames.push(personName);
+
+            const content = `<latest_role_info>\n\n[0:${importantPersonsTable.name}]\n\nColumns: ${headers.map((h, idx) => `[${idx}:${h}]`).join('|')}\n\n[0] ${rowData.join('|')}\n\n</latest_role_info>`;
+            const newEntryData = {
+                comment: `${PERSON_ENTRY_PREFIX}${i + 1}`,
+                content: content,
+                keys: [personName],
+                enabled: true,
+                type: 'keyword',
+                order: 100,
+                prevent_recursion: true
+            };
+            personEntriesToCreate.push(newEntryData);
+        });
+
+        // 2.2 执行创建
+        if (personEntriesToCreate.length > 0) {
+            await TavernHelper_API.createLorebookEntries(primaryLorebookName, personEntriesToCreate);
+            console.log(`成功创建 ${personEntriesToCreate.length} 个新的人物相关世界书条目`);
+        }
+
+    } catch(error) {
+        console.error('更新重要角色表相关世界书条目失败:', error);
+    }
+}
+
+/**
+ * 更新故事主线表世界书条目 - 参考参考文档实现
+ */
+async function updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLorebookName) {
+    if (!TavernHelper_API) return;
+    if (!primaryLorebookName) {
+        console.warn('无法更新故事主线表条目: 未设置注入目标世界书');
+        return;
+    }
+
+    const OUTLINE_COMMENT = 'TavernDB-ACU-OutlineTable';
+
+    try {
+        const allEntries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
+        const existingEntry = allEntries.find(e => e.comment === OUTLINE_COMMENT);
+
+        // 如果没有故事主线表数据，删除条目（如果存在）
+        if (!outlineTable || outlineTable.content.length < 2) {
+            if (existingEntry) {
+                await TavernHelper_API.deleteLorebookEntries(primaryLorebookName, [existingEntry.uid]);
+                console.log('已删除故事主线表条目（无数据）');
+            }
+            return;
+        }
+
+        // 格式化整个表格（使用相同的自定义格式）
+        let content = `[0:${outlineTable.name}]\n`;
+        const headers = outlineTable.content[0] ? outlineTable.content[0].slice(1) : [];
+        if (headers.length > 0) {
+            const headerInfo = headers.map((h, i) => `[${i}:${h}]`).join('|');
+            content += `Columns: ${headerInfo}\n`;
+        }
+        const rows = outlineTable.content.slice(1);
+        rows.forEach((row, rowIndex) => {
+            const rowData = row.slice(1);
+            content += `[${rowIndex}] ${rowData.join('|')}\n`;
+        });
+
+        const finalContent = `<main_storyline>\n\n${content.trim()}\n\n</main_storyline>`;
+
+        if (existingEntry) {
+            if (existingEntry.content !== finalContent) {
+                const updatedEntry = { 
+                    uid: existingEntry.uid, 
+                    content: finalContent, 
+                    enabled: true, 
+                    type: 'constant', 
+                    prevent_recursion: true 
+                };
+                await TavernHelper_API.setLorebookEntries(primaryLorebookName, [updatedEntry]);
+                console.log('成功更新故事主线表世界书条目');
+            }
+        } else {
+            const newEntry = {
+                comment: OUTLINE_COMMENT,
+                content: finalContent,
+                enabled: true,
+                type: 'constant',
+                order: 100, // 高优先级
+                prevent_recursion: true,
+            };
+            await TavernHelper_API.createLorebookEntries(primaryLorebookName, [newEntry]);
+            console.log('故事主线表世界书条目不存在，已创建新条目');
+        }
+    } catch(error) {
+        console.error('更新故事主线表世界书条目失败:', error);
+    }
 }
 
 /**
@@ -4723,6 +5107,196 @@ async function loadExtensionSettingsUI() {
     }
 }
 
+// 全局变量：防抖定时器和自动更新状态
+let newMessageDebounceTimer = null;
+let isAutoUpdating = false;
+const NEW_MESSAGE_DEBOUNCE_DELAY = 2000; // 2秒防抖延迟
+
+/**
+ * 处理新消息事件（防抖） - 参考参考文档实现
+ */
+async function handleNewMessageDebounced(eventType = 'unknown') {
+    console.log(`新消息事件 (${eventType}) 检测到，防抖延迟 ${NEW_MESSAGE_DEBOUNCE_DELAY}ms...`);
+    clearTimeout(newMessageDebounceTimer);
+    newMessageDebounceTimer = setTimeout(async () => {
+        console.log('防抖后的新消息处理触发');
+        if (isAutoUpdating) {
+            console.log('自动更新已在进行中，跳过');
+            return;
+        }
+        
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) {
+            console.log('无法获取聊天上下文，跳过');
+            return;
+        }
+        
+        await triggerAutomaticUpdateIfNeeded();
+    }, NEW_MESSAGE_DEBOUNCE_DELAY);
+}
+
+/**
+ * 触发自动更新检查 - 参考参考文档实现
+ */
+async function triggerAutomaticUpdateIfNeeded() {
+    console.log('自动更新触发器: 开始检查...');
+    
+    if (!currentSettings.autoUpdateEnabled) {
+        console.log('自动更新触发器: 自动更新已禁用');
+        return;
+    }
+    
+    const context = SillyTavern.getContext();
+    if (!context || !context.chat) {
+        console.log('自动更新触发器: 无法获取聊天上下文');
+        return;
+    }
+    
+    // 检查API是否已配置
+    const apiIsConfigured = (currentSettings.apiMode === 'custom' && 
+        (currentSettings.apiConfig?.useMainApi || 
+         (currentSettings.apiConfig?.url && currentSettings.apiConfig?.model))) || 
+        (currentSettings.apiMode === 'tavern' && currentSettings.tavernProfile);
+    
+    if (isAutoUpdating || !apiIsConfigured || !currentJsonTableData) {
+        console.log('自动更新触发器: 预检查失败', {
+            isUpdating: isAutoUpdating,
+            apiConfigured: apiIsConfigured,
+            dbLoaded: !!currentJsonTableData
+        });
+        return;
+    }
+    
+    const liveChat = context.chat;
+    if (!liveChat || liveChat.length < 2) {
+        console.log('自动更新触发器: 聊天历史太短（< 2条消息）');
+        return;
+    }
+    
+    const lastLiveMessage = liveChat[liveChat.length - 1];
+    
+    // 仅在AI有新回复时触发
+    if (lastLiveMessage.is_user) {
+        console.log('自动更新触发器: 最后一条消息是用户消息，跳过');
+        return;
+    }
+    
+    // 如果最新的AI消息已经包含数据，则跳过
+    if (lastLiveMessage.TavernDB_ACU_Data) {
+        console.log('自动更新触发器: 最新的AI消息已包含数据库数据，跳过');
+        return;
+    }
+    
+    // 计算尚未记录层数：最新消息层数 - 最近的有数据绑定的层数
+    let unrecordedMessages = 0;
+    const totalMessages = liveChat.length - 1; // 排除楼层0，总楼层数
+    let lastRecordedFloor = 0; // 最近的有数据绑定的楼层号
+    
+    // 从最新楼层开始往前找，找到最近的有数据绑定的楼层
+    for (let i = liveChat.length - 1; i > 0; i--) { // 从最新楼层开始，排除楼层0
+        const message = liveChat[i];
+        if (message.TavernDB_ACU_Data) {
+            lastRecordedFloor = i; // 楼层号（数组索引）
+            break;
+        }
+    }
+    
+    // 尚未记录层数 = 总楼层数 - 最近有数据绑定的楼层号
+    unrecordedMessages = totalMessages - lastRecordedFloor;
+    
+    const skipLatestN = currentSettings.autoUpdateFrequency ?? 0; // 最新N层不更新
+    const updateBatchSize = currentSettings.updateBatchSize || 1; // 每次更新楼层数
+    const requiredUnrecorded = skipLatestN + updateBatchSize; // 需要的未记录层数
+    
+    console.log('自动更新触发器: 参数检查', {
+        skipLatestN,
+        updateBatchSize,
+        requiredUnrecorded,
+        unrecordedMessages
+    });
+    
+    if (unrecordedMessages < requiredUnrecorded) {
+        console.log(`自动更新触发器: 尚未记录层数 (${unrecordedMessages}) 未达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。跳过。`);
+        return;
+    }
+    
+    // 当未记录层数达到或超过所需层数时触发更新
+    console.log(`自动更新触发器: 尚未记录层数 (${unrecordedMessages}) 达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。开始更新。`);
+    showToast(`触发自动更新：未记录层数 ${unrecordedMessages} >= 触发条件 ${requiredUnrecorded}`, 'info');
+    
+    // 新的处理逻辑：只处理需要更新的楼层
+    // 跳过最新N层，只处理接下来的updateBatchSize层
+    // 参考参考文档：特殊处理：当起始楼层为1时，包含0层
+    const actualMessages = liveChat.filter((_, index) => index > 0);
+    const totalActualMessages = actualMessages.length;
+    let startIndex = Math.max(0, totalActualMessages - skipLatestN - updateBatchSize);
+    let endIndex = startIndex + updateBatchSize;
+    
+    // 特殊处理：当起始楼层为1时，包含0层
+    if (startIndex === 0) {
+        startIndex = -1; // 从-1开始，这样i+1会得到0
+        endIndex = endIndex - 1; // 调整endIndex以保持批次大小不变
+    }
+    
+    const indicesToActuallyUpdate = [];
+    for (let i = startIndex; i < endIndex; i++) {
+        if (i < totalActualMessages) {
+            // 转换为原始索引（加上1，因为排除了楼层0）
+            // 特殊处理：当startIndex为-1时，包含楼层0
+            const floorIndex = i + 1;
+            if (floorIndex >= 0) { // 确保楼层索引有效
+                indicesToActuallyUpdate.push(floorIndex);
+            }
+        }
+    }
+    
+    if (indicesToActuallyUpdate.length === 0) {
+        console.log('自动更新触发器: 没有需要更新的楼层');
+        return;
+    }
+    
+    // 计算实际楼层范围（用于显示和调用）
+    const floorStart = indicesToActuallyUpdate[0];
+    const floorEnd = indicesToActuallyUpdate[indicesToActuallyUpdate.length - 1];
+    
+    console.log(`自动更新触发器: 将处理楼层 ${floorStart} 到 ${floorEnd}，共 ${indicesToActuallyUpdate.length} 层`);
+    console.log('自动更新触发器: 楼层计算详情', {
+        totalActualMessages,
+        skipLatestN,
+        updateBatchSize,
+        startIndex: startIndex + 1, // 转换为1-based楼层号
+        endIndex: endIndex, // 转换为1-based楼层号
+        actualIndices: indicesToActuallyUpdate // 已经是1-based楼层号
+    });
+    
+    if (indicesToActuallyUpdate.length > 1) {
+        showToast(`检测到 ${indicesToActuallyUpdate.length} 条未更新记录，将开始批量处理。`, 'info');
+    } else {
+        showToast(`检测到新消息，将触发数据库增量更新。`, 'info');
+    }
+    
+    console.log('自动更新触发器: 开始执行更新，处理楼层:', indicesToActuallyUpdate);
+    isAutoUpdating = true;
+    try {
+        // 使用 updateDatabaseByFloorRange 进行更新
+        const success = await updateDatabaseByFloorRange(floorStart, floorEnd);
+        console.log('自动更新触发器: 更新完成，结果:', success);
+        
+        if (success) {
+            console.log('自动更新过程成功完成');
+            showToast('自动更新完成', 'success');
+        } else {
+            console.log('自动更新过程失败');
+            showToast('自动更新失败', 'error');
+        }
+    } catch (error) {
+        console.error('自动更新过程出错:', error);
+        showToast(`自动更新出错: ${error.message}`, 'error');
+    } finally {
+        isAutoUpdating = false;
+    }
+}
+
 // 初始化扩展
 function initializeExtension() {
     // 加载扩展设置
@@ -4734,6 +5308,33 @@ function initializeExtension() {
     } else {
         // 即使未启用，也更新UI以确保按钮隐藏
         updateExtensionUI();
+    }
+    
+    // 参考参考文档：注册事件监听器
+    const context = SillyTavern.getContext();
+    if (context && context.eventSource && context.eventTypes) {
+        // 监听生成结束事件
+        if (context.eventTypes.GENERATION_ENDED) {
+            context.eventSource.on(context.eventTypes.GENERATION_ENDED, (message_id) => {
+                console.log(`生成结束事件，message_id: ${message_id}`);
+                handleNewMessageDebounced('GENERATION_ENDED');
+            });
+        }
+        
+        // 监听聊天变更事件
+        if (context.eventTypes.CHAT_CHANGED) {
+            context.eventSource.on(context.eventTypes.CHAT_CHANGED, async (chatFileName) => {
+                console.log(`聊天变更事件: ${chatFileName}`);
+                // 重置状态
+                currentJsonTableData = null;
+                isAutoUpdating = false;
+                clearTimeout(newMessageDebounceTimer);
+            });
+        }
+        
+        console.log('事件监听器已注册');
+    } else {
+        console.warn('无法注册事件监听器：eventSource 或 eventTypes 不可用');
     }
 }
 
