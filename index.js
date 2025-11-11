@@ -2420,6 +2420,8 @@ function showDataOverview() {
                         const contentDiv = detailsArea.querySelector('.details-content');
                         if (contentDiv) {
                             contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
+                            // 重新绑定详情区域的事件（重要：确保事件可以正常工作）
+                            bindDetailsEventsForMessage(detailsArea, messageIndex);
                         }
                     }
                 }
@@ -2443,41 +2445,47 @@ function bindDetailsEventsForMessage(detailsArea, messageIndex) {
     
     // 防止重复绑定：如果已经绑定过，先移除
     if (detailsArea._detailsClickHandler) {
-        detailsArea.removeEventListener('click', detailsArea._detailsClickHandler);
+        detailsArea.removeEventListener('click', detailsArea._detailsClickHandler, true);
         detailsArea._detailsClickHandler = null;
     }
     
     // 参考参考文档：使用事件委托，避免重复绑定
+    // 使用事件委托，绑定到 detailsArea 容器上，这样即使内容被 innerHTML 替换，事件仍然有效
     const clickHandler = function(e) {
-        // 保存行按钮
-        if (e.target.classList.contains('save-row-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleSaveRow(e);
-            return;
-        }
+        // 检查点击的目标是否是按钮（包括按钮内的文本节点）
+        let target = e.target;
         
-        // 删除行按钮
-        if (e.target.classList.contains('delete-row-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleDeleteRow(e);
-            return;
-        }
-        
-        // 删除表格按钮
-        if (e.target.classList.contains('delete-table-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleDeleteTable(e);
-            return;
+        // 如果点击的是文本节点，向上查找按钮元素
+        while (target && target !== detailsArea) {
+            if (target.classList && target.classList.contains('save-row-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSaveRow(e);
+                return;
+            }
+            
+            if (target.classList && target.classList.contains('delete-row-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDeleteRow(e);
+                return;
+            }
+            
+            if (target.classList && target.classList.contains('delete-table-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDeleteTable(e);
+                return;
+            }
+            
+            target = target.parentElement;
         }
     };
     
     // 保存引用以便后续移除
     detailsArea._detailsClickHandler = clickHandler;
-    // 添加新的事件监听器
-    detailsArea.addEventListener('click', clickHandler);
+    // 添加新的事件监听器（使用捕获阶段，确保事件能够被捕获）
+    detailsArea.addEventListener('click', clickHandler, true);
     
     // 设置 textarea 固定高度
     const textareas = detailsArea.querySelectorAll('.cell-input');
@@ -2504,24 +2512,30 @@ function bindOverviewEvents(parentDoc) {
     
     // 创建新的事件处理器
     const clickHandler = function(e) {
-        // 展开/收起详情按钮
-        if (e.target.classList.contains('toggle-details-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleToggleDetails(e);
-            return;
-        }
+        // 检查点击的目标是否是按钮（包括按钮内的文本节点）
+        let target = e.target;
         
-        // 删除消息按钮
-        if (e.target.classList.contains('delete-message-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleDeleteMessage(e);
-            return;
+        // 如果点击的是文本节点，向上查找按钮元素
+        while (target && target !== overviewArea) {
+            if (target.classList && target.classList.contains('toggle-details-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleToggleDetails(e);
+                return;
+            }
+            
+            if (target.classList && target.classList.contains('delete-message-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDeleteMessage(e);
+                return;
+            }
+            
+            // 注意：保存行、删除行、删除表格按钮的事件由 bindDetailsEventsForMessage 处理
+            // 这里不再处理，避免事件冲突
+            
+            target = target.parentElement;
         }
-        
-        // 注意：保存行、删除行、删除表格按钮的事件由 bindDetailsEventsForMessage 处理
-        // 这里不再处理，避免事件冲突
     };
     
     // 保存引用以便后续移除
@@ -2538,7 +2552,19 @@ function handleToggleDetails(e) {
     e.stopPropagation();
     
     try {
-        const messageIndexStr = e.target.getAttribute('data-message-index');
+        // 获取按钮元素（可能点击的是按钮内的文本节点）
+        let button = e.target;
+        while (button && (!button.classList || !button.classList.contains('toggle-details-btn'))) {
+            button = button.parentElement;
+        }
+        
+        if (!button) {
+            console.error('无法找到展开/收起按钮元素');
+            showToast('无法找到展开/收起按钮', 'error');
+            return;
+        }
+        
+        const messageIndexStr = button.getAttribute('data-message-index');
         if (!messageIndexStr) {
             console.error('无法获取消息索引');
             showToast('无法获取消息索引', 'error');
@@ -2656,9 +2682,21 @@ async function handleSaveRow(e) {
     e.preventDefault();
     e.stopPropagation();
     
-    const sheetKey = e.target.getAttribute('data-sheet-key');
-    const rowIndex = parseInt(e.target.getAttribute('data-row-index'));
-    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    // 获取按钮元素（可能点击的是按钮内的文本节点）
+    let button = e.target;
+    while (button && (!button.classList || !button.classList.contains('save-row-btn'))) {
+        button = button.parentElement;
+    }
+    
+    if (!button) {
+        console.error('无法找到保存按钮元素');
+        showToast('无法找到保存按钮', 'error');
+        return;
+    }
+    
+    const sheetKey = button.getAttribute('data-sheet-key');
+    const rowIndex = parseInt(button.getAttribute('data-row-index'));
+    const messageIndex = parseInt(button.getAttribute('data-message-index'));
     
     try {
         const context = SillyTavern.getContext();
@@ -2803,9 +2841,21 @@ async function handleDeleteRow(e) {
     e.preventDefault();
     e.stopPropagation();
     
-    const sheetKey = e.target.getAttribute('data-sheet-key');
-    const rowIndex = parseInt(e.target.getAttribute('data-row-index'));
-    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    // 获取按钮元素（可能点击的是按钮内的文本节点）
+    let button = e.target;
+    while (button && (!button.classList || !button.classList.contains('delete-row-btn'))) {
+        button = button.parentElement;
+    }
+    
+    if (!button) {
+        console.error('无法找到删除按钮元素');
+        showToast('无法找到删除按钮', 'error');
+        return;
+    }
+    
+    const sheetKey = button.getAttribute('data-sheet-key');
+    const rowIndex = parseInt(button.getAttribute('data-row-index'));
+    const messageIndex = parseInt(button.getAttribute('data-message-index'));
     
     try {
         // 1. 从指定的消息获取源数据
@@ -2932,8 +2982,20 @@ async function handleDeleteTable(e) {
     e.preventDefault();
     e.stopPropagation();
     
-    const sheetKey = e.target.getAttribute('data-sheet-key');
-    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    // 获取按钮元素（可能点击的是按钮内的文本节点）
+    let button = e.target;
+    while (button && (!button.classList || !button.classList.contains('delete-table-btn'))) {
+        button = button.parentElement;
+    }
+    
+    if (!button) {
+        console.error('无法找到删除表格按钮元素');
+        showToast('无法找到删除表格按钮', 'error');
+        return;
+    }
+    
+    const sheetKey = button.getAttribute('data-sheet-key');
+    const messageIndex = parseInt(button.getAttribute('data-message-index'));
     
     try {
         const context = SillyTavern.getContext();
@@ -3080,7 +3142,19 @@ async function handleDeleteMessage(e) {
     e.preventDefault();
     e.stopPropagation();
     
-    const messageIndex = parseInt(e.target.getAttribute('data-message-index'));
+    // 获取按钮元素（可能点击的是按钮内的文本节点）
+    let button = e.target;
+    while (button && (!button.classList || !button.classList.contains('delete-message-btn'))) {
+        button = button.parentElement;
+    }
+    
+    if (!button) {
+        console.error('无法找到删除消息按钮元素');
+        showToast('无法找到删除消息按钮', 'error');
+        return;
+    }
+    
+    const messageIndex = parseInt(button.getAttribute('data-message-index'));
     
     if (!confirm(`确定要删除楼层 ${messageIndex} 的数据库记录吗？此操作不可恢复。`)) {
         return;
@@ -3205,7 +3279,7 @@ function loadMessageDetails(messageIndex, messageData) {
                 margin-bottom: 20px; 
                 border: 1px solid var(--ios-border); 
                 border-radius: 12px; 
-                padding: 16px; 
+                padding: 0px; 
                 background: var(--ios-surface);
                 box-shadow: 0 2px 8px var(--ios-shadow);
             ">`;
