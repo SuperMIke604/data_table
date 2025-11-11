@@ -2320,6 +2320,7 @@ function showDataOverview() {
                     html += `<h4 style="margin: 0; color: var(--ios-text);">楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
                     html += `<span style="font-size: 12px; color: var(--ios-text-secondary);">${escapeHtml(timestamp)}</span>`;
                     html += `</div>`;
+                html += `</div>`; // 行项目容器结束
                     
                     // 显示数据统计
                     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
@@ -3353,6 +3354,15 @@ function loadMessageDetails(messageIndex, messageData) {
                 const rowData = row.slice(1);
                 // 将所有字段值用 | 分隔符合并为一个字符串
                 const combinedValue = rowData.map(cell => cell || '').join(' | ');
+                
+                // 行项目容器
+                html += `<div data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
+                    background: var(--ios-surface);
+                    border: 1px solid var(--ios-border);
+                    border-radius: 12px;
+                    padding: 16px;
+                    box-shadow: 0 2px 8px var(--ios-shadow);
+                ">`;
                 
                 // 输入框区域 - 参考主视觉配色
                 html += `<div class="entry-input-container" style="
