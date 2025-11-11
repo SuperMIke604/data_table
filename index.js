@@ -3263,7 +3263,7 @@ async function handleDeleteMessage(e) {
  * 加载消息详情内容
  */
 function loadMessageDetails(messageIndex, messageData) {
-    let html = '<div class="expanded-details-content" style="padding: 15px;">';
+    let html = '<div class="expanded-details-content" style="padding: 15px 0;">';
     
     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
     
@@ -3277,9 +3277,11 @@ function loadMessageDetails(messageIndex, messageData) {
             // 表格容器 - iOS风格卡片设计
             html += `<div class="table-section" data-sheet-key="${sheetKey}" style="
                 margin-bottom: 20px; 
+                margin-left: 15px;
+                margin-right: 15px;
                 border: 1px solid var(--ios-border); 
                 border-radius: 12px; 
-                padding: 0px; 
+                padding: 16px; 
                 background: var(--ios-surface);
                 box-shadow: 0 2px 8px var(--ios-shadow);
             ">`;
