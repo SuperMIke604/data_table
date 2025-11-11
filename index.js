@@ -3277,8 +3277,6 @@ function loadMessageDetails(messageIndex, messageData) {
             // 表格容器 - iOS风格卡片设计
             html += `<div class="table-section" data-sheet-key="${sheetKey}" style="
                 margin-bottom: 20px; 
-                margin-left: 15px;
-                margin-right: 15px;
                 border: 1px solid var(--ios-border); 
                 border-radius: 12px; 
                 padding: 16px; 
