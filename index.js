@@ -2347,9 +2347,9 @@ function showDataOverview() {
                     html += `<div class="message-details" data-message-index="${i}" style="
                         display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
                         border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
-                        border-radius: 6px; padding: 15px; margin-bottom: 15px;
+                        border-radius: 6px; padding: 0; margin-bottom: 15px;
                     ">`;
-                    html += `<div class="details-content" style="padding: 15px;">`;
+                    html += `<div class="details-content" style="padding: 0;">`;
                     if (isExpanded) {
                         html += loadMessageDetails(i, messageData);
                     } else {
@@ -3125,6 +3125,58 @@ async function handleDeleteMessage(e) {
             context.saveChatDebounced();
         } else {
             console.warn('无法保存聊天记录：saveChat方法不可用');
+        }
+        
+        // 删除消息后，需要重新生成上一楼层的重要角色表世界书条目
+        // 查找最新的包含数据库数据的消息
+        let latestDataMessage = null;
+        let latestDataIndex = -1;
+        for (let i = messageIndex - 1; i >= 0; i--) {
+            const msg = context.chat[i];
+            if (msg && msg.TavernDB_ACU_Data) {
+                latestDataMessage = msg;
+                latestDataIndex = i;
+                break;
+            }
+        }
+        
+        // 如果找到了上一楼层的数据，更新世界书条目
+        if (latestDataMessage && latestDataMessage.TavernDB_ACU_Data) {
+            try {
+                // 更新全局数据
+                currentJsonTableData = JSON.parse(JSON.stringify(latestDataMessage.TavernDB_ACU_Data));
+                
+                // 获取注入目标世界书
+                const primaryLorebookName = await getInjectionTargetLorebook();
+                if (primaryLorebookName) {
+                    const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
+                    let TavernHelper_API = null;
+                    if (typeof TavernHelper !== 'undefined') {
+                        TavernHelper_API = TavernHelper;
+                    } else if (parentWin && parentWin.TavernHelper) {
+                        TavernHelper_API = parentWin.TavernHelper;
+                    }
+                    
+                    if (TavernHelper_API) {
+                        // 查找重要角色表
+                        const tableKeys = Object.keys(latestDataMessage.TavernDB_ACU_Data).filter(k => k.startsWith('sheet_'));
+                        for (const sheetKey of tableKeys) {
+                            const table = latestDataMessage.TavernDB_ACU_Data[sheetKey];
+                            if (table && table.name && table.name.trim() === '重要角色表') {
+                                await updateImportantPersonsRelatedEntries(table, TavernHelper_API, primaryLorebookName);
+                                console.log('已重新生成上一楼层的重要角色表世界书条目');
+                                break;
+                            }
+                        }
+                        
+                        // 同时更新其他世界书条目（总结表、故事主线表、可读数据表）
+                        await updateReadableLorebookEntry(false);
+                    }
+                }
+            } catch (error) {
+                console.error('重新生成世界书条目失败:', error);
+                // 不阻止删除流程，只记录错误
+            }
         }
         
         // 刷新概览
