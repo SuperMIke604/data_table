@@ -2320,7 +2320,6 @@ function showDataOverview() {
                     html += `<h4 style="margin: 0; color: var(--ios-text);">楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
                     html += `<span style="font-size: 12px; color: var(--ios-text-secondary);">${escapeHtml(timestamp)}</span>`;
                     html += `</div>`;
-                html += `</div>`; // 行项目容器结束
                     
                     // 显示数据统计
                     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
@@ -3355,13 +3354,10 @@ function loadMessageDetails(messageIndex, messageData) {
                 // 将所有字段值用 | 分隔符合并为一个字符串
                 const combinedValue = rowData.map(cell => cell || '').join(' | ');
                 
-                // 行项目容器
-                html += `<div data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
-                    background: var(--ios-surface);
-                    border: 1px solid var(--ios-border);
-                    border-radius: 12px;
-                    padding: 16px;
-                    box-shadow: 0 2px 8px var(--ios-shadow);
+                // 每个条目为一个卡片
+                html += `<div class="entry-card" data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
+                    background: transparent;
+                    padding: 0;
                 ">`;
                 
                 // 输入框区域 - 参考主视觉配色
@@ -3436,6 +3432,8 @@ function loadMessageDetails(messageIndex, messageData) {
                 " onmouseover="this.style.background='#c82333'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)';" 
                    onmouseout="this.style.background='#dc3545'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
                 >删除</button>`;
+                html += `</div>`;
+                
                 html += `</div>`;
             });
             
