@@ -2444,11 +2444,13 @@ function showDataOverview() {
 function bindDetailsEventsForMessage(detailsArea, messageIndex) {
     if (!detailsArea) return;
     
-    // 参考参考文档：使用事件委托，避免重复绑定
-    // 注意：不要克隆节点，因为这会破坏已有的 DOM 引用
-    // 使用命名空间事件来避免重复绑定
+    // 防止重复绑定：如果已经绑定过，先移除
+    if (detailsArea._detailsClickHandler) {
+        detailsArea.removeEventListener('click', detailsArea._detailsClickHandler);
+        detailsArea._detailsClickHandler = null;
+    }
     
-    // 移除之前的事件绑定（使用命名空间）
+    // 参考参考文档：使用事件委托，避免重复绑定
     const clickHandler = function(e) {
         // 保存行按钮
         if (e.target.classList.contains('save-row-btn')) {
@@ -2475,8 +2477,6 @@ function bindDetailsEventsForMessage(detailsArea, messageIndex) {
         }
     };
     
-    // 移除旧的事件监听器（如果存在）
-    detailsArea.removeEventListener('click', detailsArea._detailsClickHandler);
     // 保存引用以便后续移除
     detailsArea._detailsClickHandler = clickHandler;
     // 添加新的事件监听器
@@ -2498,12 +2498,15 @@ function bindOverviewEvents(parentDoc) {
     if (!overviewArea) return;
     
     // 参考参考文档：使用事件委托，避免重复绑定
-    // 移除之前的事件监听器（通过克隆节点的方式）
-    const newOverviewArea = overviewArea.cloneNode(true);
-    overviewArea.parentNode.replaceChild(newOverviewArea, overviewArea);
+    // 使用命名空间事件来避免重复绑定，不要克隆节点（会破坏 DOM 引用）
     
-    // 使用事件委托绑定所有事件
-    newOverviewArea.addEventListener('click', function(e) {
+    // 移除旧的事件监听器（如果存在）
+    if (overviewArea._overviewClickHandler) {
+        overviewArea.removeEventListener('click', overviewArea._overviewClickHandler);
+    }
+    
+    // 创建新的事件处理器
+    const clickHandler = function(e) {
         // 展开/收起详情按钮
         if (e.target.classList.contains('toggle-details-btn')) {
             e.preventDefault();
@@ -2520,67 +2523,14 @@ function bindOverviewEvents(parentDoc) {
             return;
         }
         
-        // 保存行按钮
-        if (e.target.classList.contains('save-row-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleSaveRow(e);
-            return;
-        }
-        
-        // 删除行按钮
-        if (e.target.classList.contains('delete-row-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleDeleteRow(e);
-            return;
-        }
-        
-        // 删除表格按钮
-        if (e.target.classList.contains('delete-table-btn')) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleDeleteTable(e);
-            return;
-        }
-    });
-    
-    // 自适应高度函数 - 为所有现有的和未来添加的 textarea 绑定
-    const initTextareaHeight = (textarea) => {
-        // 移除之前的事件监听器
-        const newTextarea = textarea.cloneNode(true);
-        textarea.parentNode.replaceChild(newTextarea, textarea);
-        
-        // 设置固定高度为120px（3倍）
-        newTextarea.style.height = '120px';
-        newTextarea.style.minHeight = '120px';
+        // 注意：保存行、删除行、删除表格按钮的事件由 bindDetailsEventsForMessage 处理
+        // 这里不再处理，避免事件冲突
     };
     
-    const textareas = newOverviewArea.querySelectorAll('.cell-input');
-    textareas.forEach(initTextareaHeight);
-    
-    // 使用 MutationObserver 监听新添加的 textarea
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            mutation.addedNodes.forEach(function(node) {
-                if (node.nodeType === 1) { // Element node
-                    if (node.classList && node.classList.contains('cell-input')) {
-                        initTextareaHeight(node);
-                    }
-                    // 检查子节点
-                    const childTextareas = node.querySelectorAll && node.querySelectorAll('.cell-input');
-                    if (childTextareas) {
-                        childTextareas.forEach(initTextareaHeight);
-                    }
-                }
-            });
-        });
-    });
-    
-    observer.observe(newOverviewArea, {
-        childList: true,
-        subtree: true
-    });
+    // 保存引用以便后续移除
+    overviewArea._overviewClickHandler = clickHandler;
+    // 添加新的事件监听器
+    overviewArea.addEventListener('click', clickHandler);
 }
 
 /**
@@ -2671,15 +2621,18 @@ function handleToggleDetails(e) {
             return;
         }
         
-        if (detailsArea.style.display === 'none' || !detailsArea.style.display) {
+        const isCurrentlyVisible = detailsArea.style.display !== 'none' && detailsArea.style.display !== '';
+        
+        if (!isCurrentlyVisible) {
             // 展开详情
             const contentDiv = detailsArea.querySelector('.details-content');
             if (contentDiv) {
+                // 先设置显示，避免在加载内容时触发其他事件
+                detailsArea.style.display = 'block';
                 contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
                 // 重新绑定详情区域的事件（参考参考文档的 bindDetailsEvents_ACU）
                 bindDetailsEventsForMessage(detailsArea, messageIndex);
             }
-            detailsArea.style.display = 'block';
             toggleBtn.textContent = '收起详情';
             if (!window.dataManageExpandedDetails) {
                 window.dataManageExpandedDetails = new Set();
