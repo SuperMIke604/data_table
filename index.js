@@ -2724,10 +2724,19 @@ async function handleSaveRow(e) {
         if (!overviewArea) return;
         
         const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
-        if (!detailsArea) return;
+        if (!detailsArea) {
+            showToast('无法找到详情区域', 'error');
+            return;
+        }
         
-        // 获取该行的单个输入框（包含整行数据）
-        const rowInput = detailsArea.querySelector(`tr[data-row-index="${rowIndex}"][data-sheet-key="${sheetKey}"] .cell-input`);
+        // 获取该行的单个输入框（包含整行数据）- 修复：使用entry-card选择器
+        const entryCard = detailsArea.querySelector(`.entry-card[data-row-index="${rowIndex}"][data-sheet-key="${sheetKey}"]`);
+        if (!entryCard) {
+            showToast('无法找到条目卡片', 'error');
+            return;
+        }
+        
+        const rowInput = entryCard.querySelector('.cell-input');
         if (!rowInput) {
             showToast('无法找到输入框', 'error');
             return;
@@ -3263,7 +3272,7 @@ async function handleDeleteMessage(e) {
  * 加载消息详情内容
  */
 function loadMessageDetails(messageIndex, messageData) {
-    let html = '<div class="expanded-details-content" style="padding: 0;">';
+    let html = '<div class="expanded-details-content" style="padding: 0; background: transparent;">';
     
     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
     
@@ -3274,7 +3283,7 @@ function loadMessageDetails(messageIndex, messageData) {
             const table = messageData[sheetKey];
             if (!table || !table.name || !table.content) return;
             
-            // 表格容器 - iOS风格卡片设计
+            // 表格容器 - iOS风格卡片设计，参考主视觉
             html += `<div class="table-section" data-sheet-key="${sheetKey}" style="
                 margin-bottom: 20px; 
                 border: 1px solid var(--ios-border); 
@@ -3329,7 +3338,7 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `</div>`;
             }
             
-            // 条目列表容器 - 卡片式布局，参考主数据样式
+            // 条目列表容器 - 卡片式布局，参考主视觉
             html += `<div class="entries-list-container" style="
                 display: flex;
                 flex-direction: column;
@@ -3343,19 +3352,19 @@ function loadMessageDetails(messageIndex, messageData) {
                 // 将所有字段值用 | 分隔符合并为一个字符串
                 const combinedValue = rowData.map(cell => cell || '').join(' | ');
                 
-                // 每个条目为一个卡片
+                // 每个条目为一个卡片 - 参考主视觉配色
                 html += `<div class="entry-card" data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
-                    background: #1a1a1a;
-                    border: 1px solid #444;
-                    border-radius: 8px;
+                    background: var(--ios-surface);
+                    border: 1px solid var(--ios-border);
+                    border-radius: 12px;
                     padding: 16px;
                     transition: all 0.2s ease;
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                " onmouseover="this.style.borderColor='#666'; this.style.boxShadow='0 4px 8px rgba(0, 0, 0, 0.2)';" 
-                   onmouseout="this.style.borderColor='#444'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.1)';"
+                    box-shadow: 0 2px 8px var(--ios-shadow);
+                " onmouseover="this.style.borderColor='var(--ios-blue)'; this.style.boxShadow='0 4px 12px rgba(0, 122, 255, 0.15)';" 
+                   onmouseout="this.style.borderColor='var(--ios-border)'; this.style.boxShadow='0 2px 8px var(--ios-shadow)';"
                 >`;
                 
-                // 输入框区域
+                // 输入框区域 - 参考主视觉配色
                 html += `<div class="entry-input-container" style="
                     margin-bottom: 12px;
                 ">`;
@@ -3363,14 +3372,14 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
                 html += `data-message-index="${messageIndex}" `;
                 html += `style="
-                    background: #1a1a1a !important;
-                    color: #e0e0e0 !important;
-                    border: 1px solid #444 !important;
+                    background: var(--ios-gray) !important;
+                    color: var(--ios-text) !important;
+                    border: 1px solid var(--ios-border) !important;
                     width: 100% !important;
                     min-width: 100% !important;
-                    padding: 12px !important;
-                    border-radius: 6px !important;
-                    font-size: 13px !important;
+                    padding: 12px 16px !important;
+                    border-radius: 10px !important;
+                    font-size: 14px !important;
                     transition: all 0.2s ease !important;
                     resize: vertical !important;
                     min-height: 80px !important;
@@ -3383,14 +3392,14 @@ function loadMessageDetails(messageIndex, messageData) {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
                     display: block !important;
                     box-sizing: border-box !important;
-                " onfocus="this.style.borderColor='#007bff'; this.style.outline='none'; this.style.boxShadow='0 0 0 3px rgba(0, 123, 255, 0.2)'; this.style.background='#222';" 
-                   onblur="this.style.borderColor='#444'; this.style.boxShadow='none'; this.style.background='#1a1a1a';"
-                   onmouseover="if(document.activeElement !== this) this.style.borderColor='#555';"
-                   onmouseout="if(document.activeElement !== this) this.style.borderColor='#444';"
+                " onfocus="this.style.borderColor='var(--ios-blue)'; this.style.outline='none'; this.style.boxShadow='0 0 0 3px rgba(0, 122, 255, 0.1)'; this.style.background='var(--ios-surface)';" 
+                   onblur="this.style.borderColor='var(--ios-border)'; this.style.boxShadow='none'; this.style.background='var(--ios-gray)';"
+                   onmouseover="if(document.activeElement !== this) this.style.borderColor='var(--ios-blue-hover)';"
+                   onmouseout="if(document.activeElement !== this) this.style.borderColor='var(--ios-border)';"
                 >${escapeHtml(combinedValue)}</textarea>`;
                 html += `</div>`;
                 
-                // 操作按钮区域 - 水平排列
+                // 操作按钮区域 - 水平排列，参考主视觉
                 html += `<div class="entry-actions" style="
                     display: flex;
                     gap: 8px;
@@ -3402,7 +3411,7 @@ function loadMessageDetails(messageIndex, messageData) {
                     background: #28a745; 
                     color: white; 
                     border: none; 
-                    border-radius: 6px; 
+                    border-radius: 8px; 
                     cursor: pointer; 
                     padding: 8px 16px; 
                     font-size: 13px;
@@ -3417,7 +3426,7 @@ function loadMessageDetails(messageIndex, messageData) {
                     background: #dc3545; 
                     color: white; 
                     border: none; 
-                    border-radius: 6px; 
+                    border-radius: 8px; 
                     cursor: pointer; 
                     padding: 8px 16px; 
                     font-size: 13px;
@@ -5320,6 +5329,73 @@ let isAutoUpdating = false;
 const NEW_MESSAGE_DEBOUNCE_DELAY = 2000; // 2秒防抖延迟
 
 /**
+ * 从模板初始化数据库 - 参考参考文档实现
+ */
+async function initializeJsonTableFromTemplate() {
+    console.log('从模板初始化数据库...');
+    
+    try {
+        // 从设置中获取模板
+        const template = await loadDatabaseTemplate();
+        if (template) {
+            currentJsonTableData = JSON.parse(JSON.stringify(template));
+            console.log('从模板成功初始化数据库');
+            return true;
+        } else {
+            console.warn('无法加载数据库模板，使用空数据库');
+            currentJsonTableData = {};
+            return false;
+        }
+    } catch (error) {
+        console.error('从模板初始化数据库失败:', error);
+        currentJsonTableData = {};
+        return false;
+    }
+}
+
+/**
+ * 从聊天历史加载或创建数据库 - 参考参考文档实现
+ */
+async function loadOrCreateJsonTableFromChatHistory() {
+    currentJsonTableData = null; // 重置前先清空
+    console.log('尝试从聊天历史加载数据库...');
+    
+    const context = SillyTavern.getContext();
+    if (!context || !context.chat) {
+        console.log('无法获取聊天上下文');
+        return;
+    }
+    
+    const chat = context.chat;
+    if (!chat || chat.length === 0) {
+        console.log('聊天历史为空，初始化新数据库');
+        await initializeJsonTableFromTemplate();
+        return;
+    }
+    
+    // 从最新消息开始往前找，找到最后一条包含数据库数据的消息
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const message = chat[i];
+        if (!message.is_user && message.TavernDB_ACU_Data) {
+            console.log(`在消息索引 ${i} 找到数据库数据`);
+            try {
+                // 使用深拷贝来加载数据，防止对内存中数据的修改影响到历史记录
+                currentJsonTableData = JSON.parse(JSON.stringify(message.TavernDB_ACU_Data));
+                console.log('数据库内容已成功从聊天历史加载到内存');
+                return; // 找到数据后退出
+            } catch (error) {
+                console.error(`处理消息索引 ${i} 的数据库内容失败:`, error);
+                // 继续搜索或初始化
+            }
+        }
+    }
+    
+    // 如果到这里，说明聊天历史中没有找到数据库数据
+    console.log('聊天历史中未找到数据库，初始化新数据库');
+    await initializeJsonTableFromTemplate();
+}
+
+/**
  * 处理新消息事件（防抖） - 参考参考文档实现
  */
 async function handleNewMessageDebounced(eventType = 'unknown') {
@@ -5337,6 +5413,9 @@ async function handleNewMessageDebounced(eventType = 'unknown') {
             console.log('无法获取聊天上下文，跳过');
             return;
         }
+        
+        // 参考参考文档：在触发自动更新前，先加载数据库
+        await loadOrCreateJsonTableFromChatHistory();
         
         await triggerAutomaticUpdateIfNeeded();
     }, NEW_MESSAGE_DEBOUNCE_DELAY);
@@ -5365,7 +5444,17 @@ async function triggerAutomaticUpdateIfNeeded() {
          (currentSettings.apiConfig?.url && currentSettings.apiConfig?.model))) || 
         (currentSettings.apiMode === 'tavern' && currentSettings.tavernProfile);
     
-    if (isAutoUpdating || !apiIsConfigured || !currentJsonTableData) {
+    // 参考参考文档：如果数据库未加载，尝试加载
+    if (!currentJsonTableData) {
+        console.log('自动更新触发器: 数据库未加载，尝试加载...');
+        await loadOrCreateJsonTableFromChatHistory();
+        if (!currentJsonTableData) {
+            console.log('自动更新触发器: 数据库加载失败，跳过');
+            return;
+        }
+    }
+    
+    if (isAutoUpdating || !apiIsConfigured) {
         console.log('自动更新触发器: 预检查失败', {
             isUpdating: isAutoUpdating,
             apiConfigured: apiIsConfigured,
@@ -5553,6 +5642,8 @@ function initializeExtension() {
                 currentJsonTableData = null;
                 isAutoUpdating = false;
                 clearTimeout(newMessageDebounceTimer);
+                // 参考参考文档：重新加载数据库
+                await loadOrCreateJsonTableFromChatHistory();
             });
         }
         
@@ -5577,15 +5668,47 @@ if (typeof jQuery !== 'undefined') {
         
         // 初始化扩展
         initializeExtension();
+        
+        // 参考参考文档：初始化时加载数据库
+        setTimeout(async () => {
+            try {
+                await loadOrCreateJsonTableFromChatHistory();
+                console.log('初始化时数据库加载完成');
+            } catch (error) {
+                console.error('初始化时数据库加载失败:', error);
+            }
+        }, 1000);
     });
 } else {
     // 如果没有 jQuery，使用原生方式
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(initializeExtension, 500);
+            setTimeout(async () => {
+                initializeExtension();
+                // 参考参考文档：初始化时加载数据库
+                setTimeout(async () => {
+                    try {
+                        await loadOrCreateJsonTableFromChatHistory();
+                        console.log('初始化时数据库加载完成');
+                    } catch (error) {
+                        console.error('初始化时数据库加载失败:', error);
+                    }
+                }, 1000);
+            }, 500);
         });
     } else {
-        setTimeout(initializeExtension, 500);
+        setTimeout(async () => {
+            initializeExtension();
+            // 参考参考文档：初始化时加载数据库
+            setTimeout(async () => {
+                try {
+                    await loadOrCreateJsonTableFromChatHistory();
+                    console.log('初始化时数据库加载完成');
+                } catch (error) {
+                    console.error('初始化时数据库加载失败:', error);
+                }
+            }, 1000);
+        }, 500);
     }
 }
 
