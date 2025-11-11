@@ -2347,9 +2347,9 @@ function showDataOverview() {
                     html += `<div class="message-details" data-message-index="${i}" style="
                         display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
                         border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
-                        border-radius: 6px; padding: 0; margin-bottom: 15px;
+                        border-radius: 6px; padding: 15px; margin-bottom: 15px;
                     ">`;
-                    html += `<div class="details-content" style="padding: 0;">`;
+                    html += `<div class="details-content" style="padding: 15px;">`;
                     if (isExpanded) {
                         html += loadMessageDetails(i, messageData);
                     } else {
@@ -2908,9 +2908,13 @@ async function handleDeleteRow(e) {
         if (overviewArea) {
             const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
             if (detailsArea) {
+                // 参考参考文档：直接调用 loadMessageDetails_ACU 刷新
                 const contentDiv = detailsArea.querySelector('.details-content');
                 if (contentDiv) {
-                    contentDiv.innerHTML = loadMessageDetails(messageIndex, newJsonData);
+                    // 重新获取最新的数据（因为已经保存到聊天记录）
+                    const updatedMessage = context.chat[messageIndex];
+                    const updatedData = updatedMessage && updatedMessage.TavernDB_ACU_Data ? updatedMessage.TavernDB_ACU_Data : newJsonData;
+                    contentDiv.innerHTML = loadMessageDetails(messageIndex, updatedData);
                     // 重新绑定详情区域的事件（参考参考文档的 bindDetailsEvents_ACU）
                     bindDetailsEventsForMessage(detailsArea, messageIndex);
                 }
@@ -3038,8 +3042,33 @@ async function handleDeleteTable(e) {
             await updateReadableLorebookEntry(false);
         }
         
-        // 刷新概览
-        showDataOverview();
+        // 刷新显示 - 参考参考文档：刷新详情区域或整个概览
+        const parentDoc = (window.parent && window.parent !== window) 
+            ? window.parent.document 
+            : document;
+        const overviewArea = parentDoc.getElementById('data-manage-overview-area');
+        if (overviewArea) {
+            const detailsArea = overviewArea.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
+            if (detailsArea && detailsArea.style.display !== 'none') {
+                // 如果详情区域是展开的，刷新它
+                const contentDiv = detailsArea.querySelector('.details-content');
+                if (contentDiv) {
+                    // 重新获取最新的数据（因为已经保存到聊天记录）
+                    const updatedMessage = context.chat[messageIndex];
+                    const updatedData = updatedMessage && updatedMessage.TavernDB_ACU_Data ? updatedMessage.TavernDB_ACU_Data : newJsonData;
+                    contentDiv.innerHTML = loadMessageDetails(messageIndex, updatedData);
+                    // 重新绑定详情区域的事件
+                    bindDetailsEventsForMessage(detailsArea, messageIndex);
+                }
+            } else {
+                // 如果详情区域是收起的，刷新整个概览
+                showDataOverview();
+            }
+        } else {
+            // 如果找不到概览区域，刷新整个概览
+            showDataOverview();
+        }
+        
         showToast('表格已删除', 'success');
     } catch (error) {
         console.error('删除表格失败:', error);
@@ -3089,6 +3118,15 @@ async function handleDeleteMessage(e) {
             }
         }
         
+        // 保存聊天记录以持久化删除操作 - 参考参考文档
+        if (context.saveChat) {
+            await context.saveChat();
+        } else if (context.saveChatDebounced) {
+            context.saveChatDebounced();
+        } else {
+            console.warn('无法保存聊天记录：saveChat方法不可用');
+        }
+        
         // 刷新概览
         showDataOverview();
         showToast(`已删除楼层 ${messageIndex} 的数据库记录`, 'success');
@@ -3102,7 +3140,7 @@ async function handleDeleteMessage(e) {
  * 加载消息详情内容
  */
 function loadMessageDetails(messageIndex, messageData) {
-    let html = '<div class="expanded-details-content" style="padding: 0;">';
+    let html = '<div class="expanded-details-content" style="padding: 15px;">';
     
     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
     
