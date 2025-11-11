@@ -2343,7 +2343,7 @@ function showDataOverview() {
                     // 详情展开区域（在操作按钮之前）
                     html += `<div class="message-details" data-message-index="${i}" style="
                         display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
-                        border-top: 1px solid var(--ios-border); background: transparent; 
+                        background: transparent; 
                         border-radius: 6px; padding: 0; margin-bottom: 15px;
                     ">`;
                     html += `<div class="details-content" style="padding: 0;">`;
@@ -3338,13 +3338,7 @@ function loadMessageDetails(messageIndex, messageData) {
                 html += `</div>`;
             }
             
-            // 条目列表容器 - 卡片式布局，参考主视觉
-            html += `<div class="entries-list-container" style="
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-                margin-top: 12px;
-            ">`;
+            // 直接处理行数据，移除条目列表容器
             
             const rows = table.content.slice(1);
             rows.forEach((row, rowIndex) => {
@@ -3440,8 +3434,6 @@ function loadMessageDetails(messageIndex, messageData) {
                 
                 html += `</div>`;
             });
-            
-            html += `</div>`;
             
             html += `</div>`;
         });
