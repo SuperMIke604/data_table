@@ -2347,9 +2347,9 @@ function showDataOverview() {
                     html += `<div class="message-details" data-message-index="${i}" style="
                         display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
                         border-top: 1px solid var(--ios-border); background: var(--ios-gray-dark); 
-                        border-radius: 6px; padding: 15px; margin-bottom: 15px;
+                        border-radius: 6px; padding: 0; margin-bottom: 15px;
                     ">`;
-                    html += `<div class="details-content">`;
+                    html += `<div class="details-content" style="padding: 0;">`;
                     if (isExpanded) {
                         html += loadMessageDetails(i, messageData);
                     } else {
@@ -2439,54 +2439,147 @@ function showDataOverview() {
 }
 
 /**
- * 绑定概览事件
+ * 绑定单个消息详情区域的事件 - 参考参考文档的 bindDetailsEvents_ACU
+ */
+function bindDetailsEventsForMessage(detailsArea, messageIndex) {
+    if (!detailsArea) return;
+    
+    // 参考参考文档：使用事件委托，避免重复绑定
+    // 注意：不要克隆节点，因为这会破坏已有的 DOM 引用
+    // 使用命名空间事件来避免重复绑定
+    
+    // 移除之前的事件绑定（使用命名空间）
+    const clickHandler = function(e) {
+        // 保存行按钮
+        if (e.target.classList.contains('save-row-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSaveRow(e);
+            return;
+        }
+        
+        // 删除行按钮
+        if (e.target.classList.contains('delete-row-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDeleteRow(e);
+            return;
+        }
+        
+        // 删除表格按钮
+        if (e.target.classList.contains('delete-table-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDeleteTable(e);
+            return;
+        }
+    };
+    
+    // 移除旧的事件监听器（如果存在）
+    detailsArea.removeEventListener('click', detailsArea._detailsClickHandler);
+    // 保存引用以便后续移除
+    detailsArea._detailsClickHandler = clickHandler;
+    // 添加新的事件监听器
+    detailsArea.addEventListener('click', clickHandler);
+    
+    // 设置 textarea 固定高度
+    const textareas = detailsArea.querySelectorAll('.cell-input');
+    textareas.forEach(textarea => {
+        textarea.style.height = '120px';
+        textarea.style.minHeight = '120px';
+    });
+}
+
+/**
+ * 绑定概览事件 - 参考参考文档使用事件委托
  */
 function bindOverviewEvents(parentDoc) {
     const overviewArea = parentDoc.getElementById('data-manage-overview-area');
     if (!overviewArea) return;
     
-    // 移除之前的事件绑定
-    const toggleBtns = overviewArea.querySelectorAll('.toggle-details-btn');
-    const deleteBtns = overviewArea.querySelectorAll('.delete-message-btn');
-    const saveRowBtns = overviewArea.querySelectorAll('.save-row-btn');
-    const deleteRowBtns = overviewArea.querySelectorAll('.delete-row-btn');
-    const deleteTableBtns = overviewArea.querySelectorAll('.delete-table-btn');
+    // 参考参考文档：使用事件委托，避免重复绑定
+    // 移除之前的事件监听器（通过克隆节点的方式）
+    const newOverviewArea = overviewArea.cloneNode(true);
+    overviewArea.parentNode.replaceChild(newOverviewArea, overviewArea);
     
-    toggleBtns.forEach(btn => {
-        btn.removeEventListener('click', handleToggleDetails);
-        btn.addEventListener('click', handleToggleDetails);
+    // 使用事件委托绑定所有事件
+    newOverviewArea.addEventListener('click', function(e) {
+        // 展开/收起详情按钮
+        if (e.target.classList.contains('toggle-details-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleToggleDetails(e);
+            return;
+        }
+        
+        // 删除消息按钮
+        if (e.target.classList.contains('delete-message-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDeleteMessage(e);
+            return;
+        }
+        
+        // 保存行按钮
+        if (e.target.classList.contains('save-row-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSaveRow(e);
+            return;
+        }
+        
+        // 删除行按钮
+        if (e.target.classList.contains('delete-row-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDeleteRow(e);
+            return;
+        }
+        
+        // 删除表格按钮
+        if (e.target.classList.contains('delete-table-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDeleteTable(e);
+            return;
+        }
     });
     
-    deleteBtns.forEach(btn => {
-        btn.removeEventListener('click', handleDeleteMessage);
-        btn.addEventListener('click', handleDeleteMessage);
-    });
+    // 自适应高度函数 - 为所有现有的和未来添加的 textarea 绑定
+    const initTextareaHeight = (textarea) => {
+        // 移除之前的事件监听器
+        const newTextarea = textarea.cloneNode(true);
+        textarea.parentNode.replaceChild(newTextarea, textarea);
+        
+        // 设置固定高度为120px（3倍）
+        newTextarea.style.height = '120px';
+        newTextarea.style.minHeight = '120px';
+    };
     
-    saveRowBtns.forEach(btn => {
-        btn.removeEventListener('click', handleSaveRow);
-        btn.addEventListener('click', handleSaveRow);
-    });
+    const textareas = newOverviewArea.querySelectorAll('.cell-input');
+    textareas.forEach(initTextareaHeight);
     
-    deleteRowBtns.forEach(btn => {
-        btn.removeEventListener('click', handleDeleteRow);
-        btn.addEventListener('click', handleDeleteRow);
-    });
-    
-    deleteTableBtns.forEach(btn => {
-        btn.removeEventListener('click', handleDeleteTable);
-        btn.addEventListener('click', handleDeleteTable);
-    });
-    
-    // 自适应高度函数
-    const textareas = overviewArea.querySelectorAll('.cell-input');
-    textareas.forEach(textarea => {
-        textarea.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = Math.max(40, this.scrollHeight) + 'px';
+    // 使用 MutationObserver 监听新添加的 textarea
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (node.nodeType === 1) { // Element node
+                    if (node.classList && node.classList.contains('cell-input')) {
+                        initTextareaHeight(node);
+                    }
+                    // 检查子节点
+                    const childTextareas = node.querySelectorAll && node.querySelectorAll('.cell-input');
+                    if (childTextareas) {
+                        childTextareas.forEach(initTextareaHeight);
+                    }
+                }
+            });
         });
-        // 初始化高度
-        textarea.style.height = 'auto';
-        textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
+    });
+    
+    observer.observe(newOverviewArea, {
+        childList: true,
+        subtree: true
     });
 }
 
@@ -2583,8 +2676,8 @@ function handleToggleDetails(e) {
             const contentDiv = detailsArea.querySelector('.details-content');
             if (contentDiv) {
                 contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
-                // 重新绑定事件
-                bindOverviewEvents(parentDoc);
+                // 重新绑定详情区域的事件（参考参考文档的 bindDetailsEvents_ACU）
+                bindDetailsEventsForMessage(detailsArea, messageIndex);
             }
             detailsArea.style.display = 'block';
             toggleBtn.textContent = '收起详情';
@@ -2738,12 +2831,12 @@ async function handleSaveRow(e) {
             await updateReadableLorebookEntry(false);
         }
         
-        // 刷新当前详情区域
+        // 刷新当前详情区域 - 参考参考文档：直接调用 loadMessageDetails 并重新绑定事件
         const contentDiv = detailsArea.querySelector('.details-content');
         if (contentDiv) {
             contentDiv.innerHTML = loadMessageDetails(messageIndex, newJsonData);
-            // 重新绑定事件
-            bindOverviewEvents(parentDoc);
+            // 重新绑定详情区域的事件（参考参考文档的 bindDetailsEvents_ACU）
+            bindDetailsEventsForMessage(detailsArea, messageIndex);
         }
         
         showToast('数据已保存', 'success');
@@ -2854,7 +2947,7 @@ async function handleDeleteRow(e) {
             await updateReadableLorebookEntry(false);
         }
         
-        // 7. 刷新显示
+        // 7. 刷新显示 - 参考参考文档：直接调用 loadMessageDetails 并重新绑定事件
         const parentDoc = (window.parent && window.parent !== window) 
             ? window.parent.document 
             : document;
@@ -2865,8 +2958,8 @@ async function handleDeleteRow(e) {
                 const contentDiv = detailsArea.querySelector('.details-content');
                 if (contentDiv) {
                     contentDiv.innerHTML = loadMessageDetails(messageIndex, newJsonData);
-                    // 重新绑定事件
-                    bindOverviewEvents(parentDoc);
+                    // 重新绑定详情区域的事件（参考参考文档的 bindDetailsEvents_ACU）
+                    bindDetailsEventsForMessage(detailsArea, messageIndex);
                 }
             }
         }
@@ -3068,7 +3161,7 @@ function loadMessageDetails(messageIndex, messageData) {
             if (!table || !table.name || !table.content) return;
             
             // 配色参考弹窗主视觉（iOS风格）
-            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px; border: 1px solid var(--ios-border); border-radius: 10px; padding: 0; background: var(--ios-gray);">`;
+            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="margin-bottom: 20px; border: 1px solid var(--ios-border); border-radius: 10px; padding: 15; background: var(--ios-gray);">`;
             html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
             html += `<h4 class="table-title" style="margin: 0; color: var(--ios-text);">${escapeHtml(table.name)}</h4>`;
             html += `<button class="delete-table-btn" data-sheet-key="${sheetKey}" data-message-index="${messageIndex}" style="
