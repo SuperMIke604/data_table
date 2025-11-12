@@ -393,6 +393,61 @@ function escapeHtml(text) {
 }
 
 /**
+ * 获取当前选中的预设
+ */
+function getCurrentPrompt(settings = currentSettings) {
+    if (!settings.charCardPrompts || !Array.isArray(settings.charCardPrompts) || settings.charCardPrompts.length === 0) {
+        return DEFAULT_CHAR_CARD_PROMPT;
+    }
+    const index = settings.currentPromptIndex || 0;
+    if (index >= 0 && index < settings.charCardPrompts.length) {
+        return settings.charCardPrompts[index].prompt || DEFAULT_CHAR_CARD_PROMPT;
+    }
+    return settings.charCardPrompts[0].prompt || DEFAULT_CHAR_CARD_PROMPT;
+}
+
+/**
+ * 更新预设选择器UI
+ */
+function updatePromptSelector(settings = currentSettings) {
+    const parentDoc = (window.parent && window.parent !== window) 
+        ? window.parent.document 
+        : document;
+    
+    const selector = parentDoc.getElementById('data-manage-prompt-selector');
+    if (!selector) {
+        console.warn('预设选择器元素未找到');
+        return;
+    }
+    
+    // 确保预设数组存在
+    if (!settings.charCardPrompts || !Array.isArray(settings.charCardPrompts) || settings.charCardPrompts.length === 0) {
+        settings.charCardPrompts = [
+            {
+                name: '默认预设',
+                prompt: DEFAULT_CHAR_CARD_PROMPT
+            }
+        ];
+        settings.currentPromptIndex = 0;
+    }
+    
+    const prompts = settings.charCardPrompts;
+    selector.innerHTML = '';
+    
+    prompts.forEach((prompt, index) => {
+        const option = parentDoc.createElement('option');
+        option.value = index;
+        option.textContent = prompt.name || `预设 ${index + 1}`;
+        if (index === (settings.currentPromptIndex || 0)) {
+            option.selected = true;
+        }
+        selector.appendChild(option);
+    });
+    
+    console.log('预设选择器已更新，共', prompts.length, '个预设');
+}
+
+/**
  * 渲染提示词片段
  */
 function renderPromptSegments(segments) {
@@ -1070,14 +1125,21 @@ function openDataManagePopup() {
     
     // 等待DOM更新后设置事件监听器
     setTimeout(() => {
+        const parentDoc = (window.parent && window.parent !== window) 
+            ? window.parent.document 
+            : document;
+        
+        // 先加载设置，确保预设数组已初始化
+        loadSettings();
+        
+        // 然后设置事件监听器
         setupPopupEventListeners();
+        
+        // 最后加载UI
         loadSettingsToUI();
         updateStatusDisplay();
         
         // 如果当前是API Tab，加载酒馆预设列表
-        const parentDoc = (window.parent && window.parent !== window) 
-            ? window.parent.document 
-            : document;
         const apiTab = parentDoc.getElementById('data-manage-tab-api');
         if (apiTab && apiTab.classList.contains('active')) {
             loadTavernApiProfiles();
@@ -1302,11 +1364,13 @@ function setupPromptTabListeners(parentDoc) {
             }
         ];
         currentSettings.currentPromptIndex = 0;
+        saveSettings();
     }
     
     // 预设选择器切换
     const selector = parentDoc.getElementById('data-manage-prompt-selector');
     if (selector) {
+        console.log('找到预设选择器，准备绑定事件');
         selector.addEventListener('change', function() {
             const newIndex = parseInt(this.value);
             if (!isNaN(newIndex) && newIndex >= 0 && newIndex < currentSettings.charCardPrompts.length) {
@@ -1331,6 +1395,17 @@ function setupPromptTabListeners(parentDoc) {
     const addBtn = parentDoc.getElementById('data-manage-add-prompt');
     if (addBtn) {
         addBtn.addEventListener('click', function() {
+            // 确保预设数组存在
+            if (!currentSettings.charCardPrompts || !Array.isArray(currentSettings.charCardPrompts) || currentSettings.charCardPrompts.length === 0) {
+                currentSettings.charCardPrompts = [
+                    {
+                        name: '默认预设',
+                        prompt: DEFAULT_CHAR_CARD_PROMPT
+                    }
+                ];
+                currentSettings.currentPromptIndex = 0;
+            }
+            
             const name = prompt('请输入新预设的名称:', `预设 ${currentSettings.charCardPrompts.length + 1}`);
             if (name && name.trim()) {
                 const newPrompt = {
@@ -1343,8 +1418,13 @@ function setupPromptTabListeners(parentDoc) {
                 renderPromptSegments(newPrompt.prompt);
                 saveSettings();
                 showToast('新预设已创建', 'success');
+            } else if (name !== null) {
+                // 用户点击了取消或输入为空
+                showToast('预设名称不能为空', 'warning');
             }
         });
+    } else {
+        console.error('新增预设按钮未找到');
     }
     
     // 删除预设
