@@ -160,8 +160,14 @@ const DEFAULT_SETTINGS = {
     autoUpdateEnabled: false,      // 启用自动更新
     autoHideMessages: true,        // 数据整理完成后自动隐藏相关楼层
     
-    // AI指令预设
-    charCardPrompt: DEFAULT_CHAR_CARD_PROMPT,  // 数据库更新预设
+    // AI指令预设（支持多个预设）
+    charCardPrompts: [
+        {
+            name: '默认预设',
+            prompt: DEFAULT_CHAR_CARD_PROMPT
+        }
+    ],
+    currentPromptIndex: 0,  // 当前使用的预设索引
     
     // 数据概览模板（独立于AI指令预设）
     overviewTemplate: '',  // 数据概览模板（字符串格式）
@@ -232,6 +238,41 @@ function saveSettings() {
 }
 
 /**
+ * 迁移旧的 charCardPrompt 到新的 charCardPrompts 格式
+ */
+function migrateCharCardPrompt(settings) {
+    // 如果存在旧的 charCardPrompt 且没有新的 charCardPrompts，进行迁移
+    if (settings.charCardPrompt && (!settings.charCardPrompts || !Array.isArray(settings.charCardPrompts) || settings.charCardPrompts.length === 0)) {
+        settings.charCardPrompts = [
+            {
+                name: '默认预设',
+                prompt: Array.isArray(settings.charCardPrompt) ? settings.charCardPrompt : DEFAULT_CHAR_CARD_PROMPT
+            }
+        ];
+        settings.currentPromptIndex = 0;
+        // 删除旧的字段
+        delete settings.charCardPrompt;
+        // 保存迁移后的设置
+        saveSettings();
+        console.log('已迁移旧的 charCardPrompt 到新的 charCardPrompts 格式');
+    }
+    // 确保 charCardPrompts 存在且有效
+    if (!settings.charCardPrompts || !Array.isArray(settings.charCardPrompts) || settings.charCardPrompts.length === 0) {
+        settings.charCardPrompts = [
+            {
+                name: '默认预设',
+                prompt: DEFAULT_CHAR_CARD_PROMPT
+            }
+        ];
+        settings.currentPromptIndex = 0;
+    }
+    // 确保 currentPromptIndex 有效
+    if (typeof settings.currentPromptIndex !== 'number' || settings.currentPromptIndex < 0 || settings.currentPromptIndex >= settings.charCardPrompts.length) {
+        settings.currentPromptIndex = 0;
+    }
+}
+
+/**
  * 加载配置
  */
 function loadSettings() {
@@ -241,6 +282,8 @@ function loadSettings() {
         // 优先从 extensionSettings 加载
         if (context && context.extensionSettings && context.extensionSettings.dataManage) {
             currentSettings = { ...DEFAULT_SETTINGS, ...context.extensionSettings.dataManage };
+            // 迁移旧的 charCardPrompt 到新的 charCardPrompts 格式
+            migrateCharCardPrompt(currentSettings);
             console.log('从 extensionSettings 加载配置:', currentSettings);
             return currentSettings;
         }
@@ -252,6 +295,8 @@ function loadSettings() {
             if (saved) {
                 const parsed = JSON.parse(saved);
                 currentSettings = { ...DEFAULT_SETTINGS, ...parsed };
+                // 迁移旧的 charCardPrompt 到新的 charCardPrompts 格式
+                migrateCharCardPrompt(currentSettings);
                 console.log('从 localStorage 加载配置:', currentSettings);
                 return currentSettings;
             }
@@ -472,12 +517,16 @@ function loadSettingsToUI() {
     if (autoUpdateCheckbox) autoUpdateCheckbox.checked = settings.autoUpdateEnabled || false;
     if (autoHideCheckbox) autoHideCheckbox.checked = settings.autoHideMessages !== false;
     
-    // 渲染提示词片段
-    if (settings.charCardPrompt) {
-        renderPromptSegments(settings.charCardPrompt);
+    // 渲染提示词片段（使用当前选中的预设）
+    const currentPrompt = getCurrentPrompt(settings);
+    if (currentPrompt) {
+        renderPromptSegments(currentPrompt);
     } else {
         renderPromptSegments(DEFAULT_CHAR_CARD_PROMPT);
     }
+    
+    // 更新预设选择器
+    updatePromptSelector(settings);
     
     // 加载API配置到UI
     loadApiSettingsToUI(settings);
@@ -814,6 +863,15 @@ function openDataManagePopup() {
             <div id="data-manage-tab-prompt" class="data-manage-tab-content">
                 <div class="data-manage-card">
                     <h3>数据库更新预设 (任务指令)</h3>
+                    <div style="margin-bottom: 15px;">
+                        <label for="data-manage-prompt-selector">选择预设:</label>
+                        <div class="data-manage-input-group" style="margin-top: 8px;">
+                            <select id="data-manage-prompt-selector" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--ios-border); background: var(--ios-gray); color: var(--ios-text);"></select>
+                            <button id="data-manage-add-prompt" class="secondary" style="margin-left: 8px;">新增预设</button>
+                            <button id="data-manage-delete-prompt" class="secondary">删除预设</button>
+                            <button id="data-manage-rename-prompt" class="secondary">重命名</button>
+                        </div>
+                    </div>
                     <div id="data-manage-prompt-constructor">
                         <div class="data-manage-button-group" style="margin-bottom: 10px;">
                             <button class="data-manage-add-segment-btn" data-position="top" title="在上方添加对话轮次">+</button>
@@ -1235,6 +1293,101 @@ function setupStatusTabListeners(parentDoc) {
  * 设置AI指令预设Tab的事件监听器
  */
 function setupPromptTabListeners(parentDoc) {
+    // 确保预设数组存在
+    if (!currentSettings.charCardPrompts || !Array.isArray(currentSettings.charCardPrompts) || currentSettings.charCardPrompts.length === 0) {
+        currentSettings.charCardPrompts = [
+            {
+                name: '默认预设',
+                prompt: DEFAULT_CHAR_CARD_PROMPT
+            }
+        ];
+        currentSettings.currentPromptIndex = 0;
+    }
+    
+    // 预设选择器切换
+    const selector = parentDoc.getElementById('data-manage-prompt-selector');
+    if (selector) {
+        selector.addEventListener('change', function() {
+            const newIndex = parseInt(this.value);
+            if (!isNaN(newIndex) && newIndex >= 0 && newIndex < currentSettings.charCardPrompts.length) {
+                // 保存当前编辑的内容到旧预设
+                const segments = getPromptSegmentsFromUI();
+                if (segments && segments.length > 0) {
+                    const oldIndex = currentSettings.currentPromptIndex || 0;
+                    if (oldIndex >= 0 && oldIndex < currentSettings.charCardPrompts.length) {
+                        currentSettings.charCardPrompts[oldIndex].prompt = segments;
+                    }
+                }
+                // 切换到新预设
+                currentSettings.currentPromptIndex = newIndex;
+                const newPrompt = currentSettings.charCardPrompts[newIndex].prompt;
+                renderPromptSegments(newPrompt);
+                saveSettings();
+            }
+        });
+    }
+    
+    // 新增预设
+    const addBtn = parentDoc.getElementById('data-manage-add-prompt');
+    if (addBtn) {
+        addBtn.addEventListener('click', function() {
+            const name = prompt('请输入新预设的名称:', `预设 ${currentSettings.charCardPrompts.length + 1}`);
+            if (name && name.trim()) {
+                const newPrompt = {
+                    name: name.trim(),
+                    prompt: [...DEFAULT_CHAR_CARD_PROMPT]
+                };
+                currentSettings.charCardPrompts.push(newPrompt);
+                currentSettings.currentPromptIndex = currentSettings.charCardPrompts.length - 1;
+                updatePromptSelector(currentSettings);
+                renderPromptSegments(newPrompt.prompt);
+                saveSettings();
+                showToast('新预设已创建', 'success');
+            }
+        });
+    }
+    
+    // 删除预设
+    const deleteBtn = parentDoc.getElementById('data-manage-delete-prompt');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function() {
+            if (currentSettings.charCardPrompts.length <= 1) {
+                showToast('至少需要保留一个预设', 'warning');
+                return;
+            }
+            const currentIndex = currentSettings.currentPromptIndex || 0;
+            const currentName = currentSettings.charCardPrompts[currentIndex].name;
+            if (confirm(`确定要删除预设"${currentName}"吗？`)) {
+                currentSettings.charCardPrompts.splice(currentIndex, 1);
+                // 调整索引
+                if (currentSettings.currentPromptIndex >= currentSettings.charCardPrompts.length) {
+                    currentSettings.currentPromptIndex = currentSettings.charCardPrompts.length - 1;
+                }
+                const newPrompt = currentSettings.charCardPrompts[currentSettings.currentPromptIndex].prompt;
+                updatePromptSelector(currentSettings);
+                renderPromptSegments(newPrompt);
+                saveSettings();
+                showToast('预设已删除', 'success');
+            }
+        });
+    }
+    
+    // 重命名预设
+    const renameBtn = parentDoc.getElementById('data-manage-rename-prompt');
+    if (renameBtn) {
+        renameBtn.addEventListener('click', function() {
+            const currentIndex = currentSettings.currentPromptIndex || 0;
+            const currentName = currentSettings.charCardPrompts[currentIndex].name;
+            const newName = prompt('请输入新名称:', currentName);
+            if (newName && newName.trim() && newName.trim() !== currentName) {
+                currentSettings.charCardPrompts[currentIndex].name = newName.trim();
+                updatePromptSelector(currentSettings);
+                saveSettings();
+                showToast('预设已重命名', 'success');
+            }
+        });
+    }
+    
     // 保存提示词预设
     const saveBtn = parentDoc.getElementById('data-manage-save-prompt');
     if (saveBtn) {
@@ -1246,11 +1399,15 @@ function setupPromptTabListeners(parentDoc) {
                 return;
             }
             
-            currentSettings.charCardPrompt = segments;
-            if (saveSettings()) {
-                showToast('更新预设已保存', 'success');
-            } else {
-                showToast('保存失败', 'error');
+            // 保存到当前预设
+            const currentIndex = currentSettings.currentPromptIndex || 0;
+            if (currentIndex >= 0 && currentIndex < currentSettings.charCardPrompts.length) {
+                currentSettings.charCardPrompts[currentIndex].prompt = segments;
+                if (saveSettings()) {
+                    showToast('更新预设已保存', 'success');
+                } else {
+                    showToast('保存失败', 'error');
+                }
             }
         });
     }
@@ -1305,8 +1462,14 @@ function setupPromptTabListeners(parentDoc) {
                             };
                         });
                         
-                        renderPromptSegments(segments);
-                        showToast('提示词模板已成功加载', 'success');
+                        // 保存到当前预设
+                        const currentIndex = currentSettings.currentPromptIndex || 0;
+                        if (currentIndex >= 0 && currentIndex < currentSettings.charCardPrompts.length) {
+                            currentSettings.charCardPrompts[currentIndex].prompt = segments;
+                            renderPromptSegments(segments);
+                            saveSettings();
+                            showToast('提示词模板已成功加载', 'success');
+                        }
                         console.log('提示词模板已从JSON文件加载');
                     } catch (error) {
                         console.error('导入提示词模板失败：结构验证失败', error);
@@ -1323,13 +1486,16 @@ function setupPromptTabListeners(parentDoc) {
     const resetBtn = parentDoc.getElementById('data-manage-reset-prompt');
     if (resetBtn) {
         resetBtn.addEventListener('click', function() {
-            if (confirm('确定要恢复默认提示词预设吗？当前设置将被覆盖。')) {
-                currentSettings.charCardPrompt = [...DEFAULT_CHAR_CARD_PROMPT];
-                if (saveSettings()) {
-                    renderPromptSegments(DEFAULT_CHAR_CARD_PROMPT);
-                    showToast('更新预设已恢复为默认值', 'info');
-                } else {
-                    showToast('恢复失败', 'error');
+            if (confirm('确定要恢复当前预设为默认值吗？当前设置将被覆盖。')) {
+                const currentIndex = currentSettings.currentPromptIndex || 0;
+                if (currentIndex >= 0 && currentIndex < currentSettings.charCardPrompts.length) {
+                    currentSettings.charCardPrompts[currentIndex].prompt = [...DEFAULT_CHAR_CARD_PROMPT];
+                    if (saveSettings()) {
+                        renderPromptSegments(DEFAULT_CHAR_CARD_PROMPT);
+                        showToast('更新预设已恢复为默认值', 'info');
+                    } else {
+                        showToast('恢复失败', 'error');
+                    }
                 }
             }
         });
@@ -3355,11 +3521,7 @@ function loadMessageDetails(messageIndex, messageData) {
                 // 每个条目为一个卡片 - 参考主视觉配色
                 html += `<div class="entry-card" data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
                     background: transparent;
-                    transition: all 0.2s ease;
-                    box-shadow: 0 2px 8px var(--ios-shadow);
-                " onmouseover="this.style.boxShadow='0 4px 12px rgba(0, 122, 255, 0.15)';" 
-                   onmouseout="this.style.boxShadow='0 2px 8px var(--ios-shadow)';"
-                >`;
+                ">`;
                 
                 // 输入框区域 - 参考主视觉配色
                 html += `<div class="entry-input-container" style="
@@ -3498,10 +3660,13 @@ function exportCombinedSettings() {
         }
         
         const combinedData = {
-            prompt: currentSettings.charCardPrompt,
+            charCardPrompts: currentSettings.charCardPrompts,
+            currentPromptIndex: currentSettings.currentPromptIndex,
+            // 向后兼容：保留旧的 prompt 字段
+            prompt: getCurrentPrompt(currentSettings),
             overviewTemplate: overviewTemplateContent,
             timestamp: new Date().toISOString(),
-            version: '1.0.0'
+            version: '1.1.0'
         };
         
         const jsonStr = JSON.stringify(combinedData, null, 2);
@@ -3539,16 +3704,42 @@ function importCombinedSettings() {
                 const importedData = JSON.parse(readerEvent.target.result);
                 
                 // 只导入指令预设内容和可视化模板内容
-                if (importedData.prompt) {
-                    currentSettings.charCardPrompt = importedData.prompt;
+                // 优先使用新的多预设格式
+                if (importedData.charCardPrompts && Array.isArray(importedData.charCardPrompts) && importedData.charCardPrompts.length > 0) {
+                    currentSettings.charCardPrompts = importedData.charCardPrompts;
+                    currentSettings.currentPromptIndex = (typeof importedData.currentPromptIndex === 'number' && importedData.currentPromptIndex >= 0 && importedData.currentPromptIndex < importedData.charCardPrompts.length) 
+                        ? importedData.currentPromptIndex 
+                        : 0;
+                } else if (importedData.prompt) {
+                    // 向后兼容：如果只有旧的 prompt 字段，迁移到新格式
+                    const promptData = Array.isArray(importedData.prompt) ? importedData.prompt : DEFAULT_CHAR_CARD_PROMPT;
+                    currentSettings.charCardPrompts = [
+                        {
+                            name: '导入的预设',
+                            prompt: promptData
+                        }
+                    ];
+                    currentSettings.currentPromptIndex = 0;
                 }
+                // 保存设置并更新UI
+                saveSettings();
+                
+                // 更新UI显示
+                const parentDoc = (window.parent && window.parent !== window)
+                    ? window.parent.document
+                    : document;
+                
+                // 更新预设选择器
+                updatePromptSelector(currentSettings);
+                
+                // 渲染当前预设
+                const currentPrompt = getCurrentPrompt(currentSettings);
+                renderPromptSegments(currentPrompt);
+                
                 if (importedData.overviewTemplate) {
                     currentSettings.overviewTemplate = importedData.overviewTemplate;
                     
                     // 如果可视化模板区域是显示的，更新textarea内容
-                    const parentDoc = (window.parent && window.parent !== window) 
-                        ? window.parent.document 
-                        : document;
                     const textarea = parentDoc.getElementById('data-manage-template-textarea');
                     if (textarea) {
                         textarea.value = importedData.overviewTemplate;
@@ -4129,7 +4320,7 @@ async function callCustomOpenAI(dynamicContent) {
     
     // 组装最终的消息数组
     const messages = [];
-    const charCardPrompt = currentSettings.charCardPrompt || DEFAULT_CHAR_CARD_PROMPT;
+    const charCardPrompt = getCurrentPrompt(currentSettings);
     
     let promptSegments = [];
     if (Array.isArray(charCardPrompt)) {
@@ -4597,8 +4788,6 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
             const firstMessageIndex = batchIndices[0];
             const lastMessageIndex = batchIndices[batchIndices.length - 1];
             
-            showToast(`正在处理批次 ${batchNumber}/${totalBatches}...`, 'info');
-            
             // 1. 加载基础数据库：从当前批次开始的位置往前找最近的记录
             let foundDb = false;
             for (let j = firstMessageIndex - 1; j >= 0; j--) {
@@ -4718,12 +4907,15 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
                                 context.stopGeneration();
                             }
                             
-                            // 移除toast
-                            if (parentWin.toastr) {
+                            // 移除toast - 参照参考文档实现
+                            const $toast = parentWin.jQuery ? parentWin.jQuery(this).closest('.toast') : null;
+                            if ($toast && $toast.length) {
+                                $toast.remove();
+                            } else if (parentWin.toastr) {
+                                // 兜底方案
                                 if (loadingToast) {
                                     parentWin.toastr.clear(loadingToast);
                                 } else {
-                                    // 兜底：清除所有进行中的toast
                                     parentWin.toastr.clear();
                                 }
                             }
