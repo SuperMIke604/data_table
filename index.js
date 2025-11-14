@@ -798,15 +798,10 @@ function addDataPreviewButton(extensionsMenu, parentDoc) {
         showDataPreview();
     });
 
-    // 将按钮添加到菜单（插入到数据管理按钮之前）
-    const dataManageButton = parentDoc.getElementById('dataManageButton');
-    if (dataManageButton) {
-        extensionsMenu.insertBefore(buttonElement, dataManageButton);
-    } else {
-        extensionsMenu.appendChild(buttonElement);
-    }
+    // 将按钮添加到菜单末尾（确保数据预览在最后，数据管理在倒数第二）
+    extensionsMenu.appendChild(buttonElement);
     
-    console.log('数据预览按钮已添加到 wand menu');
+    console.log('数据预览按钮已添加到 wand menu（菜单最后）');
 }
 
 /**
