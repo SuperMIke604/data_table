@@ -2055,12 +2055,43 @@ async function populateInjectionTargetSelector() {
         select.value = worldbookConfig.injectionTarget || 'character';
         
         // 监听变化
-        select.addEventListener('change', function() {
+        select.addEventListener('change', async function() {
             if (!currentSettings.worldbookConfig) {
                 currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
             }
-            currentSettings.worldbookConfig.injectionTarget = this.value;
+            
+            const oldTargetSetting = currentSettings.worldbookConfig.injectionTarget || 'character';
+            const newTargetSetting = this.value || 'character';
+            
+            if (oldTargetSetting === newTargetSetting) {
+                return;
+            }
+            
+            try {
+                const oldLorebookName = await getInjectionTargetLorebook(oldTargetSetting);
+                if (oldLorebookName) {
+                    console.log(`[世界书] 注入目标切换，开始清理旧世界书 "${oldLorebookName}"`);
+                    await deleteGeneratedLorebookEntries(oldLorebookName);
+                }
+            } catch (error) {
+                console.error('清理旧世界书条目失败:', error);
+            }
+            
+            currentSettings.worldbookConfig.injectionTarget = newTargetSetting;
             saveSettings();
+            showToast('世界书注入目标已更新', 'success');
+            
+            if (currentJsonTableData) {
+                try {
+                    await updateReadableLorebookEntry(true);
+                    showToast('当前数据已同步到新的世界书', 'info');
+                } catch (error) {
+                    console.error('同步新世界书失败:', error);
+                    showToast('同步新世界书失败，请稍后重试', 'error');
+                }
+            } else {
+                showToast('注入目标已切换，将在下次更新时写入数据', 'info');
+            }
         });
     } catch (error) {
         console.error('填充注入目标选择器失败:', error);
@@ -2344,6 +2375,42 @@ async function populateWorldbookEntryList() {
     } catch (error) {
         console.error('填充世界书条目列表失败:', error);
         container.innerHTML = '<em style="color: var(--ios-text-secondary);">加载失败</em>';
+    }
+}
+
+async function deleteGeneratedLorebookEntries(targetLorebookName = null) {
+    const targetName = targetLorebookName || await getInjectionTargetLorebook();
+    if (!targetName) {
+        console.warn('[世界书] 无法清理条目：未找到注入目标');
+        return;
+    }
+    
+    const TavernHelper_API = getTavernHelperAPI();
+    if (!TavernHelper_API || typeof TavernHelper_API.getLorebookEntries !== 'function' || typeof TavernHelper_API.deleteLorebookEntries !== 'function') {
+        console.warn('[世界书] 无法清理条目：TavernHelper API 不可用');
+        return;
+    }
+    
+    try {
+        const allEntries = await TavernHelper_API.getLorebookEntries(targetName);
+        if (!allEntries || !Array.isArray(allEntries) || allEntries.length === 0) {
+            console.log(`[世界书] ${targetName} 中没有可清理的条目`);
+            return;
+        }
+        
+        const uidsToDelete = allEntries
+            .filter(entry => entry?.comment && GENERATED_LOREBOOK_PREFIXES.some(prefix => entry.comment.startsWith(prefix)))
+            .map(entry => entry.uid);
+        
+        if (uidsToDelete.length === 0) {
+            console.log(`[世界书] ${targetName} 中没有匹配的插件条目需要删除`);
+            return;
+        }
+        
+        await TavernHelper_API.deleteLorebookEntries(targetName, uidsToDelete);
+        console.log(`[世界书] 已从 ${targetName} 删除 ${uidsToDelete.length} 个插件生成的条目`);
+    } catch (error) {
+        console.error('清理世界书条目失败:', error);
     }
 }
 
@@ -5405,20 +5472,13 @@ async function updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLo
 /**
  * 获取注入目标世界书名称
  */
-async function getInjectionTargetLorebook() {
+async function getInjectionTargetLorebook(targetSetting = null) {
     const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
-    const injectionTarget = worldbookConfig.injectionTarget || 'character';
+    const injectionTarget = targetSetting || worldbookConfig.injectionTarget || 'character';
     
     if (injectionTarget === 'character') {
         // 获取角色卡绑定的世界书
-        const parentWin = typeof window.parent !== 'undefined' ? window.parent : window;
-        let TavernHelper_API = null;
-        
-        if (typeof TavernHelper !== 'undefined') {
-            TavernHelper_API = TavernHelper;
-        } else if (parentWin && parentWin.TavernHelper) {
-            TavernHelper_API = parentWin.TavernHelper;
-        }
+        const TavernHelper_API = getTavernHelperAPI();
         
         if (TavernHelper_API && typeof TavernHelper_API.getCharLorebooks === 'function') {
             try {
@@ -5551,6 +5611,36 @@ const EVENT_LISTENER_RETRY_INTERVAL = 5000; // 5秒重试间隔
 const MAX_RETRY_ATTEMPTS = 20; // 最多重试20次（100秒）
 let retryAttempts = 0;
 
+const GENERATED_LOREBOOK_PREFIXES = [
+    'TavernDB-ACU-ReadableDataTable',
+    'TavernDB-ACU-OutlineTable',
+    '重要人物条目',
+    'TavernDB-ACU-SummaryTable',
+    '总结条目',
+    '小总结条目'
+];
+
+function getTavernHelperAPI() {
+    try {
+        if (typeof TavernHelper !== 'undefined') {
+            return TavernHelper;
+        }
+    } catch (error) {
+        console.warn('访问全局 TavernHelper 失败:', error);
+    }
+    
+    try {
+        const parentWin = (typeof window !== 'undefined' && window.parent) ? window.parent : window;
+        if (parentWin && parentWin.TavernHelper) {
+            return parentWin.TavernHelper;
+        }
+    } catch (error) {
+        console.warn('访问父窗口 TavernHelper 失败:', error);
+    }
+    
+    return null;
+}
+
 /**
  * 从模板初始化数据库 - 参考参考文档实现
  */
@@ -5563,6 +5653,11 @@ async function initializeJsonTableFromTemplate() {
         if (template) {
             currentJsonTableData = JSON.parse(JSON.stringify(template));
             console.log('从模板成功初始化数据库');
+            try {
+                await deleteGeneratedLorebookEntries();
+            } catch (cleanupError) {
+                console.warn('初始化新数据库时清理世界书条目失败:', cleanupError);
+            }
             return true;
         } else {
             console.warn('无法加载数据库模板，使用空数据库');
