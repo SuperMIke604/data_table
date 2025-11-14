@@ -2244,12 +2244,18 @@ async function populateWorldbookEntryList() {
         for (const bookName of bookNames) {
             const bookData = allBooks.find(b => b.name === bookName);
             if (bookData && bookData.entries) {
+                // 将条目ID统一转换为字符串，避免类型不一致导致的匹配失败
+                const normalizeEntryId = (entry) => String(entry?.uid ?? entry?.id ?? '');
+                
                 // 如果该世界书没有设置，默认启用所有条目
                 // 注意：只在新世界书时设置默认值，如果已有配置（即使是空数组），则使用已有配置
                 if (typeof worldbookConfig.enabledEntries[bookName] === 'undefined') {
-                    worldbookConfig.enabledEntries[bookName] = bookData.entries.map(entry => entry.uid || entry.id);
+                    worldbookConfig.enabledEntries[bookName] = bookData.entries.map(normalizeEntryId);
                     settingsChanged = true;
                     console.log('[世界书] 新世界书，默认启用所有条目:', bookName, worldbookConfig.enabledEntries[bookName]);
+                } else {
+                    // 确保已有配置中的条目ID也被转换为字符串
+                    worldbookConfig.enabledEntries[bookName] = worldbookConfig.enabledEntries[bookName].map(id => String(id));
                 }
                 
                 const enabledEntries = worldbookConfig.enabledEntries[bookName] || [];
@@ -2257,7 +2263,7 @@ async function populateWorldbookEntryList() {
                 html += `<div style="margin-bottom: 8px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid var(--ios-border);">${escapeHtml(bookName)}</div>`;
                 
                 bookData.entries.forEach(entry => {
-                    const entryUid = entry.uid || entry.id;
+                    const entryUid = normalizeEntryId(entry);
                     const isEnabled = enabledEntries.includes(entryUid);
                     // 参考参考资料：使用 entry.comment 作为条目名称，如果没有则使用 uid
                     const entryName = entry.comment || entry.name || entryUid || `条目 ${entryUid}`;
@@ -2291,7 +2297,7 @@ async function populateWorldbookEntryList() {
             
             newCheckbox.addEventListener('change', function() {
                 const bookName = decodeURIComponent(this.dataset.book || '');
-                const entryUid = decodeURIComponent(this.dataset.uid || '');
+                const entryUid = String(decodeURIComponent(this.dataset.uid || ''));
                 
                 console.log('[世界书] 复选框状态改变:', { bookName, entryUid, checked: this.checked });
                 
@@ -2306,6 +2312,8 @@ async function populateWorldbookEntryList() {
                     currentSettings.worldbookConfig.enabledEntries[bookName] = [];
                 }
                 
+                // 确保当前列表中的所有ID都是字符串
+                currentSettings.worldbookConfig.enabledEntries[bookName] = currentSettings.worldbookConfig.enabledEntries[bookName].map(id => String(id));
                 const enabledList = currentSettings.worldbookConfig.enabledEntries[bookName];
                 const index = enabledList.indexOf(entryUid);
                 
