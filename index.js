@@ -922,7 +922,7 @@ function openDataManagePopup() {
                         <label for="data-manage-prompt-selector">选择预设:</label>
                         <div class="data-manage-input-group" style="margin-top: 8px;">
                             <select id="data-manage-prompt-selector" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--ios-border); background: var(--ios-gray); color: var(--ios-text);"></select>
-                            <button id="data-manage-add-prompt" class="secondary" style="margin-left: 8px;">新增预设</button>
+                            <button id="data-manage-add-prompt" class="secondary">新增预设</button>
                             <button id="data-manage-delete-prompt" class="secondary">删除预设</button>
                             <button id="data-manage-rename-prompt" class="secondary">重命名</button>
                         </div>
@@ -2148,7 +2148,18 @@ async function populateWorldbookEntryList() {
     
     // 确保设置已加载（从存储中重新加载，以防切换tab时设置丢失）
     loadSettings();
-    const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+    
+    // 确保 worldbookConfig 存在并直接引用 currentSettings，而不是创建新对象
+    if (!currentSettings.worldbookConfig) {
+        currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+    }
+    
+    // 确保 enabledEntries 存在
+    if (!currentSettings.worldbookConfig.enabledEntries) {
+        currentSettings.worldbookConfig.enabledEntries = {};
+    }
+    
+    const worldbookConfig = currentSettings.worldbookConfig;
     const source = worldbookConfig.source || 'character';
     let bookNames = [];
     
@@ -2245,11 +2256,8 @@ async function populateWorldbookEntryList() {
             }
         }
         
+        // 如果有新设置（默认启用所有条目），保存配置
         if (settingsChanged) {
-            if (!currentSettings.worldbookConfig) {
-                currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
-            }
-            currentSettings.worldbookConfig.enabledEntries = worldbookConfig.enabledEntries;
             saveSettings();
         }
         
