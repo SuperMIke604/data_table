@@ -5602,6 +5602,13 @@ let newMessageDebounceTimer = null;
 let isAutoUpdating = false;
 const NEW_MESSAGE_DEBOUNCE_DELAY = 2000; // 2秒防抖延迟
 
+// 事件监听器注册状态
+let eventListenersRegistered = false;
+let eventListenerRetryTimer = null;
+const EVENT_LISTENER_RETRY_INTERVAL = 5000; // 5秒重试间隔
+const MAX_RETRY_ATTEMPTS = 20; // 最多重试20次（100秒）
+let retryAttempts = 0;
+
 /**
  * 从模板初始化数据库 - 参考参考文档实现
  */
@@ -5673,23 +5680,50 @@ async function loadOrCreateJsonTableFromChatHistory() {
  * 处理新消息事件（防抖） - 参考参考文档实现
  */
 async function handleNewMessageDebounced(eventType = 'unknown') {
-    console.log(`新消息事件 (${eventType}) 检测到，防抖延迟 ${NEW_MESSAGE_DEBOUNCE_DELAY}ms...`);
-    clearTimeout(newMessageDebounceTimer);
+    console.log(`[自动更新] 新消息事件 (${eventType}) 检测到，防抖延迟 ${NEW_MESSAGE_DEBOUNCE_DELAY}ms...`);
+    
+    // 检查事件监听器是否已注册
+    if (!eventListenersRegistered) {
+        console.warn('[自动更新] 事件监听器未注册，尝试重新注册...');
+        tryRegisterEventListeners();
+    }
+    
+    // 清除之前的定时器
+    if (newMessageDebounceTimer) {
+        clearTimeout(newMessageDebounceTimer);
+        newMessageDebounceTimer = null;
+    }
+    
+    // 设置新的防抖定时器
     newMessageDebounceTimer = setTimeout(async () => {
-        console.log('防抖后的新消息处理触发');
+        console.log('[自动更新] 防抖后的新消息处理触发');
+        
+        // 确保定时器引用被清除
+        newMessageDebounceTimer = null;
+        
         if (isAutoUpdating) {
-            console.log('自动更新已在进行中，跳过');
+            console.log('[自动更新] 自动更新已在进行中，跳过');
             return;
         }
         
         const context = SillyTavern.getContext();
-        if (!context || !context.chat) {
-            console.log('无法获取聊天上下文，跳过');
+        if (!context) {
+            console.warn('[自动更新] 无法获取 SillyTavern 上下文');
+            return;
+        }
+        
+        if (!context.chat) {
+            console.warn('[自动更新] 无法获取聊天上下文 (context.chat 为空)');
             return;
         }
         
         // 参考参考文档：在触发自动更新前，先加载数据库
-        await loadOrCreateJsonTableFromChatHistory();
+        try {
+            await loadOrCreateJsonTableFromChatHistory();
+        } catch (error) {
+            console.error('[自动更新] 加载数据库失败:', error);
+            return;
+        }
         
         await triggerAutomaticUpdateIfNeeded();
     }, NEW_MESSAGE_DEBOUNCE_DELAY);
@@ -5699,16 +5733,27 @@ async function handleNewMessageDebounced(eventType = 'unknown') {
  * 触发自动更新检查 - 参考参考文档实现
  */
 async function triggerAutomaticUpdateIfNeeded() {
-    console.log('自动更新触发器: 开始检查...');
+    console.log('[自动更新] 触发器: 开始检查...');
+    
+    // 确保设置已加载
+    if (!currentSettings) {
+        console.warn('[自动更新] 设置未加载，尝试重新加载...');
+        loadSettings();
+    }
     
     if (!currentSettings.autoUpdateEnabled) {
-        console.log('自动更新触发器: 自动更新已禁用');
+        console.log('[自动更新] 触发器: 自动更新已禁用');
         return;
     }
     
     const context = SillyTavern.getContext();
-    if (!context || !context.chat) {
-        console.log('自动更新触发器: 无法获取聊天上下文');
+    if (!context) {
+        console.warn('[自动更新] 触发器: 无法获取 SillyTavern 上下文');
+        return;
+    }
+    
+    if (!context.chat) {
+        console.warn('[自动更新] 触发器: 无法获取聊天上下文 (context.chat 为空)');
         return;
     }
     
@@ -5718,42 +5763,63 @@ async function triggerAutomaticUpdateIfNeeded() {
          (currentSettings.apiConfig?.url && currentSettings.apiConfig?.model))) || 
         (currentSettings.apiMode === 'tavern' && currentSettings.tavernProfile);
     
-    // 参考参考文档：如果数据库未加载，尝试加载
-    if (!currentJsonTableData) {
-        console.log('自动更新触发器: 数据库未加载，尝试加载...');
-        await loadOrCreateJsonTableFromChatHistory();
-        if (!currentJsonTableData) {
-            console.log('自动更新触发器: 数据库加载失败，跳过');
-            return;
-        }
-    }
-    
-    if (isAutoUpdating || !apiIsConfigured) {
-        console.log('自动更新触发器: 预检查失败', {
-            isUpdating: isAutoUpdating,
-            apiConfigured: apiIsConfigured,
-            dbLoaded: !!currentJsonTableData
+    if (!apiIsConfigured) {
+        console.warn('[自动更新] 触发器: API 未配置', {
+            apiMode: currentSettings.apiMode,
+            useMainApi: currentSettings.apiConfig?.useMainApi,
+            hasUrl: !!currentSettings.apiConfig?.url,
+            hasModel: !!currentSettings.apiConfig?.model,
+            tavernProfile: currentSettings.tavernProfile
         });
         return;
     }
     
+    // 参考参考文档：如果数据库未加载，尝试加载
+    if (!currentJsonTableData) {
+        console.log('[自动更新] 触发器: 数据库未加载，尝试加载...');
+        try {
+            await loadOrCreateJsonTableFromChatHistory();
+        } catch (error) {
+            console.error('[自动更新] 触发器: 数据库加载失败:', error);
+            return;
+        }
+        if (!currentJsonTableData) {
+            console.warn('[自动更新] 触发器: 数据库加载失败，跳过');
+            return;
+        }
+    }
+    
+    if (isAutoUpdating) {
+        console.log('[自动更新] 触发器: 自动更新已在进行中，跳过');
+        return;
+    }
+    
     const liveChat = context.chat;
-    if (!liveChat || liveChat.length < 2) {
-        console.log('自动更新触发器: 聊天历史太短（< 2条消息）');
+    if (!liveChat) {
+        console.warn('[自动更新] 触发器: liveChat 为空');
+        return;
+    }
+    
+    if (liveChat.length < 2) {
+        console.log('[自动更新] 触发器: 聊天历史太短（< 2条消息），当前长度:', liveChat.length);
         return;
     }
     
     const lastLiveMessage = liveChat[liveChat.length - 1];
+    if (!lastLiveMessage) {
+        console.warn('[自动更新] 触发器: 无法获取最后一条消息');
+        return;
+    }
     
     // 仅在AI有新回复时触发
     if (lastLiveMessage.is_user) {
-        console.log('自动更新触发器: 最后一条消息是用户消息，跳过');
+        console.log('[自动更新] 触发器: 最后一条消息是用户消息，跳过');
         return;
     }
     
     // 如果最新的AI消息已经包含数据，则跳过
     if (lastLiveMessage.TavernDB_ACU_Data) {
-        console.log('自动更新触发器: 最新的AI消息已包含数据库数据，跳过');
+        console.log('[自动更新] 触发器: 最新的AI消息已包含数据库数据，跳过');
         return;
     }
     
@@ -5778,20 +5844,22 @@ async function triggerAutomaticUpdateIfNeeded() {
     const updateBatchSize = currentSettings.updateBatchSize || 1; // 每次更新楼层数
     const requiredUnrecorded = skipLatestN + updateBatchSize; // 需要的未记录层数
     
-    console.log('自动更新触发器: 参数检查', {
+    console.log('[自动更新] 触发器: 参数检查', {
         skipLatestN,
         updateBatchSize,
         requiredUnrecorded,
-        unrecordedMessages
+        unrecordedMessages,
+        totalMessages,
+        lastRecordedFloor
     });
     
     if (unrecordedMessages < requiredUnrecorded) {
-        console.log(`自动更新触发器: 尚未记录层数 (${unrecordedMessages}) 未达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。跳过。`);
+        console.log(`[自动更新] 触发器: 尚未记录层数 (${unrecordedMessages}) 未达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。跳过。`);
         return;
     }
     
     // 当未记录层数达到或超过所需层数时触发更新
-    console.log(`自动更新触发器: 尚未记录层数 (${unrecordedMessages}) 达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。开始更新。`);
+    console.log(`[自动更新] 触发器: 尚未记录层数 (${unrecordedMessages}) 达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。开始更新。`);
     showToast(`触发自动更新：未记录层数 ${unrecordedMessages} >= 触发条件 ${requiredUnrecorded}`, 'info');
     
     // 新的处理逻辑：只处理需要更新的楼层
@@ -5838,7 +5906,7 @@ async function triggerAutomaticUpdateIfNeeded() {
     }
     
     if (indicesToActuallyUpdate.length === 0) {
-        console.log('自动更新触发器: 没有需要更新的楼层');
+        console.warn('[自动更新] 触发器: 没有需要更新的楼层');
         return;
     }
     
@@ -5846,8 +5914,8 @@ async function triggerAutomaticUpdateIfNeeded() {
     const floorStart = indicesToActuallyUpdate[0];
     const floorEnd = indicesToActuallyUpdate[indicesToActuallyUpdate.length - 1];
     
-    console.log(`自动更新触发器: 将处理楼层 ${floorStart} 到 ${floorEnd}，共 ${indicesToActuallyUpdate.length} 层`);
-    console.log('自动更新触发器: 楼层计算详情', {
+    console.log(`[自动更新] 触发器: 将处理楼层 ${floorStart} 到 ${floorEnd}，共 ${indicesToActuallyUpdate.length} 层`);
+    console.log('[自动更新] 触发器: 楼层计算详情', {
         totalActualMessages,
         skipLatestN,
         updateBatchSize,
@@ -5862,26 +5930,210 @@ async function triggerAutomaticUpdateIfNeeded() {
         showToast(`检测到新消息，将触发数据库增量更新。`, 'info');
     }
     
-    console.log('自动更新触发器: 开始执行更新，处理楼层:', indicesToActuallyUpdate);
+    console.log('[自动更新] 触发器: 开始执行更新，处理楼层:', indicesToActuallyUpdate);
     isAutoUpdating = true;
     try {
         // 使用 updateDatabaseByFloorRange 进行更新
         const success = await updateDatabaseByFloorRange(floorStart, floorEnd);
-        console.log('自动更新触发器: 更新完成，结果:', success);
+        console.log('[自动更新] 触发器: 更新完成，结果:', success);
         
         if (success) {
-            console.log('自动更新过程成功完成');
+            console.log('[自动更新] 过程成功完成');
             showToast('自动更新完成', 'success');
         } else {
-            console.log('自动更新过程失败');
+            console.warn('[自动更新] 过程失败');
             showToast('自动更新失败', 'error');
         }
     } catch (error) {
-        console.error('自动更新过程出错:', error);
+        console.error('[自动更新] 过程出错:', error);
         showToast(`自动更新出错: ${error.message}`, 'error');
     } finally {
         isAutoUpdating = false;
     }
+}
+
+/**
+ * 注册事件监听器
+ * @returns {boolean} 是否成功注册
+ */
+function registerEventListeners() {
+    try {
+        const context = SillyTavern.getContext();
+        
+        // 详细检查所有必需的条件
+        if (!context) {
+            console.warn('[自动更新] 无法获取上下文：SillyTavern.getContext() 返回 null');
+            return false;
+        }
+        
+        if (!context.eventSource) {
+            console.warn('[自动更新] eventSource 不可用');
+            return false;
+        }
+        
+        if (typeof context.eventSource.on !== 'function') {
+            console.warn('[自动更新] eventSource.on 不是函数');
+            return false;
+        }
+        
+        if (!context.eventTypes) {
+            console.warn('[自动更新] eventTypes 不可用');
+            return false;
+        }
+        
+        // 监听生成结束事件
+        if (context.eventTypes.GENERATION_ENDED) {
+            context.eventSource.on(context.eventTypes.GENERATION_ENDED, (message_id) => {
+                console.log(`[自动更新] 生成结束事件，message_id: ${message_id}`);
+                handleNewMessageDebounced('GENERATION_ENDED');
+            });
+            console.log('[自动更新] GENERATION_ENDED 事件监听器已注册');
+        } else {
+            console.warn('[自动更新] GENERATION_ENDED 事件类型不可用');
+        }
+        
+        // 监听聊天变更事件
+        if (context.eventTypes.CHAT_CHANGED) {
+            context.eventSource.on(context.eventTypes.CHAT_CHANGED, async (chatFileName) => {
+                console.log(`[自动更新] 聊天变更事件: ${chatFileName}`);
+                // 重置状态
+                currentJsonTableData = null;
+                isAutoUpdating = false;
+                clearTimeout(newMessageDebounceTimer);
+                // 参考参考文档：重新加载数据库
+                await loadOrCreateJsonTableFromChatHistory();
+            });
+            console.log('[自动更新] CHAT_CHANGED 事件监听器已注册');
+        } else {
+            console.warn('[自动更新] CHAT_CHANGED 事件类型不可用');
+        }
+        
+        eventListenersRegistered = true;
+        retryAttempts = 0; // 重置重试计数
+        if (eventListenerRetryTimer) {
+            clearInterval(eventListenerRetryTimer);
+            eventListenerRetryTimer = null;
+        }
+        console.log('[自动更新] 所有事件监听器已成功注册');
+        return true;
+    } catch (error) {
+        console.error('[自动更新] 注册事件监听器时出错:', error);
+        return false;
+    }
+}
+
+/**
+ * 尝试注册事件监听器，如果失败则设置重试机制
+ */
+function tryRegisterEventListeners() {
+    if (eventListenersRegistered) {
+        console.log('[自动更新] 事件监听器已注册，跳过重复注册');
+        return;
+    }
+    
+    const success = registerEventListeners();
+    if (!success) {
+        retryAttempts++;
+        if (retryAttempts < MAX_RETRY_ATTEMPTS) {
+            console.log(`[自动更新] 事件监听器注册失败，将在 ${EVENT_LISTENER_RETRY_INTERVAL}ms 后重试 (${retryAttempts}/${MAX_RETRY_ATTEMPTS})`);
+            if (!eventListenerRetryTimer) {
+                eventListenerRetryTimer = setInterval(() => {
+                    if (eventListenersRegistered) {
+                        clearInterval(eventListenerRetryTimer);
+                        eventListenerRetryTimer = null;
+                        return;
+                    }
+                    const retrySuccess = registerEventListeners();
+                    if (retrySuccess) {
+                        clearInterval(eventListenerRetryTimer);
+                        eventListenerRetryTimer = null;
+                    } else {
+                        retryAttempts++;
+                        if (retryAttempts >= MAX_RETRY_ATTEMPTS) {
+                            console.error(`[自动更新] 事件监听器注册失败，已达到最大重试次数 (${MAX_RETRY_ATTEMPTS})`);
+                            clearInterval(eventListenerRetryTimer);
+                            eventListenerRetryTimer = null;
+                        }
+                    }
+                }, EVENT_LISTENER_RETRY_INTERVAL);
+            }
+        } else {
+            console.error(`[自动更新] 事件监听器注册失败，已达到最大重试次数 (${MAX_RETRY_ATTEMPTS})`);
+        }
+    }
+}
+
+/**
+ * 检查自动更新状态（调试用）
+ * 在控制台调用 window.DataManageDebug?.checkAutoUpdateStatus() 查看状态
+ */
+function checkAutoUpdateStatus() {
+    const context = SillyTavern.getContext();
+    const status = {
+        '自动更新已启用': currentSettings?.autoUpdateEnabled || false,
+        '事件监听器已注册': eventListenersRegistered,
+        'API已配置': (currentSettings?.apiMode === 'custom' && 
+            (currentSettings?.apiConfig?.useMainApi || 
+             (currentSettings?.apiConfig?.url && currentSettings?.apiConfig?.model))) || 
+            (currentSettings?.apiMode === 'tavern' && currentSettings?.tavernProfile),
+        '数据库已加载': !!currentJsonTableData,
+        '正在更新中': isAutoUpdating,
+        '上下文可用': !!context,
+        'eventSource可用': !!(context?.eventSource),
+        'eventTypes可用': !!(context?.eventTypes),
+        '聊天记录长度': context?.chat?.length || 0,
+        '配置参数': {
+            '最新N层不更新': currentSettings?.autoUpdateFrequency ?? 0,
+            '每次更新楼层数': currentSettings?.updateBatchSize || 1
+        }
+    };
+    
+    console.log('=== 自动更新状态检查 ===');
+    console.table(status);
+    
+    if (!eventListenersRegistered) {
+        console.warn('⚠️ 事件监听器未注册！尝试重新注册...');
+        tryRegisterEventListeners();
+    }
+    
+    return status;
+}
+
+/**
+ * 手动触发自动更新检查（调试用）
+ * 在控制台调用 window.DataManageDebug?.triggerAutoUpdate() 手动触发
+ */
+async function manualTriggerAutoUpdate() {
+    console.log('[调试] 手动触发自动更新检查...');
+    
+    // 确保设置已加载
+    if (!currentSettings) {
+        loadSettings();
+    }
+    
+    // 确保数据库已加载
+    if (!currentJsonTableData) {
+        console.log('[调试] 数据库未加载，尝试加载...');
+        await loadOrCreateJsonTableFromChatHistory();
+    }
+    
+    // 触发检查
+    await triggerAutomaticUpdateIfNeeded();
+}
+
+// 暴露调试接口到全局（仅在开发环境）
+if (typeof window !== 'undefined') {
+    if (!window.DataManageDebug) {
+        window.DataManageDebug = {};
+    }
+    window.DataManageDebug.checkAutoUpdateStatus = checkAutoUpdateStatus;
+    window.DataManageDebug.triggerAutoUpdate = manualTriggerAutoUpdate;
+    window.DataManageDebug.registerEventListeners = tryRegisterEventListeners;
+    console.log('[自动更新] 调试接口已暴露到 window.DataManageDebug');
+    console.log('[自动更新] 使用方法:');
+    console.log('  - window.DataManageDebug.checkAutoUpdateStatus() - 检查状态');
+    console.log('  - window.DataManageDebug.triggerAutoUpdate() - 手动触发更新');
+    console.log('  - window.DataManageDebug.registerEventListeners() - 重新注册事件监听器');
 }
 
 // 初始化扩展
@@ -5897,34 +6149,8 @@ function initializeExtension() {
         updateExtensionUI();
     }
     
-    // 参考参考文档：注册事件监听器
-    const context = SillyTavern.getContext();
-    if (context && context.eventSource && context.eventTypes) {
-        // 监听生成结束事件
-        if (context.eventTypes.GENERATION_ENDED) {
-            context.eventSource.on(context.eventTypes.GENERATION_ENDED, (message_id) => {
-                console.log(`生成结束事件，message_id: ${message_id}`);
-                handleNewMessageDebounced('GENERATION_ENDED');
-            });
-        }
-        
-        // 监听聊天变更事件
-        if (context.eventTypes.CHAT_CHANGED) {
-            context.eventSource.on(context.eventTypes.CHAT_CHANGED, async (chatFileName) => {
-                console.log(`聊天变更事件: ${chatFileName}`);
-                // 重置状态
-                currentJsonTableData = null;
-                isAutoUpdating = false;
-                clearTimeout(newMessageDebounceTimer);
-                // 参考参考文档：重新加载数据库
-                await loadOrCreateJsonTableFromChatHistory();
-            });
-        }
-        
-        console.log('事件监听器已注册');
-    } else {
-        console.warn('无法注册事件监听器：eventSource 或 eventTypes 不可用');
-    }
+    // 尝试注册事件监听器（带重试机制）
+    tryRegisterEventListeners();
 }
 
 // 使用 jQuery 初始化（参考示例代码）
