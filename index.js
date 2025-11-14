@@ -282,9 +282,16 @@ function loadSettings() {
         // 优先从 extensionSettings 加载
         if (context && context.extensionSettings && context.extensionSettings.dataManage) {
             currentSettings = { ...DEFAULT_SETTINGS, ...context.extensionSettings.dataManage };
+            // 确保 worldbookConfig 结构完整
+            if (!currentSettings.worldbookConfig) {
+                currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+            }
+            if (!currentSettings.worldbookConfig.enabledEntries) {
+                currentSettings.worldbookConfig.enabledEntries = {};
+            }
             // 迁移旧的 charCardPrompt 到新的 charCardPrompts 格式
             migrateCharCardPrompt(currentSettings);
-            console.log('从 extensionSettings 加载配置:', currentSettings);
+            console.log('[世界书] 从 extensionSettings 加载配置:', JSON.stringify(currentSettings.worldbookConfig.enabledEntries));
             return currentSettings;
         }
         
@@ -295,9 +302,16 @@ function loadSettings() {
             if (saved) {
                 const parsed = JSON.parse(saved);
                 currentSettings = { ...DEFAULT_SETTINGS, ...parsed };
+                // 确保 worldbookConfig 结构完整
+                if (!currentSettings.worldbookConfig) {
+                    currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+                }
+                if (!currentSettings.worldbookConfig.enabledEntries) {
+                    currentSettings.worldbookConfig.enabledEntries = {};
+                }
                 // 迁移旧的 charCardPrompt 到新的 charCardPrompts 格式
                 migrateCharCardPrompt(currentSettings);
-                console.log('从 localStorage 加载配置:', currentSettings);
+                console.log('[世界书] 从 localStorage 加载配置:', JSON.stringify(currentSettings.worldbookConfig.enabledEntries));
                 return currentSettings;
             }
         }
@@ -2231,12 +2245,15 @@ async function populateWorldbookEntryList() {
             const bookData = allBooks.find(b => b.name === bookName);
             if (bookData && bookData.entries) {
                 // 如果该世界书没有设置，默认启用所有条目
+                // 注意：只在新世界书时设置默认值，如果已有配置（即使是空数组），则使用已有配置
                 if (typeof worldbookConfig.enabledEntries[bookName] === 'undefined') {
                     worldbookConfig.enabledEntries[bookName] = bookData.entries.map(entry => entry.uid || entry.id);
                     settingsChanged = true;
+                    console.log('[世界书] 新世界书，默认启用所有条目:', bookName, worldbookConfig.enabledEntries[bookName]);
                 }
                 
                 const enabledEntries = worldbookConfig.enabledEntries[bookName] || [];
+                console.log('[世界书] 加载条目列表:', { bookName, enabledEntriesCount: enabledEntries.length, totalEntries: bookData.entries.length });
                 html += `<div style="margin-bottom: 8px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid var(--ios-border);">${escapeHtml(bookName)}</div>`;
                 
                 bookData.entries.forEach(entry => {
@@ -2266,12 +2283,22 @@ async function populateWorldbookEntryList() {
         // 绑定复选框事件
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
+            // 移除可能存在的旧事件监听器（避免重复绑定）
+            const newCheckbox = checkbox.cloneNode(true);
+            checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+            
+            newCheckbox.addEventListener('change', function() {
                 const bookName = this.dataset.book;
                 const entryUid = this.dataset.uid;
                 
+                console.log('[世界书] 复选框状态改变:', { bookName, entryUid, checked: this.checked });
+                
+                // 确保直接操作 currentSettings，而不是局部变量
                 if (!currentSettings.worldbookConfig) {
                     currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+                }
+                if (!currentSettings.worldbookConfig.enabledEntries) {
+                    currentSettings.worldbookConfig.enabledEntries = {};
                 }
                 if (!currentSettings.worldbookConfig.enabledEntries[bookName]) {
                     currentSettings.worldbookConfig.enabledEntries[bookName] = [];
@@ -2283,14 +2310,25 @@ async function populateWorldbookEntryList() {
                 if (this.checked) {
                     if (index === -1) {
                         enabledList.push(entryUid);
+                        console.log('[世界书] 已添加条目到启用列表:', entryUid);
                     }
                 } else {
                     if (index !== -1) {
                         enabledList.splice(index, 1);
+                        console.log('[世界书] 已从启用列表移除条目:', entryUid);
                     }
                 }
                 
-                saveSettings();
+                console.log('[世界书] 当前启用列表:', enabledList);
+                console.log('[世界书] 当前配置:', JSON.stringify(currentSettings.worldbookConfig.enabledEntries));
+                
+                // 保存设置
+                const saveResult = saveSettings();
+                if (saveResult) {
+                    console.log('[世界书] 设置已保存');
+                } else {
+                    console.error('[世界书] 设置保存失败');
+                }
             });
         });
     } catch (error) {
