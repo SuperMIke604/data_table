@@ -5171,6 +5171,51 @@ async function updateReadableLorebookEntry(createIfNeeded = false) {
     }
 }
 
+async function persistInitialDatabaseSnapshot(context) {
+    try {
+        if (!currentJsonTableData) {
+            console.warn('无法保存初始快照：currentJsonTableData 为空');
+            return;
+        }
+        
+        const chat = context?.chat || [];
+        if (!Array.isArray(chat)) {
+            console.warn('无法保存初始快照：chat 不可用');
+            return;
+        }
+        
+        const latestAiIndex = [...chat]
+            .map((msg, index) => (!msg.is_user ? index : -1))
+            .filter(index => index !== -1)
+            .pop();
+        
+        if (typeof latestAiIndex !== 'number') {
+            console.warn('无法保存初始快照：未找到AI消息');
+            return;
+        }
+        
+        const targetMessage = chat[latestAiIndex];
+        if (!targetMessage) {
+            console.warn('无法保存初始快照：目标消息不存在');
+            return;
+        }
+        
+        targetMessage.TavernDB_ACU_Data = JSON.parse(JSON.stringify(currentJsonTableData));
+        
+        if (typeof context.saveChat === 'function') {
+            await context.saveChat();
+            console.log('初始数据库快照已保存到聊天记录');
+        } else if (typeof SillyTavern !== 'undefined' && SillyTavern.saveChat) {
+            await SillyTavern.saveChat();
+            console.log('初始数据库快照已通过 SillyTavern.saveChat 保存');
+        } else {
+            console.warn('无法保存初始快照：saveChat 方法不可用');
+        }
+    } catch (error) {
+        console.error('保存初始数据库快照失败:', error);
+    }
+}
+
 /**
  * 格式化JSON数据为可读文本 - 参考参考文档实现
  * 重要角色表、总结表、故事主线表不应该展示在 TavernDB-ACU-ReadableDataTable 中
@@ -5726,7 +5771,15 @@ async function loadOrCreateJsonTableFromChatHistory() {
     const chat = context.chat;
     if (!chat || chat.length === 0) {
         console.log('聊天历史为空，初始化新数据库');
-        await initializeJsonTableFromTemplate();
+        const initialized = await initializeJsonTableFromTemplate();
+        if (initialized) {
+            try {
+                await updateReadableLorebookEntry(true);
+                await persistInitialDatabaseSnapshot(context);
+            } catch (error) {
+                console.error('初始化新数据库时写入世界书或聊天记录失败:', error);
+            }
+        }
         return;
     }
     
@@ -5749,7 +5802,16 @@ async function loadOrCreateJsonTableFromChatHistory() {
     
     // 如果到这里，说明聊天历史中没有找到数据库数据
     console.log('聊天历史中未找到数据库，初始化新数据库');
-    await initializeJsonTableFromTemplate();
+    const initialized = await initializeJsonTableFromTemplate();
+    if (initialized) {
+        try {
+            await updateReadableLorebookEntry(true);
+            await persistInitialDatabaseSnapshot(context);
+            console.log('新数据库已写入世界书并保存快照');
+        } catch (error) {
+            console.error('写入世界书或保存快照失败:', error);
+        }
+    }
 }
 
 /**
