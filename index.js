@@ -5477,22 +5477,14 @@ async function getInjectionTargetLorebook(targetSetting = null) {
     const injectionTarget = targetSetting || worldbookConfig.injectionTarget || 'character';
     
     if (injectionTarget === 'character') {
-        // 获取角色卡绑定的世界书
         const TavernHelper_API = getTavernHelperAPI();
-        
-        if (TavernHelper_API && typeof TavernHelper_API.getCharLorebooks === 'function') {
-            try {
-                const charLorebooks = await TavernHelper_API.getCharLorebooks({ type: 'all' });
-                if (charLorebooks && charLorebooks.primary) {
-                    return charLorebooks.primary;
-                }
-            } catch (error) {
-                console.error('获取角色卡世界书失败:', error);
-            }
+        try {
+            return await resolveCharacterPrimaryLorebook(TavernHelper_API);
+        } catch (error) {
+            console.error('解析角色卡世界书失败:', error);
+            return null;
         }
-        return null;
     } else {
-        // 返回手动选择的世界书名称
         return injectionTarget;
     }
 }
@@ -5610,6 +5602,53 @@ let eventListenerRetryTimer = null;
 const EVENT_LISTENER_RETRY_INTERVAL = 5000; // 5秒重试间隔
 const MAX_RETRY_ATTEMPTS = 20; // 最多重试20次（100秒）
 let retryAttempts = 0;
+let currentChatIdentifier = null;
+async function resolveCharacterPrimaryLorebook(TavernHelper_API) {
+    if (!TavernHelper_API) return null;
+    
+    // 首选：专用API
+    if (typeof TavernHelper_API.getCurrentCharPrimaryLorebook === 'function') {
+        try {
+            const primary = await TavernHelper_API.getCurrentCharPrimaryLorebook();
+            if (primary) {
+                return primary;
+            }
+        } catch (error) {
+            console.warn('调用 getCurrentCharPrimaryLorebook 失败:', error);
+        }
+    }
+    
+    // 回退：getCharLorebooks
+    if (typeof TavernHelper_API.getCharLorebooks === 'function') {
+        try {
+            const lorebooks = await TavernHelper_API.getCharLorebooks({ type: 'all' });
+            if (lorebooks) {
+                if (lorebooks.primary) {
+                    return lorebooks.primary;
+                }
+                if (Array.isArray(lorebooks.additional) && lorebooks.additional.length > 0) {
+                    return lorebooks.additional[0];
+                }
+            }
+        } catch (error) {
+            console.warn('调用 getCharLorebooks 失败:', error);
+        }
+    }
+    
+    // 额外回退：getCurrentLorebook
+    if (typeof TavernHelper_API.getCurrentLorebook === 'function') {
+        try {
+            const current = await TavernHelper_API.getCurrentLorebook();
+            if (current) {
+                return current;
+            }
+        } catch (error) {
+            console.warn('调用 getCurrentLorebook 失败:', error);
+        }
+    }
+    
+    return null;
+}
 
 const GENERATED_LOREBOOK_PREFIXES = [
     'TavernDB-ACU-ReadableDataTable',
@@ -6037,6 +6076,25 @@ function registerEventListeners() {
                 currentJsonTableData = null;
                 isAutoUpdating = false;
                 clearTimeout(newMessageDebounceTimer);
+                
+                // 记录当前聊天标识
+                if (chatFileName) {
+                    currentChatIdentifier = chatFileName;
+                }
+                
+                // 判断是否为全新聊天（无插件数据），如是则清理旧世界书条目
+                try {
+                    const latestContext = SillyTavern.getContext();
+                    const chat = latestContext?.chat || [];
+                    const hasExistingData = Array.isArray(chat) && chat.some(msg => msg && !msg.is_user && msg.TavernDB_ACU_Data);
+                    if (!hasExistingData) {
+                        console.log('[世界书] 检测到新聊天，没有历史数据，开始清理旧条目');
+                        await deleteGeneratedLorebookEntries();
+                    }
+                } catch (cleanupError) {
+                    console.error('聊天切换时清理世界书条目失败:', cleanupError);
+                }
+                
                 // 参考参考文档：重新加载数据库
                 await loadOrCreateJsonTableFromChatHistory();
             });
