@@ -798,10 +798,15 @@ function addDataPreviewButton(extensionsMenu, parentDoc) {
         showDataPreview();
     });
 
-    // 将按钮添加到菜单末尾（确保数据预览在最后，数据管理在倒数第二）
-    extensionsMenu.appendChild(buttonElement);
+    // 将按钮添加到菜单（插入到数据管理按钮之前）
+    const dataManageButton = parentDoc.getElementById('dataManageButton');
+    if (dataManageButton) {
+        extensionsMenu.insertBefore(buttonElement, dataManageButton);
+    } else {
+        extensionsMenu.appendChild(buttonElement);
+    }
     
-    console.log('数据预览按钮已添加到 wand menu（菜单最后）');
+    console.log('数据预览按钮已添加到 wand menu');
 }
 
 /**
@@ -846,11 +851,11 @@ function openDataManagePopup() {
                         <div style="display: flex; flex-direction: column; gap: 15px;">
                             <div class="data-manage-input-group">
                                 <label for="data-manage-floor-start">起始楼层:</label>
-                                <input type="number" id="data-manage-floor-start" placeholder="开始楼层" min="0" style="max-width: 150px;">
+                                <input type="number" id="data-manage-floor-start" placeholder="开始楼层" min="0">
                             </div>
                             <div class="data-manage-input-group">
                                 <label for="data-manage-floor-end">结束楼层:</label>
-                                <input type="number" id="data-manage-floor-end" placeholder="结束楼层" min="0" style="max-width: 150px;">
+                                <input type="number" id="data-manage-floor-end" placeholder="结束楼层" min="0">
                             </div>
                             <p class="data-manage-notes">楼层号从0开始（参考参考文档规则）</p>
                             <button id="data-manage-update-card" class="primary" style="width:100%;">按楼层范围更新数据库</button>
@@ -935,8 +940,6 @@ function openDataManagePopup() {
                     </div>
                     <div class="data-manage-button-group">
                         <button id="data-manage-save-prompt" class="primary">保存</button>
-                        <button id="data-manage-load-prompt-json" class="secondary">读取JSON模板</button>
-                        <button id="data-manage-reset-prompt" class="secondary">恢复默认</button>
                     </div>
                 </div>
             </div>
@@ -1056,11 +1059,7 @@ function openDataManagePopup() {
                         <button id="data-manage-import-combined" class="primary">合并导入(模板+指令)</button>
                         <button id="data-manage-export-combined" class="primary">合并导出(模板+指令)</button>
                     </div>
-                    <hr style="border-color: var(--ios-border); margin: 15px 0;">
-                    <div class="data-manage-button-group">
-                        <button id="data-manage-export-json" class="secondary">导出JSON数据</button>
-                    </div>
-                    <div class="data-manage-button-group" style="margin-top: 10px;">
+                    <div class="data-manage-button-group" style="margin-top: 15px;">
                         <button id="data-manage-visualize-template" class="secondary">可视化当前模板</button>
                         <button id="data-manage-show-overview" class="secondary">数据概览</button>
                     </div>
@@ -1482,95 +1481,6 @@ function setupPromptTabListeners(parentDoc) {
                     showToast('更新预设已保存', 'success');
                 } else {
                     showToast('保存失败', 'error');
-                }
-            }
-        });
-    }
-    
-    // 读取JSON模板
-    const loadBtn = parentDoc.getElementById('data-manage-load-prompt-json');
-    if (loadBtn) {
-        loadBtn.addEventListener('click', function() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json';
-            input.onchange = function(e) {
-                const file = e.target.files[0];
-                if (!file) return;
-                
-                const reader = new FileReader();
-                reader.onload = function(readerEvent) {
-                    const content = readerEvent.target.result;
-                    let jsonData;
-                    
-                    try {
-                        jsonData = JSON.parse(content);
-                    } catch (error) {
-                        console.error('导入提示词模板失败：JSON解析错误', error);
-                        showToast('文件不是有效的JSON格式', 'error');
-                        return;
-                    }
-                    
-                    try {
-                        // 验证：必须是包含 role 和 content 的对象数组
-                        if (!Array.isArray(jsonData) || jsonData.some(item => typeof item.role === 'undefined' || typeof item.content === 'undefined')) {
-                            throw new Error('JSON格式不正确。它必须是一个包含 "role" 和 "content" 键的对象的数组。');
-                        }
-                        
-                        // 规范化角色并添加 deletable 属性
-                        const segments = jsonData.map(item => {
-                            let normalizedRole = 'USER';
-                            if (item.role) {
-                                const roleLower = item.role.toLowerCase();
-                                if (roleLower === 'system') {
-                                    normalizedRole = 'SYSTEM';
-                                } else if (roleLower === 'assistant' || roleLower === 'ai') {
-                                    normalizedRole = 'assistant';
-                                } else if (roleLower === 'user') {
-                                    normalizedRole = 'USER';
-                                }
-                            }
-                            return {
-                                ...item,
-                                role: normalizedRole,
-                                deletable: item.deletable !== false
-                            };
-                        });
-                        
-                        // 保存到当前预设
-                        const currentIndex = currentSettings.currentPromptIndex || 0;
-                        if (currentIndex >= 0 && currentIndex < currentSettings.charCardPrompts.length) {
-                            currentSettings.charCardPrompts[currentIndex].prompt = segments;
-                            renderPromptSegments(segments);
-                            saveSettings();
-                            showToast('提示词模板已成功加载', 'success');
-                        }
-                        console.log('提示词模板已从JSON文件加载');
-                    } catch (error) {
-                        console.error('导入提示词模板失败：结构验证失败', error);
-                        showToast(`导入失败: ${error.message}`, 'error');
-                    }
-                };
-                reader.readAsText(file, 'UTF-8');
-            };
-            input.click();
-        });
-    }
-    
-    // 恢复默认
-    const resetBtn = parentDoc.getElementById('data-manage-reset-prompt');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', function() {
-            if (confirm('确定要恢复当前预设为默认值吗？当前设置将被覆盖。')) {
-                const currentIndex = currentSettings.currentPromptIndex || 0;
-                if (currentIndex >= 0 && currentIndex < currentSettings.charCardPrompts.length) {
-                    currentSettings.charCardPrompts[currentIndex].prompt = [...DEFAULT_CHAR_CARD_PROMPT];
-                    if (saveSettings()) {
-                        renderPromptSegments(DEFAULT_CHAR_CARD_PROMPT);
-                        showToast('更新预设已恢复为默认值', 'info');
-                    } else {
-                        showToast('恢复失败', 'error');
-                    }
                 }
             }
         });
@@ -3955,12 +3865,6 @@ function setupDataTabListeners(parentDoc) {
     const exportOverviewBtn = parentDoc.getElementById('data-manage-export-overview-data');
     if (exportOverviewBtn) {
         exportOverviewBtn.addEventListener('click', exportDataAsJSON);
-    }
-    
-    // 导出JSON数据
-    const exportJsonBtn = parentDoc.getElementById('data-manage-export-json');
-    if (exportJsonBtn) {
-        exportJsonBtn.addEventListener('click', exportDataAsJSON);
     }
     
     // 合并导出
