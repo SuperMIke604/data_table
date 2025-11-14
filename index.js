@@ -2262,10 +2262,12 @@ async function populateWorldbookEntryList() {
                     // 参考参考资料：使用 entry.comment 作为条目名称，如果没有则使用 uid
                     const entryName = entry.comment || entry.name || entryUid || `条目 ${entryUid}`;
                     const checkboxId = `worldbook-entry-${bookName}-${entryUid}`.replace(/[^a-zA-Z0-9-]/g, '-');
+                    const encodedBookName = encodeURIComponent(bookName);
+                    const encodedEntryUid = encodeURIComponent(entryUid);
                     
                     html += `
                         <div class="data-manage-checkbox-group" style="margin-bottom: 4px;">
-                            <input type="checkbox" id="${checkboxId}" data-book="${escapeHtml(bookName)}" data-uid="${escapeHtml(entryUid)}" ${isEnabled ? 'checked' : ''}>
+                            <input type="checkbox" id="${checkboxId}" data-book="${encodedBookName}" data-uid="${encodedEntryUid}" ${isEnabled ? 'checked' : ''}>
                             <label for="${checkboxId}" style="margin: 0; cursor: pointer; flex: 1;">${escapeHtml(entryName)}</label>
                         </div>
                     `;
@@ -2288,8 +2290,8 @@ async function populateWorldbookEntryList() {
             checkbox.parentNode.replaceChild(newCheckbox, checkbox);
             
             newCheckbox.addEventListener('change', function() {
-                const bookName = this.dataset.book;
-                const entryUid = this.dataset.uid;
+                const bookName = decodeURIComponent(this.dataset.book || '');
+                const entryUid = decodeURIComponent(this.dataset.uid || '');
                 
                 console.log('[世界书] 复选框状态改变:', { bookName, entryUid, checked: this.checked });
                 
