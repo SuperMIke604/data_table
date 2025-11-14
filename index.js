@@ -829,8 +829,8 @@ function openDataManagePopup() {
             <!-- Tab导航 -->
             <div class="data-manage-tabs-nav">
                 <button class="data-manage-tab-button active" data-tab="status">状态 & 操作</button>
-                <button class="data-manage-tab-button" data-tab="prompt">AI指令预设</button>
-                <button class="data-manage-tab-button" data-tab="api">API & 连接</button>
+                <button class="data-manage-tab-button" data-tab="prompt">数据库更新预设</button>
+                <button class="data-manage-tab-button" data-tab="api">API设置</button>
                 <button class="data-manage-tab-button" data-tab="worldbook">世界书</button>
                 <button class="data-manage-tab-button" data-tab="data">数据管理</button>
             </div>
@@ -917,7 +917,7 @@ function openDataManagePopup() {
             
             <div id="data-manage-tab-prompt" class="data-manage-tab-content">
                 <div class="data-manage-card">
-                    <h3>数据库更新预设 (任务指令)</h3>
+                    <h3>数据库更新预设</h3>
                     <div style="margin-bottom: 15px;">
                         <label for="data-manage-prompt-selector">选择预设:</label>
                         <div class="data-manage-input-group" style="margin-top: 8px;">
@@ -1040,8 +1040,8 @@ function openDataManagePopup() {
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <label style="margin-bottom: 0;">启用的世界书条目:</label>
                             <div class="data-manage-button-group" style="margin: 0; gap: 8px;">
-                                <button id="data-manage-worldbook-select-all" class="secondary" style="padding: 6px 12px; font-size: 13px;">全选</button>
-                                <button id="data-manage-worldbook-deselect-all" class="secondary" style="padding: 6px 12px; font-size: 13px;">全不选</button>
+                                <button id="data-manage-worldbook-select-all" class="secondary">全选</button>
+                                <button id="data-manage-worldbook-deselect-all" class="secondary">全不选</button>
                             </div>
                         </div>
                         <div id="data-manage-worldbook-entry-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);">
@@ -1072,8 +1072,6 @@ function openDataManagePopup() {
                     </div>
                     <div id="data-manage-overview-area" style="display: none; margin-top: 15px;">
                         <div class="data-manage-button-group" style="margin-bottom: 10px;">
-                            <button id="data-manage-refresh-overview" class="secondary">刷新概览</button>
-                            <button id="data-manage-export-overview-data" class="secondary">导出数据</button>
                             <button id="data-manage-close-overview" class="secondary">关闭</button>
                         </div>
                         <div id="data-manage-overview-container" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);">
@@ -1161,10 +1159,10 @@ function setupPopupEventListeners() {
     // 状态 & 操作 Tab 的按钮
     setupStatusTabListeners(parentDoc);
     
-    // AI指令预设 Tab 的按钮
+    // 数据库更新预设 Tab 的按钮
     setupPromptTabListeners(parentDoc);
     
-    // API & 连接 Tab 的按钮
+    // API设置 Tab 的按钮
     setupApiTabListeners(parentDoc);
     
     // 世界书 Tab 的按钮
@@ -1205,6 +1203,8 @@ function switchTab(tabName) {
     
     // 如果切换到世界书Tab，加载世界书列表
     if (tabName === 'worldbook') {
+        // 确保设置已加载
+        loadSettings();
         populateInjectionTargetSelector();
         updateWorldbookSourceView();
     }
@@ -1346,7 +1346,7 @@ function setupStatusTabListeners(parentDoc) {
 }
 
 /**
- * 设置AI指令预设Tab的事件监听器
+ * 设置数据库更新预设Tab的事件监听器
  */
 function setupPromptTabListeners(parentDoc) {
     // 确保预设数组存在
@@ -2146,6 +2146,8 @@ async function populateWorldbookEntryList() {
     
     container.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载条目...</em>';
     
+    // 确保设置已加载（从存储中重新加载，以防切换tab时设置丢失）
+    loadSettings();
     const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
     const source = worldbookConfig.source || 'character';
     let bookNames = [];
@@ -3850,21 +3852,6 @@ function setupDataTabListeners(parentDoc) {
             const overviewArea = parentDoc.getElementById('data-manage-overview-area');
             if (overviewArea) overviewArea.style.display = 'none';
         });
-    }
-    
-    // 刷新概览
-    const refreshOverviewBtn = parentDoc.getElementById('data-manage-refresh-overview');
-    if (refreshOverviewBtn) {
-        refreshOverviewBtn.addEventListener('click', function() {
-            showDataOverview();
-            showToast('数据概览已刷新', 'success');
-        });
-    }
-    
-    // 导出概览数据
-    const exportOverviewBtn = parentDoc.getElementById('data-manage-export-overview-data');
-    if (exportOverviewBtn) {
-        exportOverviewBtn.addEventListener('click', exportDataAsJSON);
     }
     
     // 合并导出
