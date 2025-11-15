@@ -4336,6 +4336,13 @@ async function getCombinedWorldbookContent(messages) {
             return '';
         }
 
+        // 加载启用的条目配置
+        let enabledEntriesMap = worldbookConfig.enabledEntries || {};
+        // 如果enabledEntries不存在，则创建并保存到worldbookConfig中
+        if (!worldbookConfig.enabledEntries) {
+            worldbookConfig.enabledEntries = enabledEntriesMap;
+        }
+
         let allEntries = [];
         for (const bookName of bookNames) {
             if (bookName) {
@@ -4343,10 +4350,14 @@ async function getCombinedWorldbookContent(messages) {
                 if (entries?.length) {
                     // 为每个条目注入bookName以便后续参考
                     entries.forEach(entry => allEntries.push({ ...entry, bookName }));
+                    // 如果该世界书没有启用条目配置，则默认启用所有条目
+                    if (typeof enabledEntriesMap[bookName] === 'undefined') {
+                        enabledEntriesMap[bookName] = entries.map(entry => entry.uid);
+                    }
                 }
             }
         }
-
+        
         // 默认不读取由插件生成的世界书条目
         const prefixesToExclude = [
             'TavernDB-ACU-ReadableDataTable',     // 全局条目
@@ -4360,13 +4371,11 @@ async function getCombinedWorldbookContent(messages) {
             console.log('筛选后，所选世界书不包含任何条目。');
             return '';
         }
-        
-        const enabledEntriesMap = worldbookConfig.enabledEntries || {};
         const userEnabledEntries = allEntries.filter(entry => {
             if (!entry.enabled) return false; // 过滤掉在Tavern中禁用的条目
             const bookConfig = enabledEntriesMap[entry.bookName];
-            // 条目必须在插件的UI设置中明确启用
-            return bookConfig ? bookConfig.includes(entry.uid) : false; 
+            // 如果世界书没有条目配置，则默认启用所有条目
+            return bookConfig ? bookConfig.includes(entry.uid) : true; 
         });
 
         if (userEnabledEntries.length === 0) {
