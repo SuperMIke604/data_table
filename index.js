@@ -4358,23 +4358,22 @@ async function getCombinedWorldbookContent(messages) {
         allEntries = allEntries.filter(entry =>
             !entry.comment || !prefixesToExclude.some(prefix => entry.comment.startsWith(prefix))
         );
+
+        if (allEntries.length === 0) {
+            console.log('筛选后，所选世界书不包含任何条目。');
+            return '';
+        }
         
         const enabledEntriesMap = worldbookConfig.enabledEntries || {};
         const userEnabledEntries = allEntries.filter(entry => {
             if (!entry.enabled) return false; // Filter out entries disabled in Tavern
             const bookConfig = enabledEntriesMap[entry.bookName];
             // Entry must be explicitly enabled in the plugin's UI settings
-            return bookConfig ? bookConfig.includes(entry.uid) : false;
+            return bookConfig ? bookConfig.includes(entry.uid) : false; 
         });
 
         if (userEnabledEntries.length === 0) {
             console.log('在插件设置中没有启用任何条目。');
-            return '';
-        }
-
-        if (allEntries.length === 0) {
-            console.log('筛选后没有找到任何条目');
-            console.log('筛选后，所选世界书不包含任何条目。');
             return '';
         }
         
@@ -4435,8 +4434,6 @@ async function getCombinedWorldbookContent(messages) {
             console.warn(`世界书递归达到${MAX_RECURSION_DEPTH}的最大深度。打破循环。`);
         }
 
-        // 移除了参考文档中没有的逻辑：如果没有触发任何条目则添加所有用户启用的条目
-
         const finalContent = Array.from(triggeredEntries).map(entry => {
             // 添加一个简单的标题以提高可读性
             return `### ${entry.comment || `来自${entry.bookName}的条目`}\n${entry.content}`;
@@ -4486,10 +4483,10 @@ async function prepareAIInput(messages) {
         let rowsToProcess = allRows;
         let startIndex = 0;
         
-        // 如果是总结表并且行数超过配置的最大条目数，则只提取最新的N条
-        if (table.name.trim() === '总结表' && allRows.length > (currentSettings.summaryTableMaxEntries || 10)) {
-            startIndex = allRows.length - (currentSettings.summaryTableMaxEntries || 10);
-            rowsToProcess = allRows.slice(-(currentSettings.summaryTableMaxEntries || 10));
+        // 如果是总结表并且行数超过10，则只提取最新的10条
+        if (table.name.trim() === '总结表' && allRows.length > 10) {
+            startIndex = allRows.length - 10;
+            rowsToProcess = allRows.slice(-10);
             tableDataText += `  - Note: Showing last ${rowsToProcess.length} of ${allRows.length} entries.\n`;
         }
         
@@ -4515,34 +4512,13 @@ async function prepareAIInput(messages) {
             const prefix = msg.is_user ? name1 : (msg.name || '角色');
             let content = msg.mes || msg.message || '';
             
-            // 清理内容：移除标记和标签 - 参考参考文档
+            // 先清理内容
+            content = removeMarkerContent(content);
+            content = removeTaggedContent(content);
             
-            // 参考参考文档：使用 removeTaggedContent_ACU 的实现方式
-            if (currentSettings.removeTags && typeof content === 'string' && content.trim() !== '') {
-                const tagsToRemove = currentSettings.removeTags.split('|')
-                    .map(tag => tag.trim())
-                    .filter(tag => tag);
-                
-                if (tagsToRemove.length > 0) {
-                    let cleanedText = content;
-                    tagsToRemove.forEach(tag => {
-                        // 创建一个正则表达式来匹配 <tag>...</tag> and <tag/>
-                        // g for global, i for case-insensitive
-                        const regex = new RegExp(`<${tag}>[\\s\\S]*?<\\/${tag}>|<${tag}\\/>`, 'gi');
-                        cleanedText = cleanedText.replace(regex, '');
-                    });
-                    content = cleanedText;
-                }
-            }
-            
-            // 如果是用户消息，添加标签 - 参考参考文档
-            if (msg.is_user && currentSettings.userMessageTags) {
-                const tags = currentSettings.userMessageTags.split('|').map(t => t.trim()).filter(t => t);
-                tags.forEach(tag => {
-                    if (tag) {
-                        content = `<${tag}>${content}</${tag}>`;
-                    }
-                });
+            // 如果是用户消息，添加标签
+            if (msg.is_user) {
+                content = wrapUserMessageWithTags(content);
             }
             
             return `${prefix}: ${content}`;
@@ -4551,175 +4527,72 @@ async function prepareAIInput(messages) {
         messagesText += '(无最新对话内容)';
     }
     
+    // 返回动态内容部分用于插值
     return { tableDataText, messagesText, worldbookContent };
 }
 
 /**
- * 调用自定义OpenAI API
+ * 调用自定义OpenAI API - 处理$0/$1/$4占位符替换
  */
-async function callCustomOpenAI(dynamicContent) {
-    // 创建新的AbortController用于本次请求
-    currentAbortController = new AbortController();
-    const abortSignal = currentAbortController.signal;
-    
-    // 组装最终的消息数组
-    const messages = [];
-    const charCardPrompt = getCurrentPrompt(currentSettings);
-    
-    let promptSegments = [];
-    if (Array.isArray(charCardPrompt)) {
-        promptSegments = charCardPrompt;
-    } else if (typeof charCardPrompt === 'string') {
-        promptSegments = [{ role: 'USER', content: charCardPrompt }];
+async function callCustomOpenAI(prompt, messages) {
+    if (!currentSettings.apiKey || !currentSettings.apiUrl) {
+        console.error('callCustomOpenAI: 缺少API配置');
+        return null;
     }
     
-    // 在每个段落中替换占位符
-    promptSegments.forEach(segment => {
-        let finalContent = segment.content || '';
-        finalContent = finalContent.replace(/\$0/g, dynamicContent.tableDataText || '');
-        finalContent = finalContent.replace(/\$1/g, dynamicContent.messagesText || '');
-        finalContent = finalContent.replace(/\$4/g, dynamicContent.worldbookContent || '');
+    try {
+        // 准备动态内容
+        const dynamicContent = await prepareAIInput(messages);
+        if (!dynamicContent) {
+            console.error('callCustomOpenAI: 无法准备动态内容');
+            return null;
+        }
         
-        // 转换role为小写（API要求）
-        messages.push({ 
-            role: (segment.role || 'user').toLowerCase(), 
-            content: finalContent 
+        // 替换占位符 - 参考参考文档：使用正则表达式
+        let processedPrompt = prompt;
+        processedPrompt = processedPrompt.replace(/\$0/g, dynamicContent.tableDataText);
+        processedPrompt = processedPrompt.replace(/\$1/g, dynamicContent.messagesText);
+        processedPrompt = processedPrompt.replace(/\$4/g, dynamicContent.worldbookContent);
+        
+        // 准备API请求
+        const requestPayload = {
+            model: currentSettings.model || "gpt-3.5-turbo",
+            messages: [
+                { role: "system", content: processedPrompt },
+                { role: "user", content: "请根据上述指令处理数据。" }
+            ],
+            max_tokens: 4000,
+            temperature: 0.7
+        };
+        
+        // 调用API
+        const response = await fetch(currentSettings.apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${currentSettings.apiKey}`
+            },
+            body: JSON.stringify(requestPayload)
         });
-    });
-    
-    console.log('准备发送到API的消息:', messages);
-    
-    const apiConfig = currentSettings.apiConfig || {};
-    
-    // 根据API模式选择调用方式
-    if (currentSettings.apiMode === 'tavern') {
-        // 使用酒馆连接预设
-        const profileId = currentSettings.tavernProfile;
-        if (!profileId) {
-            throw new Error('未选择酒馆连接预设');
+        
+        if (!response.ok) {
+            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
         }
         
-        const context = SillyTavern.getContext();
-        if (!context || !context.extensionSettings || !context.extensionSettings.connectionManager) {
-            throw new Error('无法访问连接管理器');
+        const responseData = await response.json();
+        const aiResponse = responseData.choices?.[0]?.message?.content;
+        
+        if (!aiResponse) {
+            throw new Error('API返回了空响应');
         }
         
-        const profiles = context.extensionSettings.connectionManager.profiles || [];
-        const targetProfile = profiles.find(p => p.id === profileId);
+        // 处理AI响应
+        return parseAndApplyTableEdits(aiResponse);
         
-        if (!targetProfile) {
-            throw new Error(`无法找到ID为 "${profileId}" 的连接预设`);
-        }
-        
-        if (!targetProfile.api) {
-            throw new Error(`预设 "${targetProfile.name || targetProfile.id}" 没有配置API`);
-        }
-        
-        // 使用ConnectionManagerRequestService发送请求
-        if (!context.ConnectionManagerRequestService || !context.ConnectionManagerRequestService.sendRequest) {
-            throw new Error('ConnectionManagerRequestService不可用');
-        }
-        
-        const response = await context.ConnectionManagerRequestService.sendRequest(
-            profileId,
-            messages,
-            apiConfig.max_tokens || 4096
-        );
-        
-        if (response && response.ok && response.result?.choices?.[0]?.message?.content) {
-            return response.result.choices[0].message.content.trim();
-        } else if (response && typeof response.content === 'string') {
-            return response.content.trim();
-        } else {
-            const errorMsg = response?.error || JSON.stringify(response);
-            throw new Error(`酒馆预设API调用返回无效响应: ${errorMsg}`);
-        }
-        
-    } else {
-        // 使用自定义API
-        if (apiConfig.useMainApi) {
-            // 模式A: 使用主API
-            const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
-            let TavernHelper = null;
-            
-            if (parentWin && parentWin.TavernHelper) {
-                TavernHelper = parentWin.TavernHelper;
-            } else if (window.TavernHelper) {
-                TavernHelper = window.TavernHelper;
-            }
-            
-            if (!TavernHelper || typeof TavernHelper.generateRaw !== 'function') {
-                throw new Error('TavernHelper.generateRaw 函数不存在。请检查酒馆版本。');
-            }
-            
-            const response = await TavernHelper.generateRaw({
-                ordered_prompts: messages,
-                should_stream: false, // 数据库更新不需要流式输出
-            });
-            
-            if (typeof response !== 'string') {
-                throw new Error('主API调用未返回预期的文本响应');
-            }
-            
-            return response.trim();
-            
-        } else {
-            // 模式B: 使用独立配置的API
-            if (!apiConfig.url || !apiConfig.model) {
-                throw new Error('自定义API的URL或模型未配置');
-            }
-            
-            const generateUrl = `/api/backends/chat-completions/generate`;
-            const context = SillyTavern.getContext();
-            const headers = { 
-                ...(context.getRequestHeaders ? context.getRequestHeaders() : {}), 
-                'Content-Type': 'application/json' 
-            };
-            
-            const body = JSON.stringify({
-                messages: messages,
-                model: apiConfig.model,
-                temperature: apiConfig.temperature || 0.9,
-                frequency_penalty: 0,
-                presence_penalty: 0.12,
-                top_p: apiConfig.top_p || 0.9,
-                max_tokens: apiConfig.max_tokens || 120000,
-                stream: false,
-                chat_completion_source: 'custom',
-                group_names: [],
-                include_reasoning: false,
-                reasoning_effort: 'medium',
-                enable_web_search: false,
-                request_images: false,
-                custom_prompt_post_processing: 'strict',
-                reverse_proxy: apiConfig.url,
-                proxy_password: '',
-                custom_url: apiConfig.url,
-                custom_include_headers: apiConfig.apiKey ? `Authorization: Bearer ${apiConfig.apiKey}` : ''
-            });
-            
-            console.log('调用自定义API:', generateUrl, 'Model:', apiConfig.model);
-            
-            const response = await fetch(generateUrl, { 
-                method: 'POST', 
-                headers, 
-                body, 
-                signal: abortSignal 
-            });
-            
-            if (!response.ok) {
-                const errTxt = await response.text();
-                throw new Error(`API请求失败: ${response.status} ${response.statusText} - ${errTxt}`);
-            }
-            
-            const data = await response.json();
-            
-            if (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
-                return data.choices[0].message.content.trim();
-            }
-            
-            throw new Error('API响应格式不正确或内容为空');
-        }
+    } catch (error) {
+        console.error('callCustomOpenAI 错误:', error);
+        toastr.error(`调用AI API失败: ${error.message}`);
+        return null;
     }
 }
 
