@@ -4339,22 +4339,22 @@ async function getCombinedWorldbookContent(messages) {
             return '';
         }
 
-        // 加载启用的条目配置
-        let enabledEntriesMap = worldbookConfig.enabledEntries || {};
+        let allEntries = [];
+        const enabledEntriesMap = worldbookConfig.enabledEntries || {};
+        
         // 如果enabledEntries不存在，则创建并保存到worldbookConfig中
         if (!worldbookConfig.enabledEntries) {
             worldbookConfig.enabledEntries = enabledEntriesMap;
         }
-
-        let allEntries = [];
+        
         for (const bookName of bookNames) {
             if (bookName) {
                 const entries = await TavernHelper.getLorebookEntries(bookName);
                 if (entries?.length) {
                     // 为每个条目注入bookName以便后续参考
                     entries.forEach(entry => allEntries.push({ ...entry, bookName }));
-                    // 如果该世界书没有启用条目配置，则默认启用所有条目
-                    if (typeof enabledEntriesMap[bookName] === 'undefined') {
+                    // 如果该世界书没有启用条目配置或配置为空数组，则默认启用所有条目
+                    if (typeof enabledEntriesMap[bookName] === 'undefined' || enabledEntriesMap[bookName].length === 0) {
                         enabledEntriesMap[bookName] = entries.map(entry => entry.uid);
                     }
                 }
@@ -4369,21 +4369,22 @@ async function getCombinedWorldbookContent(messages) {
         allEntries = allEntries.filter(entry =>
             !entry.comment || !prefixesToExclude.some(prefix => entry.comment.startsWith(prefix))
         );
-
-        if (allEntries.length === 0) {
-        console.log('筛选后没有找到任何条目');
-            console.log('筛选后，所选世界书不包含任何条目。');
-            return '';
-        }
+        
         const userEnabledEntries = allEntries.filter(entry => {
+            if (entry.enabled === false) return false; // 仅过滤掉在Tavern中明确禁用的条目
             const bookConfig = enabledEntriesMap[entry.bookName];
             // 如果世界书没有条目配置或配置为空数组，则默认启用所有条目
             return (bookConfig === undefined || bookConfig.length === 0) ? true : bookConfig.includes(entry.uid);
         });
 
         if (userEnabledEntries.length === 0) {
-        console.log('没有启用任何条目');
-            console.log('插件设置中没有启用任何条目。');
+            console.log('在插件设置中没有启用任何条目。');
+            return '';
+        }
+
+        if (allEntries.length === 0) {
+            console.log('筛选后没有找到任何条目');
+            console.log('筛选后，所选世界书不包含任何条目。');
             return '';
         }
         
