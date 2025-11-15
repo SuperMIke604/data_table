@@ -2240,6 +2240,7 @@ async function populateWorldbookEntryList() {
             
             // 如果仍然没有获取到，尝试从角色卡数据中获取
             if (bookNames.length === 0) {
+        console.log('没有找到任何世界书');
                 const context = SillyTavern.getContext();
                 if (context && context.chat && context.chat.character) {
                     try {
@@ -4309,6 +4310,8 @@ async function loadDatabaseTemplate() {
 async function getCombinedWorldbookContent(messages) {
     console.log('开始获取合并的世界书内容...');
     const worldbookConfig = currentSettings.worldbookConfig || {};
+    console.log('世界书配置:', worldbookConfig);
+    console.log('当前设置:', currentSettings);
 
     // 检查是否有必要的API可用
     const TavernHelper = window.TavernHelper;
@@ -4368,17 +4371,18 @@ async function getCombinedWorldbookContent(messages) {
         );
 
         if (allEntries.length === 0) {
+        console.log('筛选后没有找到任何条目');
             console.log('筛选后，所选世界书不包含任何条目。');
             return '';
         }
         const userEnabledEntries = allEntries.filter(entry => {
-            if (!entry.enabled) return false; // 过滤掉在Tavern中禁用的条目
             const bookConfig = enabledEntriesMap[entry.bookName];
-            // 如果世界书没有条目配置，则默认启用所有条目
-            return bookConfig ? bookConfig.includes(entry.uid) : true; 
+            // 如果世界书没有条目配置或配置为空数组，则默认启用所有条目
+            return (bookConfig === undefined || bookConfig.length === 0) ? true : bookConfig.includes(entry.uid);
         });
 
         if (userEnabledEntries.length === 0) {
+        console.log('没有启用任何条目');
             console.log('插件设置中没有启用任何条目。');
             return '';
         }
@@ -4438,6 +4442,12 @@ async function getCombinedWorldbookContent(messages) {
 
         if (recursionDepth >= MAX_RECURSION_DEPTH) {
             console.warn(`世界书递归达到${MAX_RECURSION_DEPTH}的最大深度。打破循环。`);
+        }
+
+        // 如果没有触发任何条目，添加所有用户启用的条目
+        if (triggeredEntries.size === 0) {
+            userEnabledEntries.forEach(entry => triggeredEntries.add(entry));
+            console.log('没有触发任何世界书条目，添加所有用户启用的条目');
         }
 
         const finalContent = Array.from(triggeredEntries).map(entry => {
