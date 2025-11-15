@@ -4304,6 +4304,155 @@ async function loadDatabaseTemplate() {
 }
 
 /**
+ * 获取合并的世界书内容
+ */
+async function getCombinedWorldbookContent(messages) {
+    console.log('开始获取合并的世界书内容...');
+    const worldbookConfig = currentSettings.worldbookConfig || {};
+
+    // 检查是否有必要的API可用
+    const TavernHelper = window.TavernHelper;
+    const context = SillyTavern.getContext();
+    const SillyTavern_API = context?.SillyTavern_API;
+
+    if (!TavernHelper || !SillyTavern_API) {
+        console.warn('[Worldbook] TavernHelper或SillyTavern API不可用，无法获取世界书内容。');
+        return '';
+    }
+
+    try {
+        let bookNames = [];
+        
+        if (worldbookConfig.source === 'manual') {
+            bookNames = worldbookConfig.manualSelection || [];
+        } else { // 'character' mode
+            const charLorebooks = await TavernHelper.getCharLorebooks({ type: 'all' });
+            if (charLorebooks.primary) bookNames.push(charLorebooks.primary);
+            if (charLorebooks.additional?.length) bookNames.push(...charLorebooks.additional);
+        }
+
+        if (bookNames.length === 0) {
+            console.log('没有为角色选择或可用的世界书。');
+            return '';
+        }
+
+        let allEntries = [];
+        for (const bookName of bookNames) {
+            if (bookName) {
+                const entries = await TavernHelper.getLorebookEntries(bookName);
+                if (entries?.length) {
+                    // 为每个条目注入bookName以便后续参考
+                    entries.forEach(entry => allEntries.push({ ...entry, bookName }));
+                }
+            }
+        }
+
+        // 默认不读取由插件生成的世界书条目
+        const prefixesToExclude = [
+            'TavernDB-ACU-ReadableDataTable',     // 全局条目
+            '重要人物条目'                        // 重要人物条目
+        ];
+        allEntries = allEntries.filter(entry =>
+            !entry.comment || !prefixesToExclude.some(prefix => entry.comment.startsWith(prefix))
+        );
+
+        if (allEntries.length === 0) {
+            console.log('筛选后，所选世界书不包含任何条目。');
+            return '';
+        }
+        
+        const enabledEntriesMap = worldbookConfig.enabledEntries || {};
+        const userEnabledEntries = allEntries.filter(entry => {
+            if (!entry.enabled) return false; // 过滤掉在Tavern中禁用的条目
+            const bookConfig = enabledEntriesMap[entry.bookName];
+            // 条目必须在插件的UI设置中明确启用
+            return bookConfig ? bookConfig.includes(entry.uid) : false; 
+        });
+
+        if (userEnabledEntries.length === 0) {
+            console.log('插件设置中没有启用任何条目。');
+            return '';
+        }
+        
+        // 使用提供的消息作为聊天历史
+        const chatHistory = messages.map(message => message.mes || message.message || '').join('\n').toLowerCase();
+        const getEntryKeywords = (entry) => [...new Set([...(entry.key || []), ...(entry.keys || [])])].map(k => k.toLowerCase());
+
+        // 将常量条目（"蓝色指示灯"）与基于关键字的条目（"绿色指示灯"）分开
+        const constantEntries = userEnabledEntries.filter(entry => entry.type === 'constant');
+        let keywordEntries = userEnabledEntries.filter(entry => entry.type !== 'constant');
+        
+        const triggeredEntries = new Set([...constantEntries]);
+        let recursionDepth = 0;
+        const MAX_RECURSION_DEPTH = 10; // 无限循环的安全断点
+
+        while (recursionDepth < MAX_RECURSION_DEPTH) {
+            recursionDepth++;
+            let hasChangedInThisPass = false;
+            
+            // 搜索文本包括聊天历史和已触发条目的内容（这些条目未标记为prevent_recursion）
+            const recursionSourceContent = Array.from(triggeredEntries)
+                .filter(e => !e.prevent_recursion)
+                .map(e => e.content)
+                .join('\n')
+                .toLowerCase();
+            const fullSearchText = `${chatHistory}\n${recursionSourceContent}`;
+
+            const remainingKeywordEntries = [];
+            
+            for (const entry of keywordEntries) {
+                const keywords = getEntryKeywords(entry);
+                // 如果任何关键字被找到，则触发条目
+                // 如果exclude_recursion为true，则仅在聊天历史中搜索
+                // 否则，在全文本中搜索（历史+触发内容）
+                let isTriggered = keywords.length > 0 && keywords.some(keyword => 
+                    entry.exclude_recursion ? chatHistory.includes(keyword) : fullSearchText.includes(keyword)
+                );
+
+                if (isTriggered) {
+                    triggeredEntries.add(entry);
+                    hasChangedInThisPass = true;
+                } else {
+                    remainingKeywordEntries.push(entry);
+                }
+            }
+            
+            // 如果在整个过程中没有触发新条目，则该过程是稳定的
+            if (!hasChangedInThisPass) {
+                console.log(`世界书递归在${recursionDepth}次后稳定下来。`);
+                break;
+            }
+            
+            // 更新下一次要检查的条目列表
+            keywordEntries = remainingKeywordEntries;
+        }
+
+        if (recursionDepth >= MAX_RECURSION_DEPTH) {
+            console.warn(`世界书递归达到${MAX_RECURSION_DEPTH}的最大深度。打破循环。`);
+        }
+
+        const finalContent = Array.from(triggeredEntries).map(entry => {
+            // 添加一个简单的标题以提高可读性
+            return `### ${entry.comment || `来自${entry.bookName}的条目`}\n${entry.content}`;
+        }).filter(Boolean);
+
+        if (finalContent.length === 0) {
+            console.log('最终没有触发任何世界书条目。');
+            return '';
+        }
+
+        const combinedContent = finalContent.join('\n\n');
+        
+        console.log(`生成的合并世界书内容，长度：${combinedContent.length}。触发了${triggeredEntries.size}个条目。`);
+        return combinedContent.trim();
+
+    } catch (error) {
+        console.error('[Worldbook] 处理世界书逻辑时发生错误：', error);
+        return ''; // 在错误时返回空字符串以防止生成中断
+    }
+}
+
+/**
  * 准备AI输入 - 准备表格数据、消息文本、世界书内容
  */
 async function prepareAIInput(messages) {
@@ -4312,8 +4461,8 @@ async function prepareAIInput(messages) {
         return null;
     }
     
-    // 获取世界书内容（暂时返回空字符串，后续可以完善）
-    const worldbookContent = '';
+    // 获取世界书内容
+    const worldbookContent = await getCombinedWorldbookContent(messages);
     
     // 1. 格式化当前JSON表格数据为可读文本（用于$0占位符）
     let tableDataText = '';
