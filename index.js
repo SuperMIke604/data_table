@@ -2240,7 +2240,6 @@ async function populateWorldbookEntryList() {
             
             // 如果仍然没有获取到，尝试从角色卡数据中获取
             if (bookNames.length === 0) {
-        console.log('没有找到任何世界书');
                 const context = SillyTavern.getContext();
                 if (context && context.chat && context.chat.character) {
                     try {
@@ -4305,159 +4304,65 @@ async function loadDatabaseTemplate() {
 }
 
 /**
- * 获取合并的世界书内容
+ * 准备AI输入 - 准备表格数据、消息文本、世界书内容
  */
-async function getCombinedWorldbookContent(messages) {
-    console.log('Starting to get combined worldbook content with advanced logic...');
-    const worldbookConfig = currentSettings.worldbookConfig || {};
-    console.log('Worldbook config:', worldbookConfig);
-    console.log('Current settings:', currentSettings);
-
-    // 检查是否有必要的API可用
-    const TavernHelper = window.TavernHelper;
-    const context = SillyTavern.getContext();
-    const SillyTavern_API = context?.SillyTavern_API;
-
-    if (!TavernHelper || !SillyTavern_API) {
-        console.warn('[Worldbook] TavernHelper or SillyTavern API not available, cannot get worldbook content.');
-        return '';
-    }
-
+async function getCombinedWorldbookContent() {
     try {
+        const parentWin = (typeof window.parent !== 'undefined') ? window.parent : window;
+        let TavernHelper_API = getTavernHelperAPI ? getTavernHelperAPI() : (typeof TavernHelper !== 'undefined' ? TavernHelper : (parentWin && parentWin.TavernHelper ? parentWin.TavernHelper : null));
+        const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
         let bookNames = [];
-        
-        if (worldbookConfig.source === 'manual') {
+        if ((worldbookConfig.source || 'character') === 'character') {
+            if (TavernHelper_API && typeof TavernHelper_API.getCharLorebooks === 'function') {
+                try {
+                    const charLorebooks = await TavernHelper_API.getCharLorebooks({ type: 'all' });
+                    if (charLorebooks) {
+                        if (charLorebooks.primary) bookNames.push(charLorebooks.primary);
+                        if (Array.isArray(charLorebooks.additional) && charLorebooks.additional.length > 0) bookNames.push(...charLorebooks.additional);
+                    }
+                } catch (_) {}
+            }
+            if (bookNames.length === 0) {
+                const context = SillyTavern.getContext();
+                if (context && context.chat && context.chat.character) {
+                    try {
+                        const char = context.chat.character;
+                        if (Array.isArray(char.lorebook) && char.lorebook.length > 0) {
+                            const names = new Set();
+                            char.lorebook.forEach(e => { if (e && e.worldbook) names.add(e.worldbook); });
+                            bookNames = Array.from(names);
+                        }
+                    } catch (_) {}
+                }
+            }
+        } else {
             bookNames = worldbookConfig.manualSelection || [];
-        } else { // 'character' mode
-            const charLorebooks = await TavernHelper.getCharLorebooks({ type: 'all' });
-            if (charLorebooks.primary) bookNames.push(charLorebooks.primary);
-            if (charLorebooks.additional?.length) bookNames.push(...charLorebooks.additional);
         }
-
-        if (bookNames.length === 0) {
-            console.log('No worldbooks selected or available for the character.');
-            return '';
-        }
-
-        let allEntries = [];
+        if (!Array.isArray(bookNames) || bookNames.length === 0) return '';
+        const allBooks = await getWorldBooks();
+        const enabledEntriesMap = (currentSettings.worldbookConfig && currentSettings.worldbookConfig.enabledEntries) ? currentSettings.worldbookConfig.enabledEntries : {};
+        const normalizeId = (entry) => String(entry?.uid ?? entry?.id ?? '');
+        let parts = [];
         for (const bookName of bookNames) {
-            if (bookName) {
-                const entries = await TavernHelper.getLorebookEntries(bookName);
-                if (entries?.length) {
-                    // Inject bookName into each entry for later reference
-                    entries.forEach(entry => allEntries.push({ ...entry, bookName }));
+            const book = allBooks.find(b => b.name === bookName);
+            if (!book || !Array.isArray(book.entries) || book.entries.length === 0) continue;
+            let enabled = enabledEntriesMap[bookName];
+            if (!Array.isArray(enabled)) enabled = book.entries.map(normalizeId);
+            enabled = enabled.map(id => String(id));
+            book.entries.forEach(entry => {
+                const uid = normalizeId(entry);
+                if (!uid || !enabled.includes(uid)) return;
+                const name = entry.comment || entry.name || uid;
+                const content = entry.content || '';
+                if (content && typeof content === 'string') {
+                    parts.push(`【${bookName}】${name}\n${content}`);
                 }
-            }
+            });
         }
-        
-        // 默认不读取由插件生成的世界书条目
-        const prefixesToExclude = [
-            'TavernDB-ACU-ReadableDataTable',     // 全局条目
-            '重要人物条目'                        // 重要人物条目
-        ];
-        allEntries = allEntries.filter(entry =>
-            !entry.comment || !prefixesToExclude.some(prefix => entry.comment.startsWith(prefix))
-        );
-        
-        const enabledEntriesMap = worldbookConfig.enabledEntries || {};
-        const userEnabledEntries = allEntries.filter(entry => {
-            if (!entry.enabled) return false; // Filter out entries disabled in Tavern
-            const bookConfig = enabledEntriesMap[entry.bookName];
-            // Entry must be explicitly enabled in the plugin's UI settings
-            return bookConfig ? bookConfig.includes(entry.uid) : false; 
-        });
-
-        if (userEnabledEntries.length === 0) {
-            console.log('No entries are enabled in the plugin settings.');
-            return '';
-        }
-
-        if (allEntries.length === 0) {
-            console.log('Selected worldbooks contain no entries after filtering generated ones.');
-            return '';
-        }
-        
-        // 使用提供的消息作为聊天历史
-        const chatHistory = messages.map(message => message.mes || message.message || '').join('\n').toLowerCase();
-        const getEntryKeywords = (entry) => [...new Set([...(entry.key || []), ...(entry.keys || [])])].map(k => k.toLowerCase());
-
-        // 将常量条目（"蓝色指示灯"）与基于关键字的条目（"绿色指示灯"）分开
-        const constantEntries = userEnabledEntries.filter(entry => entry.type === 'constant');
-        let keywordEntries = userEnabledEntries.filter(entry => entry.type !== 'constant');
-        
-        const triggeredEntries = new Set([...constantEntries]);
-        let recursionDepth = 0;
-        const MAX_RECURSION_DEPTH = 10; // 无限循环的安全断点
-
-        while (recursionDepth < MAX_RECURSION_DEPTH) {
-            recursionDepth++;
-            let hasChangedInThisPass = false;
-            
-            // 搜索文本包括聊天历史和已触发条目的内容（这些条目未标记为prevent_recursion）
-            const recursionSourceContent = Array.from(triggeredEntries)
-                .filter(e => !e.prevent_recursion)
-                .map(e => e.content)
-                .join('\n')
-                .toLowerCase();
-            const fullSearchText = `${chatHistory}\n${recursionSourceContent}`;
-
-            const remainingKeywordEntries = [];
-            
-            for (const entry of keywordEntries) {
-                const keywords = getEntryKeywords(entry);
-                // 如果任何关键字被找到，则触发条目
-                // 如果exclude_recursion为true，则仅在聊天历史中搜索
-                // 否则，在全文本中搜索（历史+触发内容）
-                let isTriggered = keywords.length > 0 && keywords.some(keyword => 
-                    entry.exclude_recursion ? chatHistory.includes(keyword) : fullSearchText.includes(keyword)
-                );
-
-                if (isTriggered) {
-                    triggeredEntries.add(entry);
-                    hasChangedInThisPass = true;
-                } else {
-                    remainingKeywordEntries.push(entry);
-                }
-            }
-            
-            // If no new entries were triggered in this full pass, the process is stable.
-            if (!hasChangedInThisPass) {
-                console.log(`Worldbook recursion stabilized after ${recursionDepth} passes.`);
-                break;
-            }
-            
-            // 更新下一次要检查的条目列表
-            keywordEntries = remainingKeywordEntries;
-        }
-
-        if (recursionDepth >= MAX_RECURSION_DEPTH) {
-            console.warn(`Worldbook recursion reached max depth of ${MAX_RECURSION_DEPTH}. Breaking loop.`);
-        }
-
-        // If no entries were triggered, add all user-enabled entries
-        if (triggeredEntries.size === 0) {
-            userEnabledEntries.forEach(entry => triggeredEntries.add(entry));
-            console.log('No worldbook entries were triggered, adding all user-enabled entries');
-        }
-
-        const finalContent = Array.from(triggeredEntries).map(entry => {
-            // Add a simple header for clarity
-            return `### ${entry.comment || `Entry from ${entry.bookName}`}\n${entry.content}`;
-        }).filter(Boolean);
-
-        if (finalContent.length === 0) {
-            console.log('No worldbook entries were ultimately triggered.');
-            return '';
-        }
-
-        const combinedContent = finalContent.join('\n\n');
-        
-        console.log(`Combined worldbook content generated, length: ${combinedContent.length}. ${triggeredEntries.size} entries triggered.`);
-        return combinedContent.trim();
-
-    } catch (error) {
-        console.error(`[Worldbook] An error occurred while processing worldbook logic:`, error);
-        return ''; // Return empty string on error to prevent breaking the generation.
+        return parts.join('\n\n');
+    } catch (e) {
+        console.error('构建世界书内容失败:', e);
+        return '';
     }
 }
 
@@ -4470,8 +4375,8 @@ async function prepareAIInput(messages) {
         return null;
     }
     
-    // 获取世界书内容
-    const worldbookContent = await getCombinedWorldbookContent(messages);
+    // 获取世界书内容（暂时返回空字符串，后续可以完善）
+    const worldbookContent = await getCombinedWorldbookContent();
     
     // 1. 格式化当前JSON表格数据为可读文本（用于$0占位符）
     let tableDataText = '';
@@ -4579,9 +4484,9 @@ async function callCustomOpenAI(dynamicContent) {
     // 在每个段落中替换占位符
     promptSegments.forEach(segment => {
         let finalContent = segment.content || '';
-        finalContent = finalContent.replace('$0', dynamicContent.tableDataText);
-        finalContent = finalContent.replace('$1', dynamicContent.messagesText);
-        finalContent = finalContent.replace('$4', dynamicContent.worldbookContent);
+        finalContent = finalContent.replace(/\$0/g, dynamicContent.tableDataText || '');
+        finalContent = finalContent.replace(/\$1/g, dynamicContent.messagesText || '');
+        finalContent = finalContent.replace(/\$4/g, dynamicContent.worldbookContent || '');
         
         // 转换role为小写（API要求）
         messages.push({ 
@@ -4590,7 +4495,7 @@ async function callCustomOpenAI(dynamicContent) {
         });
     });
     
-    console.log('Final messages array being sent to API:', messages);
+    console.log('准备发送到API的消息:', messages);
     
     const apiConfig = currentSettings.apiConfig || {};
     
@@ -4599,28 +4504,28 @@ async function callCustomOpenAI(dynamicContent) {
         // 使用酒馆连接预设
         const profileId = currentSettings.tavernProfile;
         if (!profileId) {
-            throw new Error('No tavern connection profile selected.');
+            throw new Error('未选择酒馆连接预设');
         }
         
         const context = SillyTavern.getContext();
         if (!context || !context.extensionSettings || !context.extensionSettings.connectionManager) {
-            throw new Error('Cannot access connection manager');
+            throw new Error('无法访问连接管理器');
         }
         
         const profiles = context.extensionSettings.connectionManager.profiles || [];
         const targetProfile = profiles.find(p => p.id === profileId);
         
         if (!targetProfile) {
-            throw new Error(`Cannot find connection profile with ID "${profileId}"`);
+            throw new Error(`无法找到ID为 "${profileId}" 的连接预设`);
         }
         
         if (!targetProfile.api) {
-            throw new Error(`Profile "${targetProfile.name || targetProfile.id}" has no API configured`);
+            throw new Error(`预设 "${targetProfile.name || targetProfile.id}" 没有配置API`);
         }
         
         // 使用ConnectionManagerRequestService发送请求
         if (!context.ConnectionManagerRequestService || !context.ConnectionManagerRequestService.sendRequest) {
-            throw new Error('ConnectionManagerRequestService is not available');
+            throw new Error('ConnectionManagerRequestService不可用');
         }
         
         const response = await context.ConnectionManagerRequestService.sendRequest(
@@ -4635,7 +4540,7 @@ async function callCustomOpenAI(dynamicContent) {
             return response.content.trim();
         } else {
             const errorMsg = response?.error || JSON.stringify(response);
-            throw new Error(`Tavern profile API call returned invalid response: ${errorMsg}`);
+            throw new Error(`酒馆预设API调用返回无效响应: ${errorMsg}`);
         }
         
     } else {
@@ -4652,7 +4557,7 @@ async function callCustomOpenAI(dynamicContent) {
             }
             
             if (!TavernHelper || typeof TavernHelper.generateRaw !== 'function') {
-                throw new Error('TavernHelper.generateRaw function does not exist. Please check SillyTavern version.');
+                throw new Error('TavernHelper.generateRaw 函数不存在。请检查酒馆版本。');
             }
             
             const response = await TavernHelper.generateRaw({
@@ -4661,7 +4566,7 @@ async function callCustomOpenAI(dynamicContent) {
             });
             
             if (typeof response !== 'string') {
-                throw new Error('Main API call did not return the expected text response');
+                throw new Error('主API调用未返回预期的文本响应');
             }
             
             return response.trim();
@@ -4669,7 +4574,7 @@ async function callCustomOpenAI(dynamicContent) {
         } else {
             // 模式B: 使用独立配置的API
             if (!apiConfig.url || !apiConfig.model) {
-                throw new Error('URL or model for custom API is not configured');
+                throw new Error('自定义API的URL或模型未配置');
             }
             
             const generateUrl = `/api/backends/chat-completions/generate`;
@@ -4701,7 +4606,7 @@ async function callCustomOpenAI(dynamicContent) {
                 custom_include_headers: apiConfig.apiKey ? `Authorization: Bearer ${apiConfig.apiKey}` : ''
             });
             
-            console.log('ACU: Calling new backend generation API:', generateUrl, 'Model:', apiConfig.model);
+            console.log('调用自定义API:', generateUrl, 'Model:', apiConfig.model);
             
             const response = await fetch(generateUrl, { 
                 method: 'POST', 
@@ -4712,7 +4617,7 @@ async function callCustomOpenAI(dynamicContent) {
             
             if (!response.ok) {
                 const errTxt = await response.text();
-                throw new Error(`API request failed: ${response.status} ${errTxt}`);
+                throw new Error(`API请求失败: ${response.status} ${response.statusText} - ${errTxt}`);
             }
             
             const data = await response.json();
@@ -4720,7 +4625,8 @@ async function callCustomOpenAI(dynamicContent) {
             if (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
                 return data.choices[0].message.content.trim();
             }
-            throw new Error('API response format is incorrect or content is empty');
+            
+            throw new Error('API响应格式不正确或内容为空');
         }
     }
 }
