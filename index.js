@@ -4352,10 +4352,9 @@ async function getCombinedWorldbookContent() {
             book.entries.forEach(entry => {
                 const uid = normalizeId(entry);
                 if (!uid || !enabled.includes(uid)) return;
-                const name = entry.comment || entry.name || uid;
                 const content = entry.content || '';
                 if (content && typeof content === 'string') {
-                    parts.push(`【${bookName}】${name}\n${content}`);
+                    parts.push(`${content}`);
                 }
             });
         }
