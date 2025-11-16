@@ -28,6 +28,43 @@ function getExtensionSettings() {
     }
 }
 
+/**
+ * 新聊天重置流程：加载设置、重置本地状态、清理插件生成世界书条目、重载数据库
+ */
+async function resetScriptStateForNewChat(chatFileName) {
+    try {
+        // 确保设置为最新
+        loadSettings();
+        const context = SillyTavern.getContext();
+
+        // 记录聊天标识（如可用）
+        if (chatFileName) {
+            currentChatIdentifier = chatFileName;
+        } else if (context && context.chatId) {
+            currentChatIdentifier = context.chatId;
+        }
+
+        // 重置状态
+        currentJsonTableData = null;
+        isAutoUpdating = false;
+        clearTimeout(newMessageDebounceTimer);
+
+        // 清理插件生成的世界书条目
+        try {
+            await deleteGeneratedLorebookEntries();
+            console.log('[世界书] 新聊天重置：已清理插件生成的世界书条目');
+        } catch (cleanupError) {
+            console.error('新聊天重置时清理世界书条目失败:', cleanupError);
+        }
+
+        // 重新加载数据库
+        await loadOrCreateJsonTableFromChatHistory();
+        console.log('[自动更新] 新聊天重置完成');
+    } catch (error) {
+        console.error('resetScriptStateForNewChat 执行失败:', error);
+    }
+}
+
 // 保存扩展设置
 function saveExtensionSettings() {
     try {
@@ -6196,31 +6233,8 @@ function registerEventListeners() {
         if (context.eventTypes.CHAT_CHANGED) {
             context.eventSource.on(context.eventTypes.CHAT_CHANGED, async (chatFileName) => {
                 console.log(`[自动更新] 聊天变更事件: ${chatFileName}`);
-                // 重置状态
-                currentJsonTableData = null;
-                isAutoUpdating = false;
-                clearTimeout(newMessageDebounceTimer);
-                
-                // 记录当前聊天标识
-                if (chatFileName) {
-                    currentChatIdentifier = chatFileName;
-                }
-                
-                // 判断是否为全新聊天（无插件数据），如是则清理旧世界书条目
-                try {
-                    const latestContext = SillyTavern.getContext();
-                    const chat = latestContext?.chat || [];
-                    const hasExistingData = Array.isArray(chat) && chat.some(msg => msg && !msg.is_user && msg.TavernDB_ACU_Data);
-                    if (!hasExistingData) {
-                        console.log('[世界书] 检测到新聊天，没有历史数据，开始清理旧条目');
-                        await deleteGeneratedLorebookEntries();
-                    }
-                } catch (cleanupError) {
-                    console.error('聊天切换时清理世界书条目失败:', cleanupError);
-                }
-                
-                // 参考参考文档：重新加载数据库
-                await loadOrCreateJsonTableFromChatHistory();
+                // 与参考文档一致：统一走新聊天重置流程
+                await resetScriptStateForNewChat(chatFileName);
             });
             console.log('[自动更新] CHAT_CHANGED 事件监听器已注册');
         } else {
@@ -6388,15 +6402,16 @@ if (typeof jQuery !== 'undefined') {
         // 初始化扩展
         initializeExtension();
         
-        // 参考参考文档：初始化时加载数据库
+        // 参考文档：初始化完成后，延迟到下一个事件循环执行“新聊天重置”以避免竞态
         setTimeout(async () => {
             try {
-                await loadOrCreateJsonTableFromChatHistory();
-                console.log('初始化时数据库加载完成');
+                const ctx = SillyTavern.getContext();
+                const chatId = ctx?.chatId || null;
+                await resetScriptStateForNewChat(chatId);
             } catch (error) {
-                console.error('初始化时数据库加载失败:', error);
+                console.error('初始化时新聊天重置失败:', error);
             }
-        }, 1000);
+        }, 0);
     });
 } else {
     // 如果没有 jQuery，使用原生方式
@@ -6404,29 +6419,31 @@ if (typeof jQuery !== 'undefined') {
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(async () => {
                 initializeExtension();
-                // 参考参考文档：初始化时加载数据库
+                // 初始化完成后立即进行新聊天重置（微任务后）
                 setTimeout(async () => {
                     try {
-                        await loadOrCreateJsonTableFromChatHistory();
-                        console.log('初始化时数据库加载完成');
+                        const ctx = SillyTavern.getContext();
+                        const chatId = ctx?.chatId || null;
+                        await resetScriptStateForNewChat(chatId);
                     } catch (error) {
-                        console.error('初始化时数据库加载失败:', error);
+                        console.error('初始化时新聊天重置失败:', error);
                     }
-                }, 1000);
+                }, 0);
             }, 500);
         });
     } else {
         setTimeout(async () => {
             initializeExtension();
-            // 参考参考文档：初始化时加载数据库
+            // 初始化完成后立即进行新聊天重置（微任务后）
             setTimeout(async () => {
                 try {
-                    await loadOrCreateJsonTableFromChatHistory();
-                    console.log('初始化时数据库加载完成');
+                    const ctx = SillyTavern.getContext();
+                    const chatId = ctx?.chatId || null;
+                    await resetScriptStateForNewChat(chatId);
                 } catch (error) {
-                    console.error('初始化时数据库加载失败:', error);
+                    console.error('初始化时新聊天重置失败:', error);
                 }
-            }, 1000);
+            }, 0);
         }, 500);
     }
 }
