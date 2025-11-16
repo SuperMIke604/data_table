@@ -228,10 +228,24 @@ const DEFAULT_SETTINGS = {
         manualSelection: [],        // 手动选择的世界书列表
         enabledEntries: {}          // 启用的世界书条目: {'worldbook_name': ['entry_uid1', 'entry_uid2']}
     },
+    // 世界书排序（统一一个排序值，数值越小越靠前）
+    worldbookOrder: 100,
 };
 
 // 当前配置
 let currentSettings = { ...DEFAULT_SETTINGS };
+
+function getWorldbookOrderValue() {
+    const v = currentSettings?.worldbookOrder;
+    if (typeof v === 'number') return v;
+    if (v && typeof v === 'object') {
+        // 兼容旧配置：若存在旧的多字段结构，则取 readable 或最小值
+        const vals = [v.readable, v.outline, v.summary, v.person].filter(x => typeof x === 'number');
+        if (typeof v.readable === 'number') return v.readable;
+        if (vals.length > 0) return Math.min(...vals);
+    }
+    return DEFAULT_SETTINGS.worldbookOrder;
+}
 
 // 当前数据库数据（内存中的数据库状态）
 let currentJsonTableData = null;
@@ -471,6 +485,20 @@ function updatePromptSelector(settings = currentSettings) {
         return;
     }
     
+    // 保存世界书排序
+    const saveWorldbookOrderBtn = parentDoc.getElementById('data-manage-save-worldbook-order');
+    if (saveWorldbookOrderBtn) {
+        saveWorldbookOrderBtn.addEventListener('click', function() {
+            const v = parseInt(parentDoc.getElementById('data-manage-worldbook-order')?.value || '100', 10);
+            currentSettings.worldbookOrder = Number.isFinite(v) ? v : 100;
+            if (saveSettings()) {
+                showToast('世界书排序已保存', 'success');
+            } else {
+                showToast('保存失败', 'error');
+            }
+        });
+    }
+
     // 确保预设数组存在
     if (!settings.charCardPrompts || !Array.isArray(settings.charCardPrompts) || settings.charCardPrompts.length === 0) {
         settings.charCardPrompts = [
@@ -607,6 +635,7 @@ function loadSettingsToUI() {
     const frequencyInput = parentDoc.getElementById('data-manage-update-frequency');
     const batchSizeInput = parentDoc.getElementById('data-manage-batch-size');
     const maxEntriesInput = parentDoc.getElementById('data-manage-max-entries');
+    const worldbookOrderInput = parentDoc.getElementById('data-manage-worldbook-order');
     const removeTagsInput = parentDoc.getElementById('data-manage-remove-tags');
     const userMessageTagsInput = parentDoc.getElementById('data-manage-user-message-tags');
     
@@ -617,6 +646,7 @@ function loadSettingsToUI() {
     if (frequencyInput) frequencyInput.value = settings.autoUpdateFrequency || '';
     if (batchSizeInput) batchSizeInput.value = settings.updateBatchSize || '';
     if (maxEntriesInput) maxEntriesInput.value = settings.summaryTableMaxEntries || '';
+    if (worldbookOrderInput) worldbookOrderInput.value = (typeof settings.worldbookOrder === 'number') ? settings.worldbookOrder : (settings.worldbookOrder?.readable ?? 100);
     if (removeTagsInput) removeTagsInput.value = settings.removeTags || '';
     if (userMessageTagsInput) userMessageTagsInput.value = settings.userMessageTags || '';
     
@@ -948,6 +978,14 @@ function openDataManagePopup() {
                             <p class="data-manage-notes">设置总结表条目在世界书中显示的最新条目数量</p>
                         </div>
                         <div>
+                            <label for="data-manage-worldbook-order">世界书排序（统一数值，越小越靠前）:</label>
+                            <div class="data-manage-input-group">
+                                <input type="number" id="data-manage-worldbook-order" step="1" placeholder="100">
+                                <button id="data-manage-save-worldbook-order" class="secondary">保存</button>
+                            </div>
+                            <p class="data-manage-notes">影响由本扩展生成的世界书条目的优先级（order）。</p>
+                        </div>
+                        <div>
                             <label for="data-manage-remove-tags">自定义删除标签 (竖线分隔):</label>
                             <div class="data-manage-input-group">
                                 <input type="text" id="data-manage-remove-tags" placeholder="e.g., plot|status">
@@ -1098,6 +1136,7 @@ function openDataManagePopup() {
                         <div id="data-manage-worldbook-entry-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);">
                             <em style="color: var(--ios-text-secondary);">正在加载条目...</em>
                         </div>
+                        
                     </div>
                 </div>
             </div>
@@ -2014,6 +2053,10 @@ function loadWorldbookSettingsToUI(settings) {
         }
     });
     
+    // 排序输入框赋值（统一一个数值）
+    const orderInput = parentDoc.getElementById('data-manage-order');
+    if (orderInput) orderInput.value = (typeof settings.worldbookOrder === 'number') ? settings.worldbookOrder : (settings.worldbookOrder?.readable ?? 100);
+
     // 触发来源切换以更新UI
     if (sourceRadios.length > 0) {
         const event = new Event('change', { bubbles: true });
@@ -5257,7 +5300,7 @@ async function updateReadableLorebookEntry(createIfNeeded = false) {
                 content: `<main_story_info>\n\n${readableText}\n\n</main_story_info>`,
                 enabled: true,
                 type: 'constant',
-                order: 100,
+                order: getWorldbookOrderValue(),
                 prevent_recursion: true,
             };
             await TavernHelper_API.createLorebookEntries(primaryLorebookName, [newDb2Entry]);
@@ -5459,7 +5502,7 @@ async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primary
                 content: finalContent,
                 enabled: true,
                 type: 'constant',
-                order: 100, // 高优先级（略低于主线表）
+                order: getWorldbookOrderValue(),
                 prevent_recursion: true,
             };
             await TavernHelper_API.createLorebookEntries(primaryLorebookName, [newEntry]);
@@ -5527,7 +5570,7 @@ async function updateImportantPersonsRelatedEntries(importantPersonsTable, Taver
                 keys: [personName],
                 enabled: true,
                 type: 'keyword',
-                order: 100,
+                order: getWorldbookOrderValue(),
                 prevent_recursion: true
             };
             personEntriesToCreate.push(newEntryData);
@@ -5602,7 +5645,7 @@ async function updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLo
                 content: finalContent,
                 enabled: true,
                 type: 'constant',
-                order: 100, // 高优先级
+                order: getWorldbookOrderValue(),
                 prevent_recursion: true,
             };
             await TavernHelper_API.createLorebookEntries(primaryLorebookName, [newEntry]);
