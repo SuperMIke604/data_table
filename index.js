@@ -5873,7 +5873,7 @@ async function loadOrCreateJsonTableFromChatHistory() {
         const initialized = await initializeJsonTableFromTemplate();
         if (initialized) {
             try {
-                await updateReadableLorebookEntry(true);
+                // 新聊天：仅保存初始快照，不创建任何世界书条目
                 await persistInitialDatabaseSnapshot(context);
             } catch (error) {
                 console.error('初始化新数据库时写入世界书或聊天记录失败:', error);
@@ -5891,6 +5891,12 @@ async function loadOrCreateJsonTableFromChatHistory() {
                 // 使用深拷贝来加载数据，防止对内存中数据的修改影响到历史记录
                 currentJsonTableData = JSON.parse(JSON.stringify(message.TavernDB_ACU_Data));
                 console.log('数据库内容已成功从聊天历史加载到内存');
+                // 旧聊天：加载到内存后，生成/同步对应世界书条目
+                try {
+                    await updateReadableLorebookEntry(true);
+                } catch (wbErr) {
+                    console.error('加载旧聊天后同步世界书失败:', wbErr);
+                }
                 return; // 找到数据后退出
             } catch (error) {
                 console.error(`处理消息索引 ${i} 的数据库内容失败:`, error);
@@ -5904,9 +5910,9 @@ async function loadOrCreateJsonTableFromChatHistory() {
     const initialized = await initializeJsonTableFromTemplate();
     if (initialized) {
         try {
-            await updateReadableLorebookEntry(true);
+            // 新聊天（无历史数据库）：仅保存初始快照，不创建世界书条目
             await persistInitialDatabaseSnapshot(context);
-            console.log('新数据库已写入世界书并保存快照');
+            console.log('新数据库已保存初始快照（未创建世界书条目）');
         } catch (error) {
             console.error('写入世界书或保存快照失败:', error);
         }
