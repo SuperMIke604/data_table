@@ -6605,29 +6605,16 @@ async function initWorldbookData(eventData) {
 }
 
 /**
- * 宏获取世界书提示词（同步版本，用于宏注册）
- * @returns {string} 世界书提示词
+ * 宏获取表格数据（同步版本，用于宏注册）
+ * 返回表格数据（与$0相同）
+ * @returns {string} 表格数据文本
  */
-function getMacroWorldbookPromptSync() {
+function getMacroTableDataSync() {
     try {
-        // 宏不受"启用世界书生成"开关影响，始终返回世界书数据
-        
-        // 检查缓存是否有效
-        const now = Date.now();
-        if (worldbookContentCache && (now - worldbookContentCacheTime) < WORLDBOOK_CACHE_TTL) {
-            return worldbookContentCache;
-        }
-        
-        // 缓存过期或不存在，返回空字符串（异步更新缓存）
-        // 在后台更新缓存，但不阻塞宏的返回
-        updateWorldbookContentCache().catch(err => {
-            console.error('后台更新世界书缓存失败:', err);
-        });
-        
-        // 如果缓存存在但过期，仍然返回它（比返回空字符串好）
-        return worldbookContentCache || '';
+        // 宏不受"启用世界书生成"开关影响，始终返回表格数据（与$0相同）
+        return getTableDataTextForInjection();
     } catch (error) {
-        console.error('宏获取世界书提示词失败:', error);
+        console.error('宏获取表格数据失败:', error);
         return '';
     }
 }
@@ -6746,15 +6733,11 @@ function registerWorldbookInjection() {
 
         // 注册宏（如果context支持）
         if (context.registerMacro && typeof context.registerMacro === 'function') {
-            // 注册宏 - 使用同步函数，返回缓存的世界书内容
-            // SillyTavern的宏系统需要同步函数，所以我们使用缓存机制
-            context.registerMacro('worldbookData', () => {
-                return getMacroWorldbookPromptSync();
+            // 注册宏 - 使用同步函数，返回表格数据（与$0相同）
+            context.registerMacro('tableData', () => {
+                return getMacroTableDataSync();
             });
-            console.log('[世界书注入] 宏 worldbookData 已注册');
-            
-            // 初始化缓存
-            updateWorldbookContentCache();
+            console.log('[世界书注入] 宏 tableData 已注册（返回表格数据，与$0相同）');
         }
 
         // 注册事件监听器
