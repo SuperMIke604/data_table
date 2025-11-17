@@ -5261,6 +5261,12 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
  * 参考参考文档：需要分别处理重要角色表、总结表、故事主线表和可读数据表
  */
 async function updateReadableLorebookEntry(createIfNeeded = false) {
+    // 检查是否启用世界书生成
+    if (currentSettings.enableWorldbookGeneration !== true) {
+        console.log('世界书生成未启用，跳过更新世界书条目');
+        return;
+    }
+    
     if (!currentJsonTableData) {
         console.warn('更新世界书条目失败: currentJsonTableData为空');
         return;
@@ -5456,6 +5462,12 @@ function formatJsonToReadable(jsonData) {
  * 更新总结表世界书条目 - 参考参考文档实现
  */
 async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primaryLorebookName) {
+    // 检查是否启用世界书生成
+    if (currentSettings.enableWorldbookGeneration !== true) {
+        console.log('世界书生成未启用，跳过更新总结表条目');
+        return;
+    }
+    
     if (!TavernHelper_API) return;
     if (!primaryLorebookName) {
         console.warn('无法更新总结表条目: 未设置注入目标世界书');
@@ -5534,6 +5546,12 @@ async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primary
  * 更新重要角色表相关世界书条目 - 参考参考文档实现
  */
 async function updateImportantPersonsRelatedEntries(importantPersonsTable, TavernHelper_API, primaryLorebookName) {
+    // 检查是否启用世界书生成
+    if (currentSettings.enableWorldbookGeneration !== true) {
+        console.log('世界书生成未启用，跳过更新重要角色表条目');
+        return;
+    }
+    
     if (!TavernHelper_API) return;
     if (!primaryLorebookName) {
         console.warn('无法更新重要角色表条目: 未设置注入目标世界书');
@@ -5608,6 +5626,12 @@ async function updateImportantPersonsRelatedEntries(importantPersonsTable, Taver
  * 更新故事主线表世界书条目 - 参考参考文档实现
  */
 async function updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLorebookName) {
+    // 检查是否启用世界书生成
+    if (currentSettings.enableWorldbookGeneration !== true) {
+        console.log('世界书生成未启用，跳过更新故事主线表条目');
+        return;
+    }
+    
     if (!TavernHelper_API) return;
     if (!primaryLorebookName) {
         console.warn('无法更新故事主线表条目: 未设置注入目标世界书');
@@ -6518,6 +6542,29 @@ if (typeof jQuery !== 'undefined') {
 
 // ==================== 世界书数据注入功能 ====================
 
+// 世界书内容缓存（用于宏的同步访问）
+let worldbookContentCache = '';
+let worldbookContentCacheTime = 0;
+const WORLDBOOK_CACHE_TTL = 5000; // 缓存有效期5秒
+
+/**
+ * 更新世界书内容缓存
+ */
+async function updateWorldbookContentCache() {
+    try {
+        if (currentSettings.enableWorldbookGeneration !== true) {
+            worldbookContentCache = '';
+            return;
+        }
+        const content = await getCombinedWorldbookContent();
+        worldbookContentCache = content || '';
+        worldbookContentCacheTime = Date.now();
+    } catch (error) {
+        console.error('更新世界书内容缓存失败:', error);
+        worldbookContentCache = '';
+    }
+}
+
 /**
  * 获取世界书相关提示词
  * @param {*} eventData 事件数据（可选）
@@ -6529,6 +6576,9 @@ async function getWorldbookPrompt(eventData) {
         if (!worldbookContent || worldbookContent.trim() === '') {
             return '';
         }
+        // 更新缓存
+        worldbookContentCache = worldbookContent;
+        worldbookContentCacheTime = Date.now();
         return worldbookContent;
     } catch (error) {
         console.error('获取世界书提示词失败:', error);
@@ -6557,7 +6607,37 @@ async function initWorldbookData(eventData) {
 }
 
 /**
- * 宏获取世界书提示词
+ * 宏获取世界书提示词（同步版本，用于宏注册）
+ * @returns {string} 世界书提示词
+ */
+function getMacroWorldbookPromptSync() {
+    try {
+        if (currentSettings.enableWorldbookGeneration !== true) {
+            return '';
+        }
+        
+        // 检查缓存是否有效
+        const now = Date.now();
+        if (worldbookContentCache && (now - worldbookContentCacheTime) < WORLDBOOK_CACHE_TTL) {
+            return worldbookContentCache;
+        }
+        
+        // 缓存过期或不存在，返回空字符串（异步更新缓存）
+        // 在后台更新缓存，但不阻塞宏的返回
+        updateWorldbookContentCache().catch(err => {
+            console.error('后台更新世界书缓存失败:', err);
+        });
+        
+        // 如果缓存存在但过期，仍然返回它（比返回空字符串好）
+        return worldbookContentCache || '';
+    } catch (error) {
+        console.error('宏获取世界书提示词失败:', error);
+        return '';
+    }
+}
+
+/**
+ * 宏获取世界书提示词（异步版本，用于事件注入）
  * @returns {Promise<string>} 世界书提示词
  */
 async function getMacroWorldbookPrompt() {
@@ -6624,11 +6704,15 @@ function registerWorldbookInjection() {
 
         // 注册宏（如果context支持）
         if (context.registerMacro && typeof context.registerMacro === 'function') {
-            // 注册同步宏（返回Promise）
-            context.registerMacro('worldbookData', async () => {
-                return await getMacroWorldbookPrompt();
+            // 注册宏 - 使用同步函数，返回缓存的世界书内容
+            // SillyTavern的宏系统需要同步函数，所以我们使用缓存机制
+            context.registerMacro('worldbookData', () => {
+                return getMacroWorldbookPromptSync();
             });
             console.log('[世界书注入] 宏 worldbookData 已注册');
+            
+            // 初始化缓存
+            updateWorldbookContentCache();
         }
 
         // 注册事件监听器
@@ -6638,6 +6722,13 @@ function registerWorldbookInjection() {
                 console.log('[世界书注入] CHAT_COMPLETION_PROMPT_READY 事件监听器已注册');
             } else {
                 console.warn('[世界书注入] CHAT_COMPLETION_PROMPT_READY 事件类型不可用');
+            }
+            
+            // 监听聊天变更事件，更新缓存
+            if (context.eventTypes.CHAT_CHANGED) {
+                context.eventSource.on(context.eventTypes.CHAT_CHANGED, () => {
+                    updateWorldbookContentCache();
+                });
             }
         } else {
             console.warn('[世界书注入] eventSource 或 eventTypes 不可用，延迟注册');
