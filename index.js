@@ -196,6 +196,7 @@ const DEFAULT_SETTINGS = {
     // 核心操作
     autoUpdateEnabled: false,      // 启用自动更新
     autoHideMessages: true,        // 数据整理完成后自动隐藏相关楼层
+    enableWorldbookGeneration: false, // 启用世界书生成（注入到提示词）
     
     // AI指令预设（支持多个预设）
     charCardPrompts: [
@@ -642,6 +643,7 @@ function loadSettingsToUI() {
     // 更新复选框
     const autoUpdateCheckbox = parentDoc.getElementById('data-manage-auto-update-enabled');
     const autoHideCheckbox = parentDoc.getElementById('data-manage-auto-hide-messages');
+    const enableWorldbookCheckbox = parentDoc.getElementById('data-manage-enable-worldbook-generation');
     
     if (frequencyInput) frequencyInput.value = settings.autoUpdateFrequency || '';
     if (batchSizeInput) batchSizeInput.value = settings.updateBatchSize || '';
@@ -652,6 +654,7 @@ function loadSettingsToUI() {
     
     if (autoUpdateCheckbox) autoUpdateCheckbox.checked = settings.autoUpdateEnabled || false;
     if (autoHideCheckbox) autoHideCheckbox.checked = settings.autoHideMessages !== false;
+    if (enableWorldbookCheckbox) enableWorldbookCheckbox.checked = settings.enableWorldbookGeneration || false;
     
     // 渲染提示词片段（使用当前选中的预设）
     const currentPrompt = getCurrentPrompt(settings);
@@ -947,6 +950,10 @@ function openDataManagePopup() {
                             <div class="data-manage-checkbox-group">
                                 <input type="checkbox" id="data-manage-auto-hide-messages" checked>
                                 <label for="data-manage-auto-hide-messages">数据整理完成后自动隐藏相关楼层</label>
+                            </div>
+                            <div class="data-manage-checkbox-group">
+                                <input type="checkbox" id="data-manage-enable-worldbook-generation">
+                                <label for="data-manage-enable-worldbook-generation">启用世界书生成</label>
                             </div>
                         </div>
                     </div>
@@ -1431,6 +1438,16 @@ function setupStatusTabListeners(parentDoc) {
         autoHideCheckbox.addEventListener('change', function() {
             currentSettings.autoHideMessages = this.checked;
             saveSettings();
+        });
+    }
+    
+    // 启用世界书生成复选框
+    const enableWorldbookCheckbox = parentDoc.getElementById('data-manage-enable-worldbook-generation');
+    if (enableWorldbookCheckbox) {
+        enableWorldbookCheckbox.addEventListener('change', function() {
+            currentSettings.enableWorldbookGeneration = this.checked;
+            saveSettings();
+            showToast(this.checked ? '已启用世界书生成' : '已禁用世界书生成', 'info');
         });
     }
 }
@@ -6420,6 +6437,8 @@ if (typeof window !== 'undefined') {
 
 // 初始化扩展
 function initializeExtension() {
+    // 注册世界书注入功能
+    registerWorldbookInjection();
     // 加载扩展设置
     loadExtensionSettingsUI();
     
@@ -6494,6 +6513,140 @@ if (typeof jQuery !== 'undefined') {
                 }
             }, 0);
         }, 500);
+    }
+}
+
+// ==================== 世界书数据注入功能 ====================
+
+/**
+ * 获取世界书相关提示词
+ * @param {*} eventData 事件数据（可选）
+ * @returns {Promise<string>} 世界书相关提示词
+ */
+async function getWorldbookPrompt(eventData) {
+    try {
+        const worldbookContent = await getCombinedWorldbookContent();
+        if (!worldbookContent || worldbookContent.trim() === '') {
+            return '';
+        }
+        return worldbookContent;
+    } catch (error) {
+        console.error('获取世界书提示词失败:', error);
+        return '';
+    }
+}
+
+/**
+ * 初始化世界书数据（用于模板替换）
+ * @param {*} eventData 事件数据（可选）
+ * @returns {Promise<string>} 完整的世界书提示词
+ */
+async function initWorldbookData(eventData) {
+    try {
+        const worldbookContent = await getWorldbookPrompt(eventData);
+        if (!worldbookContent || worldbookContent.trim() === '') {
+            return '';
+        }
+        // 可以在这里添加模板，类似参考文档2中的message_template
+        // 目前直接返回世界书内容
+        return worldbookContent;
+    } catch (error) {
+        console.error('初始化世界书数据失败:', error);
+        return '';
+    }
+}
+
+/**
+ * 宏获取世界书提示词
+ * @returns {Promise<string>} 世界书提示词
+ */
+async function getMacroWorldbookPrompt() {
+    try {
+        if (currentSettings.enableWorldbookGeneration !== true) {
+            return '';
+        }
+        const promptContent = await getWorldbookPrompt();
+        return promptContent;
+    } catch (error) {
+        console.error('宏获取世界书提示词失败:', error);
+        return '';
+    }
+}
+
+/**
+ * 注入世界书总体提示词
+ * @param {*} eventData 事件数据
+ */
+async function onChatCompletionPromptReadyForWorldbook(eventData) {
+    try {
+        // 检查是否启用世界书生成
+        if (currentSettings.enableWorldbookGeneration !== true) {
+            return;
+        }
+
+        // 检查是否是dryRun
+        if (eventData.dryRun === true) {
+            return;
+        }
+
+        console.log('[世界书注入] 开始注入世界书数据');
+        const worldbookContent = await initWorldbookData(eventData);
+        
+        if (!worldbookContent || worldbookContent.trim() === '') {
+            console.log('[世界书注入] 世界书内容为空，跳过注入');
+            return;
+        }
+
+        // 构建最终提示词
+        const finalPrompt = `以下是通过世界书记录的当前场景信息以及历史记录信息，你需要以此为参考进行思考：\n${worldbookContent}`;
+        
+        // 注入到聊天消息中（默认使用user角色，插入到倒数第0个位置，即最后）
+        eventData.chat.push({ role: 'user', content: finalPrompt });
+        
+        console.log('[世界书注入] 世界书数据已注入', eventData.chat);
+    } catch (error) {
+        console.error('[世界书注入] 世界书数据注入失败:', error);
+    }
+}
+
+/**
+ * 注册世界书相关的事件监听器和宏
+ */
+function registerWorldbookInjection() {
+    try {
+        const context = SillyTavern.getContext();
+        
+        if (!context) {
+            console.warn('[世界书注入] 无法获取上下文，延迟注册');
+            setTimeout(registerWorldbookInjection, 1000);
+            return;
+        }
+
+        // 注册宏（如果context支持）
+        if (context.registerMacro && typeof context.registerMacro === 'function') {
+            // 注册同步宏（返回Promise）
+            context.registerMacro('worldbookData', async () => {
+                return await getMacroWorldbookPrompt();
+            });
+            console.log('[世界书注入] 宏 worldbookData 已注册');
+        }
+
+        // 注册事件监听器
+        if (context.eventSource && context.eventTypes) {
+            if (context.eventTypes.CHAT_COMPLETION_PROMPT_READY) {
+                context.eventSource.on(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, onChatCompletionPromptReadyForWorldbook);
+                console.log('[世界书注入] CHAT_COMPLETION_PROMPT_READY 事件监听器已注册');
+            } else {
+                console.warn('[世界书注入] CHAT_COMPLETION_PROMPT_READY 事件类型不可用');
+            }
+        } else {
+            console.warn('[世界书注入] eventSource 或 eventTypes 不可用，延迟注册');
+            setTimeout(registerWorldbookInjection, 1000);
+        }
+    } catch (error) {
+        console.error('[世界书注入] 注册失败:', error);
+        // 延迟重试
+        setTimeout(registerWorldbookInjection, 1000);
     }
 }
 
