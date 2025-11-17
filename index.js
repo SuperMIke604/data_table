@@ -6549,13 +6549,11 @@ const WORLDBOOK_CACHE_TTL = 5000; // 缓存有效期5秒
 
 /**
  * 更新世界书内容缓存
+ * 注意：缓存更新不受"启用世界书生成"开关影响，因为宏需要始终可用
  */
 async function updateWorldbookContentCache() {
     try {
-        if (currentSettings.enableWorldbookGeneration !== true) {
-            worldbookContentCache = '';
-            return;
-        }
+        // 无论开关是否启用，都更新缓存，以便宏可以获取数据
         const content = await getCombinedWorldbookContent();
         worldbookContentCache = content || '';
         worldbookContentCacheTime = Date.now();
@@ -6612,9 +6610,7 @@ async function initWorldbookData(eventData) {
  */
 function getMacroWorldbookPromptSync() {
     try {
-        if (currentSettings.enableWorldbookGeneration !== true) {
-            return '';
-        }
+        // 宏不受"启用世界书生成"开关影响，始终返回世界书数据
         
         // 检查缓存是否有效
         const now = Date.now();
