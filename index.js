@@ -6650,7 +6650,53 @@ async function getMacroWorldbookPrompt() {
 }
 
 /**
- * 注入世界书总体提示词
+ * 获取表格数据文本（用于注入，格式与$0相同）
+ * @returns {string} 表格数据文本
+ */
+function getTableDataTextForInjection() {
+    if (!currentJsonTableData) {
+        return '';
+    }
+    
+    let tableDataText = '';
+    const tableKeys = Object.keys(currentJsonTableData).filter(k => k.startsWith('sheet_'));
+    
+    tableKeys.forEach((sheetKey, tableIndex) => {
+        const table = currentJsonTableData[sheetKey];
+        if (!table || !table.name || !table.content) return;
+        
+        tableDataText += `[${tableIndex}:${table.name}]\n`;
+        const headers = table.content[0] ? table.content[0].slice(1).map((h, i) => `[${i}:${h}]`).join('|') : 'No Headers';
+        tableDataText += `  Columns: ${headers}\n`;
+        
+        const allRows = table.content.slice(1);
+        let rowsToProcess = allRows;
+        let startIndex = 0;
+        
+        // 如果是总结表并且行数超过配置的最大条目数，则只提取最新的N条
+        if (table.name.trim() === '总结表' && allRows.length > (currentSettings.summaryTableMaxEntries || 10)) {
+            startIndex = allRows.length - (currentSettings.summaryTableMaxEntries || 10);
+            rowsToProcess = allRows.slice(-(currentSettings.summaryTableMaxEntries || 10));
+            tableDataText += `  - Note: Showing last ${rowsToProcess.length} of ${allRows.length} entries.\n`;
+        }
+        
+        if (rowsToProcess.length > 0) {
+            rowsToProcess.forEach((row, index) => {
+                const originalRowIndex = startIndex + index;
+                const rowData = row.slice(1).join('|');
+                tableDataText += `  [${originalRowIndex}] ${rowData}\n`;
+            });
+        } else {
+            tableDataText += '  (No data rows)\n';
+        }
+        tableDataText += '\n';
+    });
+    
+    return tableDataText.trim();
+}
+
+/**
+ * 注入表格数据（与$0对应的内容相同）
  * @param {*} eventData 事件数据
  */
 async function onChatCompletionPromptReadyForWorldbook(eventData) {
@@ -6665,23 +6711,23 @@ async function onChatCompletionPromptReadyForWorldbook(eventData) {
             return;
         }
 
-        console.log('[世界书注入] 开始注入世界书数据');
-        const worldbookContent = await initWorldbookData(eventData);
+        console.log('[世界书注入] 开始注入表格数据');
+        const tableDataText = getTableDataTextForInjection();
         
-        if (!worldbookContent || worldbookContent.trim() === '') {
-            console.log('[世界书注入] 世界书内容为空，跳过注入');
+        if (!tableDataText || tableDataText.trim() === '') {
+            console.log('[世界书注入] 表格数据为空，跳过注入');
             return;
         }
 
-        // 构建最终提示词
-        const finalPrompt = `以下是通过世界书记录的当前场景信息以及历史记录信息，你需要以此为参考进行思考：\n${worldbookContent}`;
+        // 构建最终提示词（与$0对应的内容相同）
+        const finalPrompt = `以下是通过表格记录的当前场景信息以及历史记录信息，你需要以此为参考进行思考：\n${tableDataText}`;
         
         // 注入到聊天消息中（默认使用user角色，插入到倒数第0个位置，即最后）
         eventData.chat.push({ role: 'user', content: finalPrompt });
         
-        console.log('[世界书注入] 世界书数据已注入', eventData.chat);
+        console.log('[世界书注入] 表格数据已注入', eventData.chat);
     } catch (error) {
-        console.error('[世界书注入] 世界书数据注入失败:', error);
+        console.error('[世界书注入] 表格数据注入失败:', error);
     }
 }
 
