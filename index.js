@@ -6720,7 +6720,7 @@ async function onChatCompletionPromptReadyForWorldbook(eventData) {
         }
 
         // 构建最终提示词（与$0对应的内容相同）
-        const finalPrompt = `以下是通过表格记录的当前场景信息以及历史记录信息，你需要以此为参考进行思考：\n${tableDataText}`;
+        const finalPrompt = `\n${tableDataText}`;
         
         // 注入到聊天消息中（默认使用user角色，插入到倒数第0个位置，即最后）
         eventData.chat.push({ role: 'user', content: finalPrompt });
