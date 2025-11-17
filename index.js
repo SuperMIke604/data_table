@@ -6718,7 +6718,13 @@ function registerWorldbookInjection() {
         // 注册事件监听器
         if (context.eventSource && context.eventTypes) {
             if (context.eventTypes.CHAT_COMPLETION_PROMPT_READY) {
-                context.eventSource.on(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, onChatCompletionPromptReadyForWorldbook);
+                // 包装原始处理器，在注入前先更新缓存
+                context.eventSource.on(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, async (eventData) => {
+                    // 在注入前先更新缓存，确保宏获取到最新数据
+                    await updateWorldbookContentCache();
+                    // 然后执行注入
+                    await onChatCompletionPromptReadyForWorldbook(eventData);
+                });
                 console.log('[世界书注入] CHAT_COMPLETION_PROMPT_READY 事件监听器已注册');
             } else {
                 console.warn('[世界书注入] CHAT_COMPLETION_PROMPT_READY 事件类型不可用');
