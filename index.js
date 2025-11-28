@@ -4463,6 +4463,85 @@ async function getCombinedWorldbookContent() {
 }
 
 /**
+ * 构建表格数据的可读文本
+ * @param {Object} jsonTableData 当前表格数据
+ * @param {Object} settings 当前配置
+ * @returns {{ text: string, hasData: boolean }}
+ */
+function buildReadableTableDataText(jsonTableData, settings) {
+    if (!jsonTableData) {
+        return { text: '', hasData: false };
+    }
+    
+    const summaryLimit = settings?.summaryTableMaxEntries || 10;
+    const tableKeys = Object.keys(jsonTableData).filter(k => k.startsWith('sheet_'));
+    if (tableKeys.length === 0) {
+        return { text: '', hasData: false };
+    }
+    
+    const sections = [];
+    let hasAnyRow = false;
+    
+    tableKeys.forEach((sheetKey) => {
+        const table = jsonTableData[sheetKey];
+        if (!table || !table.name || !Array.isArray(table.content) || table.content.length === 0) {
+            return;
+        }
+        
+        const headerRow = Array.isArray(table.content[0]) ? table.content[0].slice(1) : [];
+        const allRows = table.content.slice(1);
+        
+        let rowsToProcess = allRows;
+        let startIndex = 0;
+        let note = '';
+        
+        if (table.name.trim() === '总结表' && allRows.length > summaryLimit) {
+            startIndex = allRows.length - summaryLimit;
+            rowsToProcess = allRows.slice(-summaryLimit);
+            note = `> 仅展示最近 ${rowsToProcess.length} 条（共 ${allRows.length} 条）`;
+        }
+        
+        const sectionLines = [];
+        sectionLines.push(`### ${table.name}`);
+        if (note) {
+            sectionLines.push(note);
+            sectionLines.push('');
+        }
+        
+        if (rowsToProcess.length === 0) {
+            sectionLines.push('- (无数据)');
+        } else {
+            rowsToProcess.forEach((row, index) => {
+                hasAnyRow = true;
+                const rowCells = Array.isArray(row) ? row.slice(1) : [];
+                const titleCell = rowCells[0];
+                const displayTitle = (titleCell && String(titleCell).trim()) ? String(titleCell).trim() : `条目 ${startIndex + index + 1}`;
+                
+                sectionLines.push(`- ${displayTitle}`);
+                
+                const detailHeaders = headerRow.slice(1);
+                const detailValues = rowCells.slice(1);
+                if (detailHeaders.length > 0 && detailValues.length > 0) {
+                    detailHeaders.forEach((header, detailIndex) => {
+                        const fieldName = (header && String(header).trim()) ? String(header).trim() : `字段 ${detailIndex + 2}`;
+                        const fieldValue = detailValues[detailIndex];
+                        const displayValue = (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '') ? String(fieldValue).trim() : '-';
+                        sectionLines.push(`  - ${fieldName}: ${displayValue}`);
+                    });
+                }
+                
+                sectionLines.push('');
+            });
+        }
+        
+        sections.push(sectionLines.join('\n').trim());
+    });
+    
+    const finalText = sections.join('\n\n').trim();
+    return { text: finalText, hasData: hasAnyRow };
+}
+
+/**
  * 准备AI输入 - 准备表格数据、消息文本、世界书内容
  */
 async function prepareAIInput(messages) {
@@ -4475,39 +4554,8 @@ async function prepareAIInput(messages) {
     const worldbookContent = await getCombinedWorldbookContent();
     
     // 1. 格式化当前JSON表格数据为可读文本（用于$0占位符）
-    let tableDataText = '';
-    const tableKeys = Object.keys(currentJsonTableData).filter(k => k.startsWith('sheet_'));
-    
-    tableKeys.forEach((sheetKey, tableIndex) => {
-        const table = currentJsonTableData[sheetKey];
-        if (!table || !table.name || !table.content) return;
-        
-        tableDataText += `[${tableIndex}:${table.name}]\n`;
-        const headers = table.content[0] ? table.content[0].slice(1).map((h, i) => `[${i}:${h}]`).join('|') : 'No Headers';
-        tableDataText += `  Columns: ${headers}\n`;
-        
-        const allRows = table.content.slice(1);
-        let rowsToProcess = allRows;
-        let startIndex = 0;
-        
-        // 如果是总结表并且行数超过配置的最大条目数，则只提取最新的N条
-        if (table.name.trim() === '总结表' && allRows.length > (currentSettings.summaryTableMaxEntries || 10)) {
-            startIndex = allRows.length - (currentSettings.summaryTableMaxEntries || 10);
-            rowsToProcess = allRows.slice(-(currentSettings.summaryTableMaxEntries || 10));
-            tableDataText += `  - Note: Showing last ${rowsToProcess.length} of ${allRows.length} entries.\n`;
-        }
-        
-        if (rowsToProcess.length > 0) {
-            rowsToProcess.forEach((row, index) => {
-                const originalRowIndex = startIndex + index;
-                const rowData = row.slice(1).join('|');
-                tableDataText += `  [${originalRowIndex}] ${rowData}\n`;
-            });
-        } else {
-            tableDataText += '  (No data rows)\n';
-        }
-        tableDataText += '\n';
-    });
+    const { text: tableDataText, hasData: hasTableData } = buildReadableTableDataText(currentJsonTableData, currentSettings);
+    const safeTableDataText = hasTableData ? tableDataText : '';
     
     // 2. 格式化消息文本（用于$1占位符）
     let messagesText = '当前最新对话内容:\n';
@@ -4555,7 +4603,7 @@ async function prepareAIInput(messages) {
         messagesText += '(无最新对话内容)';
     }
     
-    return { tableDataText, messagesText, worldbookContent };
+    return { tableDataText: safeTableDataText, messagesText, worldbookContent };
 }
 
 /**
@@ -6645,41 +6693,8 @@ function getTableDataTextForInjection() {
         return '';
     }
     
-    let tableDataText = '';
-    const tableKeys = Object.keys(currentJsonTableData).filter(k => k.startsWith('sheet_'));
-    
-    tableKeys.forEach((sheetKey, tableIndex) => {
-        const table = currentJsonTableData[sheetKey];
-        if (!table || !table.name || !table.content) return;
-        
-        tableDataText += `[${tableIndex}:${table.name}]\n`;
-        const headers = table.content[0] ? table.content[0].slice(1).map((h, i) => `[${i}:${h}]`).join('|') : 'No Headers';
-        tableDataText += `  Columns: ${headers}\n`;
-        
-        const allRows = table.content.slice(1);
-        let rowsToProcess = allRows;
-        let startIndex = 0;
-        
-        // 如果是总结表并且行数超过配置的最大条目数，则只提取最新的N条
-        if (table.name.trim() === '总结表' && allRows.length > (currentSettings.summaryTableMaxEntries || 10)) {
-            startIndex = allRows.length - (currentSettings.summaryTableMaxEntries || 10);
-            rowsToProcess = allRows.slice(-(currentSettings.summaryTableMaxEntries || 10));
-            tableDataText += `  - Note: Showing last ${rowsToProcess.length} of ${allRows.length} entries.\n`;
-        }
-        
-        if (rowsToProcess.length > 0) {
-            rowsToProcess.forEach((row, index) => {
-                const originalRowIndex = startIndex + index;
-                const rowData = row.slice(1).join('|');
-                tableDataText += `  [${originalRowIndex}] ${rowData}\n`;
-            });
-        } else {
-            tableDataText += '  (No data rows)\n';
-        }
-        tableDataText += '\n';
-    });
-    
-    return tableDataText.trim();
+    const { text, hasData } = buildReadableTableDataText(currentJsonTableData, currentSettings);
+    return hasData ? text : '';
 }
 
 /**
