@@ -4493,46 +4493,39 @@ function buildReadableTableDataText(jsonTableData, settings) {
         
         let rowsToProcess = allRows;
         let startIndex = 0;
-        let note = '';
-        
         if (table.name.trim() === '总结表' && allRows.length > summaryLimit) {
             startIndex = allRows.length - summaryLimit;
             rowsToProcess = allRows.slice(-summaryLimit);
-            note = `> 仅展示最近 ${rowsToProcess.length} 条（共 ${allRows.length} 条）`;
+        }
+        
+        if (rowsToProcess.length === 0) {
+            return;
         }
         
         const sectionLines = [];
         sectionLines.push(`### ${table.name}`);
-        if (note) {
-            sectionLines.push(note);
-            sectionLines.push('');
-        }
         
-        if (rowsToProcess.length === 0) {
-            sectionLines.push('- (无数据)');
-        } else {
-            rowsToProcess.forEach((row, index) => {
-                hasAnyRow = true;
-                const rowCells = Array.isArray(row) ? row.slice(1) : [];
-                const titleCell = rowCells[0];
-                const displayTitle = (titleCell && String(titleCell).trim()) ? String(titleCell).trim() : `条目 ${startIndex + index + 1}`;
-                
-                sectionLines.push(`- ${displayTitle}`);
-                
-                const detailHeaders = headerRow.slice(1);
-                const detailValues = rowCells.slice(1);
-                if (detailHeaders.length > 0 && detailValues.length > 0) {
-                    detailHeaders.forEach((header, detailIndex) => {
-                        const fieldName = (header && String(header).trim()) ? String(header).trim() : `字段 ${detailIndex + 2}`;
-                        const fieldValue = detailValues[detailIndex];
-                        const displayValue = (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '') ? String(fieldValue).trim() : '-';
-                        sectionLines.push(`  - ${fieldName}: ${displayValue}`);
-                    });
-                }
-                
-                sectionLines.push('');
-            });
-        }
+        rowsToProcess.forEach((row, index) => {
+            hasAnyRow = true;
+            const rowCells = Array.isArray(row) ? row.slice(1) : [];
+            const titleCell = rowCells[0];
+            const displayTitle = (titleCell && String(titleCell).trim()) ? String(titleCell).trim() : `条目 ${startIndex + index + 1}`;
+            
+            sectionLines.push(`- ${displayTitle}`);
+            
+            const detailHeaders = headerRow.slice(1);
+            const detailValues = rowCells.slice(1);
+            if (detailHeaders.length > 0 && detailValues.length > 0) {
+                detailHeaders.forEach((header, detailIndex) => {
+                    const fieldName = (header && String(header).trim()) ? String(header).trim() : `字段 ${detailIndex + 2}`;
+                    const fieldValue = detailValues[detailIndex];
+                    const displayValue = (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '') ? String(fieldValue).trim() : '-';
+                    sectionLines.push(`  - ${fieldName}: ${displayValue}`);
+                });
+            }
+            
+            sectionLines.push('');
+        });
         
         sections.push(sectionLines.join('\n').trim());
     });
