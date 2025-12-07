@@ -4350,7 +4350,15 @@ function generateDiffTablesHtml(oldData, newData) {
             } else if (!oldRow && newRow) {
                 diffRows.push({ type: 'added', row: newRow });
             } else if (oldRow && newRow && JSON.stringify(oldRow) !== JSON.stringify(newRow)) {
-                diffRows.push({ type: 'modified', row: newRow });
+                // 记录列级别的差异信息
+                const changedCols = [];
+                const colCount = Math.max(oldRow.length, newRow.length, headers.length);
+                for (let c = 0; c < colCount; c++) {
+                    const oldCell = oldRow[c] ?? '';
+                    const newCell = newRow[c] ?? '';
+                    changedCols[c] = (oldCell !== newCell);
+                }
+                diffRows.push({ type: 'modified', row: newRow, changedCols });
             }
         }
         if (diffRows.length === 0) {
@@ -4370,17 +4378,36 @@ function generateDiffTablesHtml(oldData, newData) {
         }
         html += `</tr></thead><tbody>`;
         diffRows.forEach((item, index) => {
-            let rowStyle = '';
+            // 行级背景色：删除=浅红，新增=浅绿，修改=默认背景（按列高亮）
+            let rowBg = '';
             if (item.type === 'deleted') {
-                rowStyle = 'background-color: rgba(255,0,0,0.15); color: #ff4d4f;';
+                rowBg = 'background-color: rgba(255,0,0,0.12);';
+            } else if (item.type === 'added') {
+                rowBg = 'background-color: rgba(0,200,0,0.08);';
             } else {
-                rowStyle = 'background-color: rgba(0,200,0,0.12); color: #1faa00;';
+                // 修改行使用交替行背景，具体高亮由单元格控制
+                rowBg = (index % 2 === 0)
+                    ? 'background-color: var(--ios-surface);'
+                    : 'background-color: var(--ios-gray);';
             }
-            html += `<tr style="${rowStyle}">`;
+            html += `<tr style="${rowBg}">`;
             const row = item.row || [];
+            const changedCols = item.changedCols || [];
             headers.forEach((_, colIndex) => {
                 const cellContent = (row && row[colIndex]) ? row[colIndex] : '';
-                html += `<td style="padding: 10px 8px; border: 1px solid var(--ios-border); vertical-align: top; word-break: break-word;">${escapeHtml(cellContent)}</td>`;
+                let cellBg = '';
+                if (item.type === 'deleted') {
+                    // 删除行：整行都浅红背景
+                    cellBg = 'background-color: rgba(255,0,0,0.12);';
+                } else if (item.type === 'added') {
+                    // 新增行：整行都浅绿背景
+                    cellBg = 'background-color: rgba(0,200,0,0.12);';
+                } else if (item.type === 'modified' && changedCols[colIndex]) {
+                    // 修改行：仅有变化的列使用浅绿背景
+                    cellBg = 'background-color: rgba(0,200,0,0.18);';
+                }
+                const style = `padding: 10px 8px; border: 1px solid var(--ios-border); vertical-align: top; word-break: break-word;${cellBg}`;
+                html += `<td style="${style}">${escapeHtml(cellContent)}</td>`;
             });
             html += `</tr>`;
         });
