@@ -231,6 +231,7 @@ const DEFAULT_SETTINGS = {
     },
     // 世界书排序（统一一个排序值，数值越小越靠前）
     worldbookOrder: 100,
+    previewOnlyShowChanges: false,
 };
 
 // 当前配置
@@ -644,6 +645,7 @@ function loadSettingsToUI() {
     const autoUpdateCheckbox = parentDoc.getElementById('data-manage-auto-update-enabled');
     const autoHideCheckbox = parentDoc.getElementById('data-manage-auto-hide-messages');
     const enableWorldbookCheckbox = parentDoc.getElementById('data-manage-enable-worldbook-generation');
+    const previewOnlyChangesCheckbox = parentDoc.getElementById('data-manage-preview-only-changes');
     
     if (frequencyInput) frequencyInput.value = settings.autoUpdateFrequency || '';
     if (batchSizeInput) batchSizeInput.value = settings.updateBatchSize || '';
@@ -655,6 +657,7 @@ function loadSettingsToUI() {
     if (autoUpdateCheckbox) autoUpdateCheckbox.checked = settings.autoUpdateEnabled || false;
     if (autoHideCheckbox) autoHideCheckbox.checked = settings.autoHideMessages !== false;
     if (enableWorldbookCheckbox) enableWorldbookCheckbox.checked = settings.enableWorldbookGeneration || false;
+    if (previewOnlyChangesCheckbox) previewOnlyChangesCheckbox.checked = !!settings.previewOnlyShowChanges;
     
     // 渲染提示词片段（使用当前选中的预设）
     const currentPrompt = getCurrentPrompt(settings);
@@ -954,6 +957,10 @@ function openDataManagePopup() {
                             <div class="data-manage-checkbox-group">
                                 <input type="checkbox" id="data-manage-enable-worldbook-generation">
                                 <label for="data-manage-enable-worldbook-generation">启用世界书生成</label>
+                            </div>
+                            <div class="data-manage-checkbox-group">
+                                <input type="checkbox" id="data-manage-preview-only-changes">
+                                <label for="data-manage-preview-only-changes">数据预览仅显示有变化的数据（删除标红，新增和修改标绿）</label>
                             </div>
                         </div>
                     </div>
@@ -4190,23 +4197,18 @@ async function showDataPreview() {
         
         // 生成表格HTML
         let tablesHtml = '';
-        
+        const previewOnlyChanges = !!(currentSettings && currentSettings.previewOnlyShowChanges);
+
         if (typeof messageData === 'object') {
-            // 如果是对象，尝试查找表格数据
-            for (const [key, value] of Object.entries(messageData)) {
-                if (value && typeof value === 'object' && value.content && Array.isArray(value.content)) {
-                    // 使用表格名称而不是表格id（key）
-                    const tableName = value.name || key;
-                    tablesHtml += generateTableHtml(tableName, value.content);
+            if (previewOnlyChanges) {
+                const previous = findPreviousDbMessage(chat, messageIndex);
+                if (previous && previous.data) {
+                    tablesHtml = generateDiffTablesHtml(previous.data, messageData);
+                } else {
+                    tablesHtml = generateAllTablesHtml(messageData);
                 }
-            }
-            
-            // 如果没有找到表格数据，显示整个对象
-            if (!tablesHtml) {
-                tablesHtml = `<div class="data-manage-card" style="margin-bottom: 16px;">
-                    <h3>数据内容</h3>
-                    <pre style="background-color: var(--ios-gray); padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(JSON.stringify(messageData, null, 2))}</pre>
-                </div>`;
+            } else {
+                tablesHtml = generateAllTablesHtml(messageData);
             }
         }
         
@@ -4259,6 +4261,116 @@ async function showDataPreview() {
         console.error('显示数据预览失败:', error);
         showToast(`显示数据预览失败: ${error.message}`, 'error');
     }
+}
+
+/**
+ * 生成完整表格HTML（不做diff）
+ */
+function generateAllTablesHtml(messageData) {
+    let tablesHtml = '';
+    for (const [key, value] of Object.entries(messageData)) {
+        if (value && typeof value === 'object' && value.content && Array.isArray(value.content)) {
+            const tableName = value.name || key;
+            tablesHtml += generateTableHtml(tableName, value.content);
+        }
+    }
+    if (!tablesHtml) {
+        tablesHtml = `<div class="data-manage-card" style="margin-bottom: 16px;">
+            <h3>数据内容</h3>
+            <pre style="background-color: var(--ios-gray); padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(JSON.stringify(messageData, null, 2))}</pre>
+        </div>`;
+    }
+    return tablesHtml;
+}
+
+/**
+ * 根据前后两份数据生成仅包含变化行的表格HTML
+ */
+function generateDiffTablesHtml(oldData, newData) {
+    let html = '';
+    if (!oldData || !newData || typeof oldData !== 'object' || typeof newData !== 'object') {
+        return generateAllTablesHtml(newData || oldData || {});
+    }
+    const keys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]));
+    keys.forEach(key => {
+        const oldTable = oldData[key];
+        const newTable = newData[key];
+        if (!newTable || !newTable.content || !Array.isArray(newTable.content)) {
+            return;
+        }
+        const oldContent = (oldTable && Array.isArray(oldTable.content)) ? oldTable.content : [];
+        const newContent = newTable.content;
+        if (!newContent.length) {
+            return;
+        }
+        const headers = newContent[0] || (oldContent[0] || []);
+        const maxRows = Math.max(oldContent.length, newContent.length);
+        const diffRows = [];
+        for (let i = 1; i < maxRows; i++) {
+            const oldRow = oldContent[i];
+            const newRow = newContent[i];
+            if (oldRow && !newRow) {
+                diffRows.push({ type: 'deleted', row: oldRow });
+            } else if (!oldRow && newRow) {
+                diffRows.push({ type: 'added', row: newRow });
+            } else if (oldRow && newRow && JSON.stringify(oldRow) !== JSON.stringify(newRow)) {
+                diffRows.push({ type: 'modified', row: newRow });
+            }
+        }
+        if (diffRows.length === 0) {
+            return;
+        }
+        const tableName = (newTable && newTable.name) || (oldTable && oldTable.name) || key;
+        html += `<div class="data-manage-card" style="margin-bottom: 16px;">
+            <h3>${escapeHtml(tableName)}（仅显示有变化的行）</h3>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
+                    <thead>
+                        <tr style="background-color: var(--ios-gray-dark);">`;
+        if (headers && headers.length > 0) {
+            headers.forEach(header => {
+                html += `<th style="padding: 12px 8px; text-align: left; border: 1px solid var(--ios-border); font-weight: 600; white-space: nowrap;">${escapeHtml(header || '')}</th>`;
+            });
+        }
+        html += `</tr></thead><tbody>`;
+        diffRows.forEach((item, index) => {
+            let rowStyle = '';
+            if (item.type === 'deleted') {
+                rowStyle = 'background-color: rgba(255,0,0,0.15); color: #ff4d4f;';
+            } else {
+                rowStyle = 'background-color: rgba(0,200,0,0.12); color: #1faa00;';
+            }
+            html += `<tr style="${rowStyle}">`;
+            const row = item.row || [];
+            headers.forEach((_, colIndex) => {
+                const cellContent = (row && row[colIndex]) ? row[colIndex] : '';
+                html += `<td style="padding: 10px 8px; border: 1px solid var(--ios-border); vertical-align: top; word-break: break-word;">${escapeHtml(cellContent)}</td>`;
+            });
+            html += `</tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+    });
+    if (!html) {
+        html = `<div class="data-manage-card" style="margin-bottom: 16px;">
+            <h3>数据内容</h3>
+            <p class="data-manage-notes">相比上一楼层未检测到变化，已隐藏详细表格。</p>
+        </div>`;
+    }
+    return html;
+}
+
+/**
+ * 查找指定索引之前最近一条包含数据库数据的消息
+ */
+function findPreviousDbMessage(chat, fromIndex) {
+    if (!chat || !Array.isArray(chat)) return null;
+    for (let i = fromIndex - 1; i >= 0; i--) {
+        const message = chat[i];
+        if (message && message.TavernDB_ACU_Data) {
+            return { index: i, data: message.TavernDB_ACU_Data };
+        }
+    }
+    return null;
 }
 
 /**
@@ -5160,6 +5272,8 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
     let success = false;
     const maxRetries = 3;
     let loadingToast = null;
+    // 记录更新前的数据库快照，用于判断是否有实际变更
+    const beforeSnapshot = currentJsonTableData ? JSON.stringify(currentJsonTableData) : null;
     
     try {
         // 参考参考文档：创建带终止按钮的toast
@@ -5251,7 +5365,19 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '正在�
             if (!parseSuccess) {
                 throw new Error('解析或应用AI更新时出错');
             }
-            
+
+            // 判断是否有实际数据变更（前后快照对比）
+            const afterSnapshot = currentJsonTableData ? JSON.stringify(currentJsonTableData) : null;
+            if (beforeSnapshot !== null && afterSnapshot !== null && beforeSnapshot === afterSnapshot) {
+                console.warn('AI 更新指令解析成功，但数据库内容无实际变更，本次不写入聊天记录');
+                if (attempt === maxRetries) {
+                    throw new Error('AI更新未对数据库产生任何变更');
+                }
+                // 视为本次尝试失败，等待后重试
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
+
             success = true;
             break;
         }
