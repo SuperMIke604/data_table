@@ -645,7 +645,6 @@ function loadSettingsToUI() {
     const autoUpdateCheckbox = parentDoc.getElementById('data-manage-auto-update-enabled');
     const autoHideCheckbox = parentDoc.getElementById('data-manage-auto-hide-messages');
     const enableWorldbookCheckbox = parentDoc.getElementById('data-manage-enable-worldbook-generation');
-    const previewOnlyChangesCheckbox = parentDoc.getElementById('data-manage-preview-only-changes');
     
     if (frequencyInput) frequencyInput.value = settings.autoUpdateFrequency || '';
     if (batchSizeInput) batchSizeInput.value = settings.updateBatchSize || '';
@@ -657,7 +656,6 @@ function loadSettingsToUI() {
     if (autoUpdateCheckbox) autoUpdateCheckbox.checked = settings.autoUpdateEnabled || false;
     if (autoHideCheckbox) autoHideCheckbox.checked = settings.autoHideMessages !== false;
     if (enableWorldbookCheckbox) enableWorldbookCheckbox.checked = settings.enableWorldbookGeneration || false;
-    if (previewOnlyChangesCheckbox) previewOnlyChangesCheckbox.checked = !!settings.previewOnlyShowChanges;
     
     // 渲染提示词片段（使用当前选中的预设）
     const currentPrompt = getCurrentPrompt(settings);
@@ -957,10 +955,6 @@ function openDataManagePopup() {
                             <div class="data-manage-checkbox-group">
                                 <input type="checkbox" id="data-manage-enable-worldbook-generation">
                                 <label for="data-manage-enable-worldbook-generation">启用世界书生成</label>
-                            </div>
-                            <div class="data-manage-checkbox-group">
-                                <input type="checkbox" id="data-manage-preview-only-changes">
-                                <label for="data-manage-preview-only-changes">数据预览仅显示有变化的数据（删除标红，新增和修改标绿）</label>
                             </div>
                         </div>
                     </div>
@@ -4197,7 +4191,8 @@ async function showDataPreview() {
         
         // 生成表格HTML
         let tablesHtml = '';
-        const previewOnlyChanges = !!(currentSettings && currentSettings.previewOnlyShowChanges);
+        const settings = loadSettings();
+        const previewOnlyChanges = !!(settings && settings.previewOnlyShowChanges);
 
         if (typeof messageData === 'object') {
             if (previewOnlyChanges) {
@@ -4216,6 +4211,12 @@ async function showDataPreview() {
         const previewHtml = `
             <div class="data-manage-popup" style="max-width: 100%;">
                 <h2>数据预览</h2>
+                <div class="data-manage-card" style="margin-bottom: 12px;">
+                    <label class="data-manage-checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="data-preview-only-changes" ${previewOnlyChanges ? 'checked' : ''} />
+                        <span>仅显示相对于上一楼层有变化的数据（删除标红，新增和修改标绿）</span>
+                    </label>
+                </div>
                 <div class="data-manage-card">
                     <h3>消息信息</h3>
                     <p><strong>楼层:</strong> ${messageIndex}</p>
@@ -4238,6 +4239,24 @@ async function showDataPreview() {
                     console.log('数据预览弹窗关闭:', action);
                 }
             });
+
+            // 绑定数据预览开关事件（稍后执行，等待DOM渲染）
+            setTimeout(() => {
+                const parentDoc = (window.parent && window.parent !== window)
+                    ? window.parent.document
+                    : document;
+                const checkbox = parentDoc.getElementById('data-preview-only-changes');
+                if (checkbox) {
+                    checkbox.addEventListener('change', function() {
+                        const s = loadSettings();
+                        s.previewOnlyShowChanges = this.checked;
+                        currentSettings.previewOnlyShowChanges = this.checked;
+                        saveSettings();
+                        // 重新打开预览以应用新的展示模式
+                        showDataPreview();
+                    });
+                }
+            }, 50);
         } else {
             // 如果没有callGenericPopup，使用简单的弹窗
             const popup = window.open('', 'dataPreviewPopup', 'width=900,height=700,scrollbars=yes');
@@ -4250,6 +4269,23 @@ async function showDataPreview() {
                 </head>
                 <body>
                     ${previewHtml}
+                    <script>
+                        (function() {
+                            const checkbox = document.getElementById('data-preview-only-changes');
+                            if (checkbox && window.opener && window.opener.SillyTavern) {
+                                checkbox.addEventListener('change', function() {
+                                    try {
+                                        const openerWin = window.opener;
+                                        if (openerWin && openerWin.dataManageTogglePreviewOnlyChanges) {
+                                            openerWin.dataManageTogglePreviewOnlyChanges(this.checked);
+                                        }
+                                    } catch (e) {
+                                        console.error('更新数据预览开关失败:', e);
+                                    }
+                                });
+                            }
+                        })();
+                    </script>
                 </body>
                 </html>
             `);
