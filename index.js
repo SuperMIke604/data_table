@@ -1021,6 +1021,7 @@ function openDataManagePopup() {
                             <select id="data-manage-prompt-selector" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--ios-border); background: var(--ios-gray); color: var(--ios-text);"></select>
                             <button id="data-manage-add-prompt" class="secondary">新增预设</button>
                             <button id="data-manage-delete-prompt" class="secondary">删除预设</button>
+                            <button id="data-manage-duplicate-prompt" class="secondary">复制预设</button>
                             <button id="data-manage-rename-prompt" class="secondary">重命名</button>
                         </div>
                     </div>
@@ -1551,6 +1552,39 @@ function setupPromptTabListeners(parentDoc) {
                 saveSettings();
                 showToast('预设已删除', 'success');
             }
+        });
+    }
+    
+    // 复制预设
+    const duplicateBtn = parentDoc.getElementById('data-manage-duplicate-prompt');
+    if (duplicateBtn) {
+        duplicateBtn.addEventListener('click', function() {
+            const currentIndex = currentSettings.currentPromptIndex || 0;
+            const currentPreset = currentSettings.charCardPrompts[currentIndex];
+            if (!currentPreset) {
+                return;
+            }
+            const defaultName = `${currentPreset.name} 副本`;
+            const newName = prompt('请输入复制预设的名称:', defaultName);
+            if (!newName || !newName.trim()) {
+                if (newName !== null) {
+                    showToast('预设名称不能为空', 'warning');
+                }
+                return;
+            }
+            const copiedPrompt = Array.isArray(currentPreset.prompt)
+                ? currentPreset.prompt.map(seg => ({ ...seg }))
+                : currentPreset.prompt;
+            const newPreset = {
+                name: newName.trim(),
+                prompt: copiedPrompt
+            };
+            currentSettings.charCardPrompts.push(newPreset);
+            currentSettings.currentPromptIndex = currentSettings.charCardPrompts.length - 1;
+            updatePromptSelector(currentSettings);
+            renderPromptSegments(newPreset.prompt);
+            saveSettings();
+            showToast('预设已复制', 'success');
         });
     }
     
