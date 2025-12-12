@@ -2369,6 +2369,14 @@ async function populateWorldbookEntryList() {
         const allBooks = await getWorldBooks();
         let html = '';
         let settingsChanged = false;
+        const isLorebookEntryEnabled = (entry) => {
+            if (!entry || typeof entry !== 'object') return true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'disabled')) return entry.disabled !== true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'is_disabled')) return entry.is_disabled !== true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'enabled')) return entry.enabled === true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'isEnabled')) return entry.isEnabled === true;
+            return true;
+        };
         
         for (const bookName of bookNames) {
             const bookData = allBooks.find(b => b.name === bookName);
@@ -2376,12 +2384,15 @@ async function populateWorldbookEntryList() {
                 // 将条目ID统一转换为字符串，避免类型不一致导致的匹配失败
                 const normalizeEntryId = (entry) => String(entry?.uid ?? entry?.id ?? '');
                 
-                // 如果该世界书没有设置，默认启用所有条目
+                // 如果该世界书没有设置，默认启用“世界书里处于启用状态”的条目
                 // 注意：只在新世界书时设置默认值，如果已有配置（即使是空数组），则使用已有配置
                 if (typeof worldbookConfig.enabledEntries[bookName] === 'undefined') {
-                    worldbookConfig.enabledEntries[bookName] = bookData.entries.map(normalizeEntryId);
+                    worldbookConfig.enabledEntries[bookName] = bookData.entries
+                        .filter(isLorebookEntryEnabled)
+                        .map(normalizeEntryId)
+                        .filter(id => id);
                     settingsChanged = true;
-                    console.log('[世界书] 新世界书，默认启用所有条目:', bookName, worldbookConfig.enabledEntries[bookName]);
+                    console.log('[世界书] 新世界书，默认启用已开启条目:', bookName, worldbookConfig.enabledEntries[bookName]);
                 } else {
                     // 确保已有配置中的条目ID也被转换为字符串
                     worldbookConfig.enabledEntries[bookName] = worldbookConfig.enabledEntries[bookName].map(id => String(id));
@@ -4614,12 +4625,25 @@ async function getCombinedWorldbookContent() {
         const allBooks = await getWorldBooks();
         const enabledEntriesMap = (currentSettings.worldbookConfig && currentSettings.worldbookConfig.enabledEntries) ? currentSettings.worldbookConfig.enabledEntries : {};
         const normalizeId = (entry) => String(entry?.uid ?? entry?.id ?? '');
+        const isLorebookEntryEnabled = (entry) => {
+            if (!entry || typeof entry !== 'object') return true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'disabled')) return entry.disabled !== true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'is_disabled')) return entry.is_disabled !== true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'enabled')) return entry.enabled === true;
+            if (Object.prototype.hasOwnProperty.call(entry, 'isEnabled')) return entry.isEnabled === true;
+            return true;
+        };
         let parts = [];
         for (const bookName of bookNames) {
             const book = allBooks.find(b => b.name === bookName);
             if (!book || !Array.isArray(book.entries) || book.entries.length === 0) continue;
             let enabled = enabledEntriesMap[bookName];
-            if (!Array.isArray(enabled)) enabled = book.entries.map(normalizeId);
+            if (!Array.isArray(enabled)) {
+                enabled = book.entries
+                    .filter(isLorebookEntryEnabled)
+                    .map(normalizeId)
+                    .filter(id => id);
+            }
             enabled = enabled.map(id => String(id));
             book.entries.forEach(entry => {
                 const uid = normalizeId(entry);
@@ -5287,14 +5311,9 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
         
         showToast(`开始更新 ${indicesToUpdate.length} 条消息的数据库...`, 'info');
         
-        // 按批次处理更新
-        const batchSize = currentSettings.updateBatchSize || 1;
-        const batches = [];
-        for (let i = 0; i < indicesToUpdate.length; i += batchSize) {
-            batches.push(indicesToUpdate.slice(i, i + batchSize));
-        }
-        
-        console.log(`处理 ${indicesToUpdate.length} 个更新，分为 ${batches.length} 个批次，每批 ${batchSize} 个`);
+        // 手动更新不分批：范围内一次性处理
+        const batches = [indicesToUpdate];
+        console.log(`处理 ${indicesToUpdate.length} 个更新，分为 ${batches.length} 个批次，每批 ${indicesToUpdate.length} 个`);
         
         let overallSuccess = true;
         
