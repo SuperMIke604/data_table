@@ -5165,21 +5165,41 @@ function parseAndApplyTableEdits(aiResponse) {
                 case 'updateRow': {
                     const [tableIndex, rowIndex, data] = args;
                     const table = sheets[tableIndex];
-                    if (table && table.content && table.content.length > rowIndex + 1 && typeof data === 'object') {
+                    if (table && table.content && typeof data === 'object') {
+                        const headerLen = Array.isArray(table.content[0]) ? table.content[0].length : 0;
+                        const createEmptyRow = () => {
+                            const row = [];
+                            const targetLen = Math.max(1, headerLen);
+                            for (let i = 0; i < targetLen; i++) row.push('');
+                            row[0] = null;
+                            return row;
+                        };
+
+                        // 若目标行不存在（常见于首次更新），自动补齐行
+                        while (table.content.length <= rowIndex + 1) {
+                            table.content.push(createEmptyRow());
+                        }
+
                         Object.keys(data).forEach(colIndexStr => {
                             const colIndex = parseInt(colIndexStr, 10);
-                            if (!isNaN(colIndex) && table.content[rowIndex + 1].length > colIndex + 1) {
-                                table.content[rowIndex + 1][colIndex + 1] = data[colIndexStr];
+                            if (isNaN(colIndex)) return;
+
+                            const targetCol = colIndex + 1;
+                            const row = table.content[rowIndex + 1];
+                            while (row.length <= targetCol) {
+                                row.push('');
                             }
+                            row[targetCol] = data[colIndexStr];
                         });
+
                         console.log(`应用updateRow到表格 ${tableIndex} (${table.name})，索引 ${rowIndex}，数据:`, data);
                         appliedEdits++;
                     }
                     break;
                 }
             }
-        } catch (e) {
-            console.error(`解析或应用指令失败: "${line}"`, e);
+        } catch (error) {
+            console.error(`应用指令失败: ${line}`, error);
         }
     });
     
