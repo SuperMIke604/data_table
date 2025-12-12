@@ -4709,6 +4709,59 @@ function buildReadableTableDataText(jsonTableData, settings) {
     return { text: finalText, hasData: hasAnyRow };
 }
 
+function buildTableDataTextForDollar0(jsonTableData, settings) {
+    if (!jsonTableData) {
+        return { text: '', hasData: false };
+    }
+
+    const summaryLimit = settings?.summaryTableMaxEntries || 10;
+    const tableKeys = Object.keys(jsonTableData).filter(k => k.startsWith('sheet_'));
+    if (tableKeys.length === 0) {
+        return { text: '', hasData: false };
+    }
+
+    let hasAnyRow = false;
+    let tableDataText = '';
+
+    tableKeys.forEach((sheetKey, tableIndex) => {
+        const table = jsonTableData[sheetKey];
+        if (!table || !table.name || !Array.isArray(table.content)) {
+            return;
+        }
+
+        tableDataText += `[${tableIndex}:${table.name}]\n`;
+        const headers = Array.isArray(table.content[0])
+            ? table.content[0].slice(1).map((h, i) => `[${i}:${h}]`).join('|')
+            : 'No Headers';
+        tableDataText += `  Columns: ${headers}\n`;
+
+        const allRows = table.content.slice(1);
+        let rowsToProcess = allRows;
+        let startIndex = 0;
+
+        if (table.name.trim() === '总结表' && allRows.length > summaryLimit) {
+            startIndex = allRows.length - summaryLimit;
+            rowsToProcess = allRows.slice(-summaryLimit);
+            tableDataText += `  - Note: Showing last ${rowsToProcess.length} of ${allRows.length} entries.\n`;
+        }
+
+        if (rowsToProcess.length > 0) {
+            rowsToProcess.forEach((row, index) => {
+                hasAnyRow = true;
+                const originalRowIndex = startIndex + index;
+                const rowData = Array.isArray(row) ? row.slice(1).join('|') : '';
+                tableDataText += `  [${originalRowIndex}] ${rowData}\n`;
+            });
+        } else {
+            tableDataText += '  (No data rows)\n';
+        }
+
+        tableDataText += '\n';
+    });
+
+    return { text: tableDataText.trim(), hasData: hasAnyRow };
+}
+
 /**
  * 准备AI输入 - 准备表格数据、消息文本、世界书内容
  */
@@ -4722,7 +4775,7 @@ async function prepareAIInput(messages) {
     const worldbookContent = await getCombinedWorldbookContent();
     
     // 1. 格式化当前JSON表格数据为可读文本（用于$0占位符）
-    const { text: tableDataText, hasData: hasTableData } = buildReadableTableDataText(currentJsonTableData, currentSettings);
+    const { text: tableDataText, hasData: hasTableData } = buildTableDataTextForDollar0(currentJsonTableData, currentSettings);
     const safeTableDataText = hasTableData ? tableDataText : '';
     
     // 2. 格式化消息文本（用于$1占位符）
