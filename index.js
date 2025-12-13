@@ -5443,6 +5443,22 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
         
         if (overallSuccess) {
             showToast('所有批次更新完成', 'success');
+
+            // 如果用户启用了自动隐藏功能，则在手动更新成功后隐藏相关楼层
+            if (currentSettings.autoHideMessages) {
+                try {
+                    const hideResult = await hideMessagesByFloorRange(floorStart, floorEnd);
+                    if (hideResult.success) {
+                        showToast(`数据整理完成！已成功隐藏${hideResult.rangeText}。`, 'success');
+                    } else {
+                        showToast(`数据整理完成！但隐藏楼层时出现问题：${hideResult.errorMessage}`, 'warning');
+                    }
+                } catch (error) {
+                    console.error('隐藏楼层时发生错误:', error);
+                    showToast('数据整理完成！但自动隐藏功能出现问题，请手动隐藏相关楼层。', 'warning');
+                }
+            }
+
             return true; // 返回成功
         } else {
             return false; // 返回失败
@@ -5452,6 +5468,80 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
         console.error('更新数据库失败:', error);
         throw error;
     }
+}
+
+/**
+ * 根据楼层范围隐藏消息
+ */
+async function hideMessagesByFloorRange(startFloor, endFloor) {
+    try {
+        // 特殊处理：当起始楼层为1时，包含0层
+        let actualStartFloor = startFloor;
+        let actualEndFloor = endFloor;
+
+        if (startFloor === 1) {
+            actualStartFloor = 0; // 包含0层
+        }
+
+        // 构建楼层范围字符串
+        let rangeText;
+        let hideCommand;
+
+        if (actualEndFloor === null || actualEndFloor === undefined) {
+            // 只指定起始楼层，隐藏从该楼层到最新的所有楼层
+            rangeText = `楼层 ${actualStartFloor} 及以后`;
+            hideCommand = `/hide ${actualStartFloor}-`;
+        } else {
+            // 指定了楼层范围
+            rangeText = `楼层 ${actualStartFloor}-${actualEndFloor}`;
+            hideCommand = `/hide ${actualStartFloor}-${actualEndFloor}`;
+        }
+
+        console.log(`准备隐藏楼层范围: ${hideCommand} (原始范围: ${startFloor}${endFloor !== null && endFloor !== undefined ? `-${endFloor}` : ' 及以后'})`);
+
+        // 调用 /hide 命令
+        await triggerSlashCommand(hideCommand);
+
+        return {
+            success: true,
+            rangeText: rangeText,
+            hideCommand: hideCommand,
+        };
+    } catch (error) {
+        console.error('隐藏楼层时发生错误:', error);
+        return {
+            success: false,
+            rangeText: endFloor !== null && endFloor !== undefined ? `楼层 ${startFloor}-${endFloor}` : `楼层 ${startFloor} 及以后` ,
+            errorMessage: error.message || '未知错误',
+        };
+    }
+}
+
+/**
+ * 触发斜杠命令的辅助函数
+ */
+async function triggerSlashCommand(command) {
+    return new Promise((resolve, reject) => {
+        try {
+            // 优先使用 SillyTavern 暴露的 API（如果存在）
+            if (typeof SillyTavern_API_ACU !== 'undefined' && SillyTavern_API_ACU.triggerSlash) {
+                SillyTavern_API_ACU.triggerSlash(command);
+                resolve();
+                return;
+            }
+
+            // 备用方案：直接调用全局 window.triggerSlash（若可用）
+            if (typeof window !== 'undefined' && typeof window.triggerSlash === 'function') {
+                window.triggerSlash(command);
+                resolve();
+                return;
+            }
+
+            reject(new Error('无法找到 triggerSlash 函数'));
+        } catch (error) {
+            reject(error);
+        }
+    });
 }
 
 /**
