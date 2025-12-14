@@ -4769,13 +4769,15 @@ function buildReadableTableDataText(jsonTableData, settings) {
 
 function buildTableDataTextForDollar0(jsonTableData, settings) {
     if (!jsonTableData) {
-        return { text: '', hasData: false };
+        // 即使没有表格数据，也返回说明性文本，避免 $0 完全为空
+        return { text: '(当前还没有表格数据)', hasData: false };
     }
 
     const summaryLimit = settings?.summaryTableMaxEntries || 10;
     const tableKeys = Object.keys(jsonTableData).filter(k => k.startsWith('sheet_'));
     if (tableKeys.length === 0) {
-        return { text: '', hasData: false };
+        // 没有任何 sheet_ 表时，同样返回占位说明
+        return { text: '(当前还没有表格数据)', hasData: false };
     }
 
     let hasAnyRow = false;
@@ -4834,7 +4836,8 @@ async function prepareAIInput(messages) {
     
     // 1. 格式化当前JSON表格数据为可读文本（用于$0占位符）
     const { text: tableDataText, hasData: hasTableData } = buildTableDataTextForDollar0(currentJsonTableData, currentSettings);
-    const safeTableDataText = hasTableData ? tableDataText : '';
+    // 与参考文档保持一致：即使没有实际数据行，也使用构建好的占位文本
+    const safeTableDataText = tableDataText || '(当前还没有表格数据)';
     
     // 2. 格式化消息文本（用于$1占位符）
     let messagesText = '当前最新对话内容:\n';
