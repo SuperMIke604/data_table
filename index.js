@@ -5168,6 +5168,9 @@ function parseAndApplyTableEdits(aiResponse) {
                 } catch (jsonError) {
                     // 尝试清理JSON
                     let sanitizedJson = jsonPart;
+                    // 兼容未加引号的数字键（例如：{1: "x", 2: "y"}）
+                    // 转为合法 JSON：{"1": "x", "2": "y"}
+                    sanitizedJson = sanitizedJson.replace(/([,{]\s*)(\d+)\s*:/g, '$1"$2":');
                     // 移除尾随逗号
                     sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
                     // 修复悬空键
