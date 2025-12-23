@@ -5094,7 +5094,18 @@ function parseAndApplyTableEdits(aiResponse) {
     let commandReconstructor = '';
     
     originalLines.forEach(line => {
-        const trimmedLine = line.trim();
+        let trimmedLine = line.trim();
+        if (trimmedLine === '') return;
+
+        // 兼容 AI 输出为 JS 字符串拼接形式：
+        // 例如："...\n' + updateRow(...)" 或单独一行 "+"
+        if (trimmedLine === '+') return;
+        if (trimmedLine.startsWith('+')) {
+            trimmedLine = trimmedLine.slice(1).trimStart();
+        }
+        if (trimmedLine.endsWith('+')) {
+            trimmedLine = trimmedLine.slice(0, -1).trimEnd();
+        }
         if (trimmedLine === '') return;
         
         if (trimmedLine.startsWith('insertRow') || trimmedLine.startsWith('deleteRow') || trimmedLine.startsWith('updateRow')) {
