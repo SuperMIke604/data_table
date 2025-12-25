@@ -252,6 +252,65 @@ function getWorldbookOrderValue() {
 // 当前数据库数据（内存中的数据库状态）
 let currentJsonTableData = null;
 
+let tableEditErrorLogCache = null;
+const TABLE_EDIT_ERROR_LOG_STORAGE_KEY = 'TavernDB_TableEditErrorLog';
+
+function getTableEditErrorLog() {
+    if (Array.isArray(tableEditErrorLogCache)) return tableEditErrorLogCache;
+    try {
+        const raw = localStorage.getItem(TABLE_EDIT_ERROR_LOG_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        tableEditErrorLogCache = Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        tableEditErrorLogCache = [];
+    }
+    return tableEditErrorLogCache;
+}
+
+function saveTableEditErrorLog() {
+    try {
+        localStorage.setItem(TABLE_EDIT_ERROR_LOG_STORAGE_KEY, JSON.stringify(getTableEditErrorLog()));
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function appendTableEditErrorLog(entry) {
+    try {
+        const log = getTableEditErrorLog();
+        log.push({
+            time: new Date().toISOString(),
+            ...entry,
+        });
+        const max = 200;
+        if (log.length > max) log.splice(0, log.length - max);
+        saveTableEditErrorLog();
+    } catch (e) {
+    }
+}
+
+function clearTableEditErrorLog() {
+    tableEditErrorLogCache = [];
+    try {
+        localStorage.removeItem(TABLE_EDIT_ERROR_LOG_STORAGE_KEY);
+    } catch (e) {
+    }
+}
+
+function escapeHtmlSafe(s) {
+    try {
+        return escapeHtml(String(s));
+    } catch (e) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+}
+
 // 用于中止正在进行的AI请求
 let currentAbortController = null;
 
@@ -1161,6 +1220,7 @@ function openDataManagePopup() {
                     <div class="data-manage-button-group" style="margin-top: 15px;">
                         <button id="data-manage-visualize-template" class="secondary">可视化当前模板</button>
                         <button id="data-manage-show-overview" class="secondary">数据概览</button>
+                        <button id="data-manage-show-error-log" class="secondary">报错日志</button>
                     </div>
                     <div id="data-manage-template-visualization" style="display: none; margin-top: 15px;">
                         <div class="data-manage-button-group" style="margin-bottom: 10px;">
@@ -1168,6 +1228,13 @@ function openDataManagePopup() {
                             <button id="data-manage-refresh-template-display" class="secondary">刷新显示</button>
                         </div>
                         <textarea id="data-manage-template-textarea" style="width: 100%; min-height: 300px; font-family: monospace; background-color: var(--ios-gray); color: var(--ios-text); padding: 12px; border: 1px solid var(--ios-border); border-radius: 8px; resize: vertical;"></textarea>
+                    </div>
+                    <div id="data-manage-error-log-area" style="display: none; margin-top: 15px;">
+                        <div class="data-manage-button-group" style="margin-bottom: 10px;">
+                            <button id="data-manage-clear-error-log" class="secondary">清空日志</button>
+                            <button id="data-manage-close-error-log" class="secondary">关闭</button>
+                        </div>
+                        <div id="data-manage-error-log-container" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);"></div>
                     </div>
                     <div id="data-manage-overview-area" style="display: none; margin-top: 15px;">
                         <div class="data-manage-button-group" style="margin-bottom: 10px;">
@@ -4152,6 +4219,60 @@ function setupDataTabListeners(parentDoc) {
             showToast('模板显示已刷新', 'success');
         });
     }
+
+    const showErrorLogBtn = parentDoc.getElementById('data-manage-show-error-log');
+    if (showErrorLogBtn) {
+        showErrorLogBtn.addEventListener('click', function() {
+            const area = parentDoc.getElementById('data-manage-error-log-area');
+            const container = parentDoc.getElementById('data-manage-error-log-container');
+            if (!area || !container) return;
+            const log = getTableEditErrorLog();
+            if (!log.length) {
+                container.innerHTML = '<em style="color: var(--ios-text-secondary);">暂无报错日志</em>';
+            } else {
+                const rows = log
+                    .slice()
+                    .reverse()
+                    .map((e, idx) => {
+                        const time = escapeHtmlSafe(e.time || '');
+                        const reason = escapeHtmlSafe(e.reason || '');
+                        const command = escapeHtmlSafe(e.command || '');
+                        const detail = escapeHtmlSafe(e.detail || '');
+                        return `
+                            <div style="padding: 10px; border: 1px solid var(--ios-border); border-radius: 8px; margin-bottom: 10px; background: rgba(255, 59, 48, 0.06);">
+                                <div style="display:flex; justify-content:space-between; gap:12px;">
+                                    <div><b>#${idx + 1}</b> <span style="color: var(--ios-text-secondary);">${time}</span></div>
+                                    <div style="color: #FF3B30;"><b>${reason}</b></div>
+                                </div>
+                                <div style="margin-top:8px; font-family: monospace; white-space: pre-wrap; word-break: break-word;">${command}</div>
+                                ${detail ? `<div style="margin-top:8px; color: var(--ios-text-secondary); white-space: pre-wrap; word-break: break-word;">${detail}</div>` : ''}
+                            </div>
+                        `;
+                    })
+                    .join('');
+                container.innerHTML = rows;
+            }
+            area.style.display = 'block';
+        });
+    }
+
+    const closeErrorLogBtn = parentDoc.getElementById('data-manage-close-error-log');
+    if (closeErrorLogBtn) {
+        closeErrorLogBtn.addEventListener('click', function() {
+            const area = parentDoc.getElementById('data-manage-error-log-area');
+            if (area) area.style.display = 'none';
+        });
+    }
+
+    const clearErrorLogBtn = parentDoc.getElementById('data-manage-clear-error-log');
+    if (clearErrorLogBtn) {
+        clearErrorLogBtn.addEventListener('click', function() {
+            clearTableEditErrorLog();
+            const container = parentDoc.getElementById('data-manage-error-log-container');
+            if (container) container.innerHTML = '<em style="color: var(--ios-text-secondary);">暂无报错日志</em>';
+            showToast('报错日志已清空', 'success');
+        });
+    }
 }
 
 /**
@@ -5168,6 +5289,22 @@ function parseAndApplyTableEdits(aiResponse) {
     if (commandReconstructor) {
         commandLines.push(commandReconstructor);
     }
+
+    // 进一步拆分：有些AI/字符串拼接会把多条指令合并到同一行（例如：updateRow(...);deleteRow(...);...）
+    // 这里按分号再切分一次，避免整行无法匹配单条指令的正则而导致“全部失效”。
+    const expandedCommandLines = [];
+    commandLines.forEach(cmdLine => {
+        const parts = String(cmdLine).split(';');
+        parts.forEach(part => {
+            const t = part.trim();
+            if (!t) return;
+            if (t.startsWith('insertRow') || t.startsWith('deleteRow') || t.startsWith('updateRow')) {
+                expandedCommandLines.push(t + ';');
+            }
+        });
+    });
+    commandLines.length = 0;
+    commandLines.push(...expandedCommandLines);
     
     let appliedEdits = 0;
     
@@ -5187,6 +5324,10 @@ function parseAndApplyTableEdits(aiResponse) {
         const match = commandLineWithoutComment.match(/^(insertRow|deleteRow|updateRow)\s*\((.*)\);?$/);
         if (!match) {
             console.warn(`跳过格式错误或截断的指令行: "${commandLineWithoutComment}"`);
+            appendTableEditErrorLog({
+                reason: '指令格式错误',
+                command: commandLineWithoutComment,
+            });
             return;
         }
         
@@ -5230,6 +5371,11 @@ function parseAndApplyTableEdits(aiResponse) {
                         args = [...initialArgs, jsonData];
                     } catch (finalError) {
                         console.error(`无法解析JSON: "${jsonPart}"`, finalError);
+                        appendTableEditErrorLog({
+                            reason: 'JSON解析失败',
+                            command: commandLineWithoutComment,
+                            detail: String(finalError && finalError.message ? finalError.message : finalError),
+                        });
                         return;
                     }
                 }
@@ -5249,6 +5395,11 @@ function parseAndApplyTableEdits(aiResponse) {
                         table.content.push(newRow);
                         console.log(`应用insertRow到表格 ${tableIndex} (${table.name})，数据:`, data);
                         appliedEdits++;
+                    } else {
+                        appendTableEditErrorLog({
+                            reason: 'insertRow 目标表不存在或参数无效',
+                            command: commandLineWithoutComment,
+                        });
                     }
                     break;
                 }
@@ -5259,6 +5410,11 @@ function parseAndApplyTableEdits(aiResponse) {
                         table.content.splice(rowIndex + 1, 1);
                         console.log(`应用deleteRow到表格 ${tableIndex} (${table.name})，索引 ${rowIndex}`);
                         appliedEdits++;
+                    } else {
+                        appendTableEditErrorLog({
+                            reason: 'deleteRow 目标表不存在或行索引越界',
+                            command: commandLineWithoutComment,
+                        });
                     }
                     break;
                 }
@@ -5294,12 +5450,22 @@ function parseAndApplyTableEdits(aiResponse) {
 
                         console.log(`应用updateRow到表格 ${tableIndex} (${table.name})，索引 ${rowIndex}，数据:`, data);
                         appliedEdits++;
+                    } else {
+                        appendTableEditErrorLog({
+                            reason: 'updateRow 目标表不存在或参数无效',
+                            command: commandLineWithoutComment,
+                        });
                     }
                     break;
                 }
             }
         } catch (error) {
             console.error(`应用指令失败: ${line}`, error);
+            appendTableEditErrorLog({
+                reason: '应用指令异常',
+                command: commandLineWithoutComment || String(line),
+                detail: String(error && error.message ? error.message : error),
+            });
         }
     });
     
