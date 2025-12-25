@@ -5625,15 +5625,26 @@ async function updateDatabaseByFloorRange(floorStart, floorEnd) {
             const firstMessageIndex = batchIndices[0];
             const lastMessageIndex = batchIndices[batchIndices.length - 1];
             
-            // 1. 加载基础数据库：从当前批次开始的位置往前找最近的记录
+            // 1. 加载基础数据库：优先使用当前消息的数据库，如果没有则往前找最近的记录
             let foundDb = false;
-            for (let j = firstMessageIndex - 1; j >= 0; j--) {
-                const msg = chat[j];
-                if (!msg.is_user && msg.TavernDB_ACU_Data) {
-                    currentJsonTableData = JSON.parse(JSON.stringify(msg.TavernDB_ACU_Data));
-                    console.log(`[批次 ${batchNumber}] 从消息索引 ${j} 加载数据库状态`);
-                    foundDb = true;
-                    break;
+            
+            // 首先检查当前消息是否已经有数据库记录
+            const currentMsg = chat[firstMessageIndex];
+            if (currentMsg && !currentMsg.is_user && currentMsg.TavernDB_ACU_Data) {
+                currentJsonTableData = JSON.parse(JSON.stringify(currentMsg.TavernDB_ACU_Data));
+                console.log(`[批次 ${batchNumber}] 使用当前消息索引 ${firstMessageIndex} 的数据库状态`);
+                foundDb = true;
+            } 
+            // 如果当前消息没有数据库记录，则向前查找
+            else {
+                for (let j = firstMessageIndex - 1; j >= 0; j--) {
+                    const msg = chat[j];
+                    if (!msg.is_user && msg.TavernDB_ACU_Data) {
+                        currentJsonTableData = JSON.parse(JSON.stringify(msg.TavernDB_ACU_Data));
+                        console.log(`[批次 ${batchNumber}] 从消息索引 ${j} 加载数据库状态`);
+                        foundDb = true;
+                        break;
+                    }
                 }
             }
             
