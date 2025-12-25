@@ -5384,7 +5384,15 @@ function parseAndApplyTableEdits(aiResponse) {
             // 应用指令
             switch (command) {
                 case 'insertRow': {
-                    const [tableIndex, data] = args;
+                    let tableIndex;
+                    let rowIndex;
+                    let data;
+                    if (Array.isArray(args) && args.length === 3) {
+                        [tableIndex, rowIndex, data] = args;
+                    } else {
+                        [tableIndex, data] = args;
+                        rowIndex = null;
+                    }
                     const table = sheets[tableIndex];
                     if (table && table.content && typeof data === 'object') {
                         const newRow = [null];
@@ -5392,9 +5400,16 @@ function parseAndApplyTableEdits(aiResponse) {
                         headers.forEach((_, colIndex) => {
                             newRow.push(data[colIndex] || (data[String(colIndex)] || ''));
                         });
-                        table.content.push(newRow);
-                        console.log(`应用insertRow到表格 ${tableIndex} (${table.name})，数据:`, data);
-                        appliedEdits++;
+                        if (typeof rowIndex === 'number' && !isNaN(rowIndex)) {
+                            const insertAt = Math.max(0, Math.min(rowIndex, Math.max(0, table.content.length - 1)));
+                            table.content.splice(insertAt + 1, 0, newRow);
+                            console.log(`应用insertRow到表格 ${tableIndex} (${table.name})，索引 ${insertAt}，数据:`, data);
+                            appliedEdits++;
+                        } else {
+                            table.content.push(newRow);
+                            console.log(`应用insertRow到表格 ${tableIndex} (${table.name})，数据:`, data);
+                            appliedEdits++;
+                        }
                     } else {
                         appendTableEditErrorLog({
                             reason: 'insertRow 目标表不存在或参数无效',
