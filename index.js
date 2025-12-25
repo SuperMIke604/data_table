@@ -5065,6 +5065,53 @@ function parseAndApplyTableEdits(aiResponse) {
         console.error('无法应用编辑，currentJsonTableData未加载');
         return false;
     }
+
+    const escapeUnescapedQuotesInJsonStrings = (input) => {
+        // Heuristic: when inside a JSON string literal, a non-escaped '"' is considered
+        // an inner quote (should be escaped) if the next non-space char is NOT a structural
+        // terminator (',', '}', ']'). This helps with AI text that contains quotes like "泄".
+        let out = '';
+        let inString = false;
+        let escape = false;
+        for (let i = 0; i < input.length; i++) {
+            const ch = input[i];
+            if (!inString) {
+                if (ch === '"') {
+                    inString = true;
+                }
+                out += ch;
+                continue;
+            }
+
+            if (escape) {
+                out += ch;
+                escape = false;
+                continue;
+            }
+
+            if (ch === '\\') {
+                out += ch;
+                escape = true;
+                continue;
+            }
+
+            if (ch === '"') {
+                let j = i + 1;
+                while (j < input.length && /\s/.test(input[j])) j++;
+                const next = j < input.length ? input[j] : '';
+                if (next === ',' || next === '}' || next === ']') {
+                    inString = false;
+                    out += ch;
+                } else {
+                    out += '\\"';
+                }
+                continue;
+            }
+
+            out += ch;
+        }
+        return out;
+    };
     
     // 清理AI响应
     let cleanedResponse = aiResponse.trim();
@@ -5171,6 +5218,8 @@ function parseAndApplyTableEdits(aiResponse) {
                     // 兼容未加引号的数字键（例如：{1: "x", 2: "y"}）
                     // 转为合法 JSON：{"1": "x", "2": "y"}
                     sanitizedJson = sanitizedJson.replace(/([,{]\s*)(\d+)\s*:/g, '$1"$2":');
+                    // 兼容字符串值内部包含未转义的双引号（常见于 AI 文本中的引用号）
+                    sanitizedJson = escapeUnescapedQuotesInJsonStrings(sanitizedJson);
                     // 移除尾随逗号
                     sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
                     // 修复悬空键
