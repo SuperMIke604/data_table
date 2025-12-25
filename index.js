@@ -5217,7 +5217,7 @@ function parseAndApplyTableEdits(aiResponse) {
                     let sanitizedJson = jsonPart;
                     // 兼容未加引号的数字键（例如：{1: "x", 2: "y"}）
                     // 转为合法 JSON：{"1": "x", "2": "y"}
-                    sanitizedJson = sanitizedJson.replace(/([,{]\s*)(\d+)\s*:/g, '$1"$2":');
+                    sanitizedJson = sanitizedJson.replace(/(^|[,{]\s*)(\d+)\s*[:：]/gm, '$1"$2":');
                     // 兼容字符串值内部包含未转义的双引号（常见于 AI 文本中的引用号）
                     sanitizedJson = escapeUnescapedQuotesInJsonStrings(sanitizedJson);
                     // 移除尾随逗号
