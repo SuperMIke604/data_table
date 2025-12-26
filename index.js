@@ -5356,7 +5356,7 @@ function parseAndApplyTableEdits(aiResponse) {
                 } catch (jsonError) {
                     // 尝试清理JSON
                     let sanitizedJson = jsonPart;
-                    // 兼容未加引号的数字键（例如：{1: "x", 2: "y"}）
+                    // 兼容未加引号的数字键（例如：{1: "x", 2: "y"）
                     // 转为合法 JSON：{"1": "x", "2": "y"}
                     sanitizedJson = sanitizedJson.replace(/(^|[,{]\s*)(\d+)\s*[:：]/gm, '$1"$2":');
                     // 兼容字符串值内部包含未转义的双引号（常见于 AI 文本中的引用号）
@@ -5365,6 +5365,10 @@ function parseAndApplyTableEdits(aiResponse) {
                     sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
                     // 修复悬空键
                     sanitizedJson = sanitizedJson.replace(/,\s*("[^"]*"\s*)}/g, '}');
+
+                    // 调试日志：输出原始和清洗后的 JSON 字符串，方便定位解析错误
+                    console.error('JSON 解析失败，原始 jsonPart:', jsonPart);
+                    console.error('JSON 解析失败，清洗后的 sanitizedJson:', sanitizedJson);
                     
                     try {
                         const jsonData = JSON.parse(sanitizedJson);
@@ -5374,7 +5378,11 @@ function parseAndApplyTableEdits(aiResponse) {
                         appendTableEditErrorLog({
                             reason: 'JSON解析失败',
                             command: commandLineWithoutComment,
-                            detail: String(finalError && finalError.message ? finalError.message : finalError),
+                            detail: (
+                                String(finalError && finalError.message ? finalError.message : finalError) +
+                                '\n原始 jsonPart: ' + String(jsonPart) +
+                                '\n清洗后的 sanitizedJson: ' + String(sanitizedJson)
+                            ),
                         });
                         return;
                     }
