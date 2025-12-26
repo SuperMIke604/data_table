@@ -5359,12 +5359,17 @@ function parseAndApplyTableEdits(aiResponse) {
                     // 兼容未加引号的数字键（例如：{1: "x", 2: "y"）
                     // 转为合法 JSON：{"1": "x", "2": "y"}
                     sanitizedJson = sanitizedJson.replace(/(^|[,{]\s*)(\d+)\s*[:：]/gm, '$1"$2":');
-                    // 兼容字符串值内部包含未转义的双引号（常见于 AI 文本中的引用号）
-                    sanitizedJson = escapeUnescapedQuotesInJsonStrings(sanitizedJson);
-                    // 移除尾随逗号
+                    // 移除尾随逗号，例如 {"0": "x",} 或 [1,2,]
                     sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
-                    // 修复悬空键
+                    // 修复悬空键：{"0": "x", "1" } → {"0": "x"}
                     sanitizedJson = sanitizedJson.replace(/,\s*("[^"]*"\s*)}/g, '}');
+                    // 仅在字符串值内部修复未转义的双引号，避免破坏键名
+                    // 参考参考文档：匹配形如 : "..." 的值部分
+                    sanitizedJson = sanitizedJson.replace(/(:\s*)"((?:\\.|[^"\\])*)"/g, (match, prefix, content) => {
+                        // 在内容内部，将未转义的双引号替换为转义形式
+                        const fixedContent = content.replace(/(?<!\\)"/g, '\\"');
+                        return `${prefix}"${fixedContent}"`;
+                    });
 
                     // 调试日志：输出原始和清洗后的 JSON 字符串，方便定位解析错误
                     console.error('JSON 解析失败，原始 jsonPart:', jsonPart);
