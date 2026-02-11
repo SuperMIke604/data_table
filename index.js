@@ -5359,6 +5359,9 @@ function parseAndApplyTableEdits(aiResponse) {
                     // 兼容未加引号的数字键（例如：{1: "x", 2: "y"）
                     // 转为合法 JSON：{"1": "x", "2": "y"}
                     sanitizedJson = sanitizedJson.replace(/(^|[,{]\s*)(\d+)\s*[:：]/gm, '$1"$2":');
+                    // 未加引号的值 → 加引号（排除已引号的字符串、对象、数组、JSON字面量）
+                    // {"1": 你好, "2": 世界} → {"1": "你好", "2": "世界"}
+                    sanitizedJson = sanitizedJson.replace(/(:\s*)(?!["\[{])(?!true\b|false\b|null\b|-?\d+\.?\d*\s*[,}\]])([^,}\]]+?)(\s*[,}\]])/g, '$1"$2"$3');
                     // 移除尾随逗号，例如 {"0": "x",} 或 [1,2,]
                     sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
                     // 修复悬空键：{"0": "x", "1" } → {"0": "x"}
