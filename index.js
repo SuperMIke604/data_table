@@ -5356,6 +5356,9 @@ function parseAndApplyTableEdits(aiResponse) {
                 } catch (jsonError) {
                     // 尝试清理JSON
                     let sanitizedJson = jsonPart;
+                    // 将用作键值对分隔符的全角逗号转为半角（全角逗号后跟 数字+冒号 的情况）
+                    // {0: 值A， 1: 值B} → {0: 值A, 1: 值B}
+                    sanitizedJson = sanitizedJson.replace(/，(\s*\d+\s*[:：])/g, ',$1');
                     // 兼容未加引号的数字键（例如：{1: "x", 2: "y"）
                     // 转为合法 JSON：{"1": "x", "2": "y"}
                     sanitizedJson = sanitizedJson.replace(/(^|[,{]\s*)(\d+)\s*[:：]/gm, '$1"$2":');
