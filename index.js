@@ -5354,30 +5354,38 @@ function parseAndApplyTableEdits(aiResponse) {
                     const jsonData = JSON.parse(jsonPart);
                     args = [...initialArgs, jsonData];
                 } catch (jsonError) {
-                    // 尝试清理JSON
+                    // 简化的JSON清洗流程：拆解 → 归一化 → 重建
                     let sanitizedJson = jsonPart;
-                    // 将用作键值对分隔符的全角逗号转为半角（全角逗号后跟 数字+冒号 的情况）
-                    // {0: 值A， 1: 值B} → {0: 值A, 1: 值B}
-                    sanitizedJson = sanitizedJson.replace(/，(\s*\d+\s*[:：])/g, ',$1');
-                    // 兼容未加引号的数字键（例如：{1: "x", 2: "y"）
-                    // 转为合法 JSON：{"1": "x", "2": "y"}
-                    sanitizedJson = sanitizedJson.replace(/(^|[,{]\s*)(\d+)\s*[:：]/gm, '$1"$2":');
-                    // 未加引号的值 → 加引号（排除已引号的字符串、对象、数组、JSON字面量）
-                    // {"1": 你好, "2": 世界} → {"1": "你好", "2": "世界"}
-                    sanitizedJson = sanitizedJson.replace(/("\s*:\s*)(?![\s"\[{])(?!true\b|false\b|null\b|-?\d+\.?\d*\s*[,}\]])([^,}\]]+?)(\s*[,}\]])/g, '$1"$2"$3');
-                    // 移除尾随逗号，例如 {"0": "x",} 或 [1,2,]
-                    sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
-                    // 修复悬空键：{"0": "x", "1" } → {"0": "x"}
-                    sanitizedJson = sanitizedJson.replace(/,\s*("[^"]*"\s*)}/g, '}');
-                    // 仅在字符串值内部修复未转义的双引号，避免破坏键名
-                    // 参考参考文档：匹配形如 : "..." 的值部分
-                    sanitizedJson = sanitizedJson.replace(/(:\s*)"((?:\\.|[^"\\])*)"/g, (match, prefix, content) => {
-                        // 在内容内部，将未转义的双引号替换为转义形式
-                        const fixedContent = content.replace(/(?<!\\)"/g, '\\"');
-                        return `${prefix}"${fixedContent}"`;
-                    });
 
-                    // 调试日志：输出原始和清洗后的 JSON 字符串，方便定位解析错误
+                    // 1. 统一剔除所有双引号
+                    sanitizedJson = sanitizedJson.replace(/"/g, '');
+
+                    // 2. 统一将全角逗号转为半角逗号
+                    sanitizedJson = sanitizedJson.replace(/，/g, ',');
+
+                    // 3. 匹配 数字键: 值 的模式，重建合法JSON
+                    //    用 ,\s*数字[:：] 或 } 作为值的边界，区分分隔逗号和内容逗号
+                    const kvPairs = [];
+                    const kvRegex = /(\d+)\s*[:：]\s*(.*?)(?=\s*,\s*\d+\s*[:：]|\s*})/gs;
+                    let kvMatch;
+                    while ((kvMatch = kvRegex.exec(sanitizedJson)) !== null) {
+                        const key = kvMatch[1];
+                        let value = kvMatch[2].trim();
+                        // 转义JSON特殊字符
+                        value = value
+                            .replace(/\\/g, '\\\\')
+                            .replace(/"/g, '\\"')
+                            .replace(/\n/g, '\\n')
+                            .replace(/\r/g, '\\r')
+                            .replace(/\t/g, '\\t');
+                        kvPairs.push(`"${key}":"${value}"`);
+                    }
+
+                    if (kvPairs.length > 0) {
+                        sanitizedJson = '{' + kvPairs.join(',') + '}';
+                    }
+
+                    // 调试日志
                     console.error('JSON 解析失败，原始 jsonPart:', jsonPart);
                     console.error('JSON 解析失败，清洗后的 sanitizedJson:', sanitizedJson);
 
