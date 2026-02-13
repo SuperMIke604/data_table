@@ -5361,7 +5361,7 @@ function parseAndApplyTableEdits(aiResponse) {
                     sanitizedJson = sanitizedJson.replace(/(^|[,{]\s*)(\d+)\s*[:：]/gm, '$1"$2":');
                     // 未加引号的值 → 加引号（排除已引号的字符串、对象、数组、JSON字面量）
                     // {"1": 你好, "2": 世界} → {"1": "你好", "2": "世界"}
-                    sanitizedJson = sanitizedJson.replace(/(:\s*)(?!["\[{])(?!true\b|false\b|null\b|-?\d+\.?\d*\s*[,}\]])([^,}\]]+?)(\s*[,}\]])/g, '$1"$2"$3');
+                    sanitizedJson = sanitizedJson.replace(/("\s*:\s*)(?!["\[{])(?!true\b|false\b|null\b|-?\d+\.?\d*\s*[,}\]])([^,}\]]+?)(\s*[,}\]])/g, '$1"$2"$3');
                     // 移除尾随逗号，例如 {"0": "x",} 或 [1,2,]
                     sanitizedJson = sanitizedJson.replace(/,\s*([}\]])/g, '$1');
                     // 修复悬空键：{"0": "x", "1" } → {"0": "x"}
