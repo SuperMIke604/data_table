@@ -5187,53 +5187,6 @@ function parseAndApplyTableEdits(aiResponse) {
         return false;
     }
 
-    const escapeUnescapedQuotesInJsonStrings = (input) => {
-        // Heuristic: when inside a JSON string literal, a non-escaped '"' is considered
-        // an inner quote (should be escaped) if the next non-space char is NOT a structural
-        // terminator (',', '}', ']'). This helps with AI text that contains quotes like "泄".
-        let out = '';
-        let inString = false;
-        let escape = false;
-        for (let i = 0; i < input.length; i++) {
-            const ch = input[i];
-            if (!inString) {
-                if (ch === '"') {
-                    inString = true;
-                }
-                out += ch;
-                continue;
-            }
-
-            if (escape) {
-                out += ch;
-                escape = false;
-                continue;
-            }
-
-            if (ch === '\\') {
-                out += ch;
-                escape = true;
-                continue;
-            }
-
-            if (ch === '"') {
-                let j = i + 1;
-                while (j < input.length && /\s/.test(input[j])) j++;
-                const next = j < input.length ? input[j] : '';
-                if (next === ',' || next === '}' || next === ']') {
-                    inString = false;
-                    out += ch;
-                } else {
-                    out += '\\"';
-                }
-                continue;
-            }
-
-            out += ch;
-        }
-        return out;
-    };
-
     // 清理AI响应
     let cleanedResponse = aiResponse.trim();
     // 移除JS风格的字符串拼接
