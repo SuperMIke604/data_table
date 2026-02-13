@@ -5310,8 +5310,8 @@ function parseAndApplyTableEdits(aiResponse) {
                     // 简化的JSON清洗流程：拆解 → 归一化 → 重建
                     let sanitizedJson = jsonPart;
 
-                    // 1. 统一剔除所有双引号
-                    sanitizedJson = sanitizedJson.replace(/"/g, '');
+                    // 1. 统一剔除所有双引号（含全角引号）
+                    sanitizedJson = sanitizedJson.replace(/["\u201C\u201D]/g, '');
 
                     // 2. 统一将全角逗号转为半角逗号
                     sanitizedJson = sanitizedJson.replace(/，/g, ',');
