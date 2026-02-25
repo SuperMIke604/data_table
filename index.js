@@ -4444,8 +4444,10 @@ function generateDiffTablesHtml(oldData, newData) {
                 <table class="dm-table">
                     <thead>
                         <tr>`;
-        if (headers && headers.length > 0) {
-            headers.forEach(header => {
+        // 跳过首列空白列
+        const displayHeaders = headers.slice(1);
+        if (displayHeaders.length > 0) {
+            displayHeaders.forEach(header => {
                 html += `<th>${escapeHtml(header || '')}</th>`;
             });
         }
@@ -4461,14 +4463,15 @@ function generateDiffTablesHtml(oldData, newData) {
             html += `<tr class="${rowClass}">`;
             const row = item.row || [];
             const changedCols = item.changedCols || [];
-            headers.forEach((_, colIndex) => {
-                const cellContent = (row && row[colIndex]) ? row[colIndex] : '';
+            displayHeaders.forEach((_, colIndex) => {
+                const origIndex = colIndex + 1;
+                const cellContent = (row && row[origIndex]) ? row[origIndex] : '';
                 let cellClass = '';
                 if (item.type === 'deleted') {
                     cellClass = 'dm-cell-deleted';
                 } else if (item.type === 'added') {
                     cellClass = 'dm-cell-added';
-                } else if (item.type === 'modified' && changedCols[colIndex]) {
+                } else if (item.type === 'modified' && changedCols[origIndex]) {
                     cellClass = 'dm-cell-modified';
                 }
                 html += `<td class="${cellClass}">${escapeHtml(cellContent)}</td>`;
@@ -4518,9 +4521,9 @@ function generateTableHtml(tableName, content) {
                 <thead>
                     <tr>`;
 
-    // 表头
-    const headers = content[0];
-    if (headers && headers.length > 0) {
+    // 表头（跳过首列空白列）
+    const headers = content[0] ? content[0].slice(1) : [];
+    if (headers.length > 0) {
         headers.forEach(header => {
             html += `<th>${escapeHtml(header || '')}</th>`;
         });
@@ -4528,9 +4531,9 @@ function generateTableHtml(tableName, content) {
 
     html += `</tr></thead><tbody>`;
 
-    // 数据行
+    // 数据行（跳过首列）
     for (let i = 1; i < content.length; i++) {
-        const row = content[i];
+        const row = content[i].slice(1);
         html += `<tr>`;
         row.forEach(cell => {
             const cellContent = cell || '';
