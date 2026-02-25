@@ -953,6 +953,356 @@ function addDataPreviewButton(extensionsMenu, parentDoc) {
     console.log('数据预览按钮已添加到 wand menu');
 }
 
+// ============================================================
+//  独立窗口系统 — DataManageWindowManager & createDataManageWindow
+// ============================================================
+
+/**
+ * 窗口管理器：追踪所有打开的窗口实例
+ */
+const DataManageWindowManager = {
+    windows: new Map(), // id -> { el, zIndex, overlay }
+    baseZIndex: 10000,
+    topZIndex: 10000,
+
+    register(id, el, overlay) {
+        this.topZIndex++;
+        this.windows.set(id, { el, zIndex: this.topZIndex, overlay });
+        el.style.zIndex = this.topZIndex;
+    },
+
+    unregister(id) {
+        this.windows.delete(id);
+    },
+
+    bringToFront(id) {
+        const win = this.windows.get(id);
+        if (!win) return;
+        this.topZIndex++;
+        win.zIndex = this.topZIndex;
+        win.el.style.zIndex = this.topZIndex;
+    },
+
+    getWindow(id) {
+        return this.windows.get(id)?.el || null;
+    },
+
+    isOpen(id) {
+        return this.windows.has(id);
+    },
+
+    closeAll() {
+        this.windows.forEach((_, id) => {
+            const win = this.windows.get(id);
+            if (win?.el) win.el.remove();
+            if (win?.overlay) win.overlay.remove();
+        });
+        this.windows.clear();
+    }
+};
+
+/**
+ * 创建独立浮动窗口
+ * @param {object} options
+ * @param {string} options.id - 窗口唯一ID
+ * @param {string} options.title - 窗口标题
+ * @param {string} options.content - 窗口内容HTML
+ * @param {number} [options.width=900] - 初始宽度
+ * @param {number} [options.height=700] - 初始高度
+ * @param {boolean} [options.modal=false] - 是否为模态窗口（带遮罩）
+ * @param {boolean} [options.resizable=true] - 是否可调整大小
+ * @param {boolean} [options.maximizable=true] - 是否可最大化
+ * @param {function} [options.onClose] - 关闭回调
+ * @param {function} [options.onReady] - 窗口就绪回调
+ * @returns {HTMLElement} 窗口元素
+ */
+function createDataManageWindow(options) {
+    const {
+        id,
+        title = '窗口',
+        content = '',
+        width = 900,
+        height = 700,
+        modal = false,
+        resizable = true,
+        maximizable = true,
+        onClose,
+        onReady
+    } = options;
+
+    const parentDoc = (window.parent && window.parent !== window)
+        ? window.parent.document
+        : document;
+
+    // 确保样式已注入
+    _ensureWindowStyles(parentDoc);
+
+    // 如果窗口已打开，聚焦它
+    if (DataManageWindowManager.isOpen(id)) {
+        DataManageWindowManager.bringToFront(id);
+        return DataManageWindowManager.getWindow(id);
+    }
+
+    // 创建遮罩（仅 modal 模式）
+    let overlay = null;
+    if (modal) {
+        overlay = parentDoc.createElement('div');
+        overlay.className = 'dm-window-overlay';
+        overlay.dataset.windowId = id;
+        parentDoc.body.appendChild(overlay);
+    }
+
+    // 创建窗口
+    const win = parentDoc.createElement('div');
+    win.className = 'dm-window';
+    win.id = `dm-window-${id}`;
+
+    // 居中定位
+    const vw = parentDoc.documentElement.clientWidth || window.innerWidth;
+    const vh = parentDoc.documentElement.clientHeight || window.innerHeight;
+    const w = Math.min(width, vw - 40);
+    const h = Math.min(height, vh - 40);
+    const left = Math.max(20, (vw - w) / 2);
+    const top = Math.max(20, (vh - h) / 2);
+
+    win.style.left = left + 'px';
+    win.style.top = top + 'px';
+    win.style.width = w + 'px';
+    win.style.height = h + 'px';
+
+    // 构建内部HTML
+    let controlsHtml = '';
+    if (maximizable) {
+        controlsHtml += `<button class="dm-window-btn dm-btn-maximize" title="最大化/还原">
+            <i class="fa-solid fa-expand"></i>
+        </button>`;
+    }
+    controlsHtml += `<button class="dm-window-btn dm-btn-close" title="关闭">
+        <i class="fa-solid fa-xmark"></i>
+    </button>`;
+
+    let resizeHandlesHtml = '';
+    if (resizable) {
+        const dirs = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+        resizeHandlesHtml = dirs.map(d =>
+            `<div class="dm-window-resize dm-window-resize-${d}" data-resize-dir="${d}"></div>`
+        ).join('');
+    }
+
+    win.innerHTML = `
+        <div class="dm-window-header">
+            <span class="dm-window-title">${title}</span>
+            <div class="dm-window-controls">
+                ${controlsHtml}
+            </div>
+        </div>
+        <div class="dm-window-body">
+            ${content}
+        </div>
+        ${resizeHandlesHtml}
+    `;
+
+    parentDoc.body.appendChild(win);
+
+    // 注册到管理器
+    DataManageWindowManager.register(id, win, overlay);
+
+    // --- 事件绑定 ---
+
+    // 点击窗口提升层级
+    win.addEventListener('mousedown', () => {
+        DataManageWindowManager.bringToFront(id);
+    });
+
+    // 关闭按钮
+    const closeBtn = win.querySelector('.dm-btn-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            _closeDataManageWindow(id, win, overlay, onClose);
+        });
+    }
+
+    // 遮罩点击关闭（modal）
+    if (overlay) {
+        overlay.addEventListener('click', () => {
+            _closeDataManageWindow(id, win, overlay, onClose);
+        });
+    }
+
+    // 最大化按钮
+    const maxBtn = win.querySelector('.dm-btn-maximize');
+    if (maxBtn) {
+        let savedState = null;
+        maxBtn.addEventListener('click', () => {
+            if (win.classList.contains('dm-window-maximized')) {
+                // 还原
+                win.classList.remove('dm-window-maximized');
+                if (savedState) {
+                    win.style.left = savedState.left;
+                    win.style.top = savedState.top;
+                    win.style.width = savedState.width;
+                    win.style.height = savedState.height;
+                }
+                maxBtn.innerHTML = '<i class="fa-solid fa-expand"></i>';
+                maxBtn.title = '最大化';
+            } else {
+                // 保存当前位置
+                savedState = {
+                    left: win.style.left,
+                    top: win.style.top,
+                    width: win.style.width,
+                    height: win.style.height
+                };
+                win.classList.add('dm-window-maximized');
+                maxBtn.innerHTML = '<i class="fa-solid fa-compress"></i>';
+                maxBtn.title = '还原';
+            }
+        });
+    }
+
+    // 拖拽标题栏
+    _setupWindowDrag(win, parentDoc);
+
+    // 调整大小
+    if (resizable) {
+        _setupWindowResize(win, parentDoc);
+    }
+
+    // 就绪回调
+    if (onReady) {
+        setTimeout(() => onReady(win), 50);
+    }
+
+    return win;
+}
+
+/**
+ * 关闭窗口
+ */
+function _closeDataManageWindow(id, win, overlay, onClose) {
+    win.classList.add('dm-window-closing');
+    setTimeout(() => {
+        win.remove();
+        if (overlay) overlay.remove();
+        DataManageWindowManager.unregister(id);
+        if (onClose) onClose();
+    }, 200);
+}
+
+/**
+ * 设置窗口拖拽
+ */
+function _setupWindowDrag(win, doc) {
+    const header = win.querySelector('.dm-window-header');
+    if (!header) return;
+
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    header.addEventListener('mousedown', (e) => {
+        // 不拖拽按钮
+        if (e.target.closest('.dm-window-controls')) return;
+        if (win.classList.contains('dm-window-maximized')) return;
+
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = parseInt(win.style.left) || 0;
+        startTop = parseInt(win.style.top) || 0;
+
+        e.preventDefault();
+    });
+
+    doc.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        win.style.left = (startLeft + dx) + 'px';
+        win.style.top = (startTop + dy) + 'px';
+    });
+
+    doc.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+}
+
+/**
+ * 设置窗口调整大小
+ */
+function _setupWindowResize(win, doc) {
+    const handles = win.querySelectorAll('.dm-window-resize');
+    let isResizing = false;
+    let resizeDir = '';
+    let startX, startY, startW, startH, startLeft, startTop;
+
+    handles.forEach(handle => {
+        handle.addEventListener('mousedown', (e) => {
+            if (win.classList.contains('dm-window-maximized')) return;
+
+            isResizing = true;
+            resizeDir = handle.dataset.resizeDir;
+            startX = e.clientX;
+            startY = e.clientY;
+            startW = win.offsetWidth;
+            startH = win.offsetHeight;
+            startLeft = parseInt(win.style.left) || 0;
+            startTop = parseInt(win.style.top) || 0;
+
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    });
+
+    doc.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const minW = 400;
+        const minH = 300;
+
+        if (resizeDir.includes('e')) {
+            win.style.width = Math.max(minW, startW + dx) + 'px';
+        }
+        if (resizeDir.includes('s')) {
+            win.style.height = Math.max(minH, startH + dy) + 'px';
+        }
+        if (resizeDir.includes('w')) {
+            const newW = Math.max(minW, startW - dx);
+            if (newW > minW || dx < 0) {
+                win.style.width = newW + 'px';
+                win.style.left = (startLeft + (startW - newW)) + 'px';
+            }
+        }
+        if (resizeDir.includes('n')) {
+            const newH = Math.max(minH, startH - dy);
+            if (newH > minH || dy < 0) {
+                win.style.height = newH + 'px';
+                win.style.top = (startTop + (startH - newH)) + 'px';
+            }
+        }
+    });
+
+    doc.addEventListener('mouseup', () => {
+        isResizing = false;
+        resizeDir = '';
+    });
+}
+
+/**
+ * 确保窗口CSS已注入到父文档
+ */
+function _ensureWindowStyles(parentDoc) {
+    if (parentDoc.getElementById('dm-window-styles-link')) return;
+
+    // 尝试找到已加载的 style.css 并注入
+    const extensionPath = `scripts/extensions/third-party/${extensionName}`;
+    const link = parentDoc.createElement('link');
+    link.id = 'dm-window-styles-link';
+    link.rel = 'stylesheet';
+    link.href = `${extensionPath}/style.css`;
+    parentDoc.head.appendChild(link);
+}
+
 /**
  * 打开数据管理弹窗
  */
@@ -977,6 +1327,7 @@ function openDataManagePopup() {
                 <button class="data-manage-tab-button" data-tab="api">API设置</button>
                 <button class="data-manage-tab-button" data-tab="worldbook">世界书</button>
                 <button class="data-manage-tab-button" data-tab="data">数据管理</button>
+                <button class="data-manage-tab-button" data-tab="sheetsettings">表格设置</button>
             </div>
             
             <!-- Tab内容 -->
@@ -1246,63 +1597,57 @@ function openDataManagePopup() {
                     </div>
                 </div>
             </div>
+            
+            <div id="data-manage-tab-sheetsettings" class="data-manage-tab-content">
+                <div class="data-manage-card">
+                    <h3>表格独立更新设置</h3>
+                    <p class="data-manage-notes">为每个表格配置独立的更新参数。设为 <b>-1</b> 表示沿用全局设置，设为 <b>0</b> 表示该表不参与自动更新。</p>
+                    <div id="data-manage-sheet-settings-list" style="margin-top: 16px;">
+                        <em style="color: var(--ios-text-secondary);">加载中...</em>
+                    </div>
+                    <div class="data-manage-button-group" style="margin-top: 16px;">
+                        <button id="data-manage-save-sheet-settings" class="primary">保存所有表格设置</button>
+                        <button id="data-manage-reset-sheet-settings" class="secondary">全部重置为沿用全局</button>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 
-    // 使用 SillyTavern 的弹窗API
-    if (context && context.callGenericPopup) {
-        context.callGenericPopup(popupHtml, context.POPUP_TYPE?.DISPLAY || 'display', '数据管理', {
-            wide: true,
-            large: true,
-            allowVerticalScrolling: true,
-            okButton: '关闭',
-            cancelButton: false,
-            callback: function (action) {
-                console.log('弹窗关闭:', action);
+    // 使用独立窗口系统
+    createDataManageWindow({
+        id: 'dm-main',
+        title: '数据管理',
+        content: popupHtml,
+        width: 900,
+        height: 700,
+        modal: false,
+        resizable: true,
+        maximizable: true,
+        onClose: () => {
+            console.log('数据管理窗口已关闭');
+        },
+        onReady: (win) => {
+            // 先加载设置，确保预设数组已初始化
+            loadSettings();
+
+            // 然后设置事件监听器
+            setupPopupEventListeners();
+
+            // 最后加载UI
+            loadSettingsToUI();
+            updateStatusDisplay();
+
+            // 如果当前是API Tab，加载酒馆预设列表
+            const parentDoc = (window.parent && window.parent !== window)
+                ? window.parent.document
+                : document;
+            const apiTab = parentDoc.getElementById('data-manage-tab-api');
+            if (apiTab && apiTab.classList.contains('active')) {
+                loadTavernApiProfiles();
             }
-        });
-    } else {
-        // 如果没有 callGenericPopup，使用简单的弹窗
-        const popup = window.open('', 'dataManagePopup', 'width=900,height=700,scrollbars=yes');
-        popup.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>数据管理</title>
-                <link rel="stylesheet" href="style.css">
-            </head>
-            <body>
-                ${popupHtml}
-                <script>
-                    ${setupPopupScripts()}
-                </script>
-            </body>
-            </html>
-        `);
-    }
-
-    // 等待DOM更新后设置事件监听器
-    setTimeout(() => {
-        const parentDoc = (window.parent && window.parent !== window)
-            ? window.parent.document
-            : document;
-
-        // 先加载设置，确保预设数组已初始化
-        loadSettings();
-
-        // 然后设置事件监听器
-        setupPopupEventListeners();
-
-        // 最后加载UI
-        loadSettingsToUI();
-        updateStatusDisplay();
-
-        // 如果当前是API Tab，加载酒馆预设列表
-        const apiTab = parentDoc.getElementById('data-manage-tab-api');
-        if (apiTab && apiTab.classList.contains('active')) {
-            loadTavernApiProfiles();
         }
-    }, 100);
+    });
 }
 
 /**
@@ -1336,6 +1681,9 @@ function setupPopupEventListeners() {
 
     // 数据管理 Tab 的按钮
     setupDataTabListeners(parentDoc);
+
+    // 表格设置 Tab 的按钮
+    setupSheetSettingsTabListeners(parentDoc);
 }
 
 /**
@@ -1373,6 +1721,11 @@ function switchTab(tabName) {
         loadSettings();
         populateInjectionTargetSelector();
         updateWorldbookSourceView();
+    }
+
+    // 如果切换到表格设置Tab，渲染设置UI
+    if (tabName === 'sheetsettings') {
+        renderSheetSettingsUI();
     }
 }
 
@@ -4182,6 +4535,173 @@ function setupDataTabListeners(parentDoc) {
     }
 }
 
+// ============================================================
+//  表格独立更新设置 — renderSheetSettingsUI & setupSheetSettingsTabListeners
+// ============================================================
+
+/**
+ * 渲染表格独立更新设置 UI
+ */
+function renderSheetSettingsUI() {
+    const parentDoc = (window.parent && window.parent !== window)
+        ? window.parent.document
+        : document;
+
+    const listContainer = parentDoc.getElementById('data-manage-sheet-settings-list');
+    if (!listContainer) return;
+
+    if (!currentJsonTableData) {
+        listContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">暂无数据库加载，请先在聊天中生成数据后再配置。</em>';
+        return;
+    }
+
+    const sheetKeys = Object.keys(currentJsonTableData).filter(k => {
+        const v = currentJsonTableData[k];
+        return v && typeof v === 'object' && v.content && Array.isArray(v.content);
+    });
+
+    if (sheetKeys.length === 0) {
+        listContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">当前数据库没有有效的表格。</em>';
+        return;
+    }
+
+    // 全局默认值（用于显示参考）
+    const globalFreq = currentSettings.autoUpdateFrequency ?? 0;
+    const globalBatch = currentSettings.updateBatchSize || 1;
+
+    let html = `<p class="data-manage-notes" style="margin-bottom: 12px;">
+        当前全局设置：最新N层不更新 = <b>${globalFreq}</b>，每次更新楼层数 = <b>${globalBatch}</b>
+    </p>`;
+
+    sheetKeys.forEach((key, idx) => {
+        const table = currentJsonTableData[key];
+        const name = table.name || key;
+        const config = table.updateConfig || {};
+
+        const freqVal = Number.isFinite(config.updateFrequency) ? config.updateFrequency : -1;
+        const batchVal = Number.isFinite(config.batchSize) ? config.batchSize : -1;
+        const skipVal = Number.isFinite(config.skipFloors) ? config.skipFloors : -1;
+        const depthVal = Number.isFinite(config.contextDepth) ? config.contextDepth : -1;
+
+        html += `
+        <div class="data-manage-card" style="margin-bottom: 12px; padding: 16px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <h4 style="margin: 0; font-size: 15px; font-weight: 600; color: var(--ios-text);">
+                    ${escapeHtml(name)}
+                </h4>
+                <span style="font-size: 12px; color: var(--ios-text-secondary);">Key: ${escapeHtml(key)}</span>
+            </div>
+            <div class="data-manage-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                <div>
+                    <label style="font-size: 13px;">更新频率 (updateFrequency)</label>
+                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="updateFrequency" value="${freqVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
+                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, 0=不自动更新, >0=每N层AI回复更新一次</p>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">批量大小 (batchSize)</label>
+                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="batchSize" value="${batchVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
+                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, >0=每次更新的楼层数</p>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">跳过楼层数 (skipFloors)</label>
+                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="skipFloors" value="${skipVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
+                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, >=0=最新N层不计入触发条件</p>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">上下文深度 (contextDepth)</label>
+                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="contextDepth" value="${depthVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
+                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, >0=AI可见的最新消息数量</p>
+                </div>
+            </div>
+        </div>`;
+    });
+
+    listContainer.innerHTML = html;
+}
+
+/**
+ * 设置表格设置 Tab 的事件监听器
+ */
+function setupSheetSettingsTabListeners(parentDoc) {
+    // 保存所有表格设置
+    const saveBtn = parentDoc.getElementById('data-manage-save-sheet-settings');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            _saveAllSheetSettings();
+        });
+    }
+
+    // 重置所有表格设置
+    const resetBtn = parentDoc.getElementById('data-manage-reset-sheet-settings');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            if (!confirm('确定要将所有表格的独立设置重置为沿用全局（-1）吗？')) return;
+            _resetAllSheetSettings();
+        });
+    }
+}
+
+/**
+ * 从 UI 读取并保存所有表格的 updateConfig
+ */
+function _saveAllSheetSettings() {
+    const parentDoc = (window.parent && window.parent !== window)
+        ? window.parent.document
+        : document;
+
+    if (!currentJsonTableData) {
+        showToast('数据库未加载', 'warning');
+        return;
+    }
+
+    const inputs = parentDoc.querySelectorAll('.sheet-cfg-input');
+    inputs.forEach(input => {
+        const sheetKey = input.dataset.sheetKey;
+        const field = input.dataset.cfgField;
+        const value = parseInt(input.value);
+
+        if (!sheetKey || !field || isNaN(value)) return;
+
+        const table = currentJsonTableData[sheetKey];
+        if (!table) return;
+
+        if (!table.updateConfig) {
+            table.updateConfig = {};
+        }
+        table.updateConfig[field] = value;
+    });
+
+    // 保存到聊天记录
+    saveJsonTableToChatHistory(currentJsonTableData);
+    showToast('所有表格的独立更新设置已保存', 'success');
+}
+
+/**
+ * 将所有表格的 updateConfig 重置为 -1
+ */
+function _resetAllSheetSettings() {
+    if (!currentJsonTableData) {
+        showToast('数据库未加载', 'warning');
+        return;
+    }
+
+    for (const key of Object.keys(currentJsonTableData)) {
+        const table = currentJsonTableData[key];
+        if (table && typeof table === 'object') {
+            table.updateConfig = {
+                updateFrequency: -1,
+                batchSize: -1,
+                skipFloors: -1,
+                contextDepth: -1
+            };
+        }
+    }
+
+    saveJsonTableToChatHistory(currentJsonTableData);
+    renderSheetSettingsUI(); // 刷新 UI
+    showToast('所有表格设置已重置为沿用全局', 'success');
+}
+
 /**
  * 数据预览 — 卡片式布局 (Card-based Data Preview)
  *
@@ -4282,8 +4802,35 @@ async function showDataPreview() {
         _dpState.undoStack = [];
         _dpState.collapsed = false;
 
-        _dpRenderFull();
-        showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
+        // 使用独立窗口渲染数据预览
+        const previewWindowId = 'dm-preview';
+
+        // 如果预览窗口已打开，先关闭
+        if (DataManageWindowManager.isOpen(previewWindowId)) {
+            const existingWin = DataManageWindowManager.getWindow(previewWindowId);
+            if (existingWin) {
+                existingWin.remove();
+                DataManageWindowManager.unregister(previewWindowId);
+            }
+        }
+
+        createDataManageWindow({
+            id: previewWindowId,
+            title: `数据预览 — 楼层 ${messageIndex}`,
+            content: '<div id="dm-preview-wrapper" class="dm-preview-wrapper"></div>',
+            width: 1000,
+            height: 700,
+            modal: false,
+            resizable: true,
+            maximizable: true,
+            onClose: () => {
+                console.log('数据预览窗口已关闭');
+            },
+            onReady: () => {
+                _dpRenderFull();
+                showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
+            }
+        });
 
     } catch (error) {
         console.error('显示数据预览失败:', error);
@@ -4298,14 +4845,19 @@ function _dpRenderFull() {
 
     let wrapper = parentDoc.getElementById('dm-preview-wrapper');
     if (!wrapper) {
-        const popup = parentDoc.querySelector('.data-manage-popup');
-        if (popup) {
-            wrapper = parentDoc.createElement('div');
-            wrapper.id = 'dm-preview-wrapper';
-            wrapper.className = 'dm-preview-wrapper';
-            popup.appendChild(wrapper);
-        } else {
-            console.error('无法找到数据管理弹窗容器');
+        // 尝试在预览窗口中查找
+        const previewWin = parentDoc.getElementById('dm-window-dm-preview');
+        if (previewWin) {
+            const body = previewWin.querySelector('.dm-window-body');
+            if (body) {
+                wrapper = parentDoc.createElement('div');
+                wrapper.id = 'dm-preview-wrapper';
+                wrapper.className = 'dm-preview-wrapper';
+                body.appendChild(wrapper);
+            }
+        }
+        if (!wrapper) {
+            console.error('无法找到数据预览容器');
             return;
         }
     }
@@ -4610,9 +5162,14 @@ function _dpHandleAction(action, target, e) {
             _dpRenderFull();
             break;
         case 'close': {
-            const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
-            const w = parentDoc.getElementById('dm-preview-wrapper');
-            if (w) w.remove();
+            const previewWin = DataManageWindowManager.getWindow('dm-preview');
+            if (previewWin) {
+                _closeDataManageWindow('dm-preview', previewWin, null, null);
+            } else {
+                const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+                const w = parentDoc.getElementById('dm-preview-wrapper');
+                if (w) w.remove();
+            }
             break;
         }
         case 'undo':
@@ -5813,6 +6370,11 @@ async function saveJsonTableToChatHistory(targetMessageIndex = -1) {
 
     // 使用深拷贝来存储数据快照，防止所有消息引用同一个对象
     targetMessage.TavernDB_ACU_Data = JSON.parse(JSON.stringify(currentJsonTableData));
+
+    // 记录本次更新涉及的表的 key（用于 per-sheet 更新频率追踪）
+    if (window._currentAutoUpdateModifiedKeys && Array.isArray(window._currentAutoUpdateModifiedKeys)) {
+        targetMessage.TavernDB_ACU_ModifiedKeys = [...window._currentAutoUpdateModifiedKeys];
+    }
     console.log(`已将数据库附加到索引 ${finalIndex} 的消息。正在保存聊天记录...`);
 
     // 保存聊天记录
@@ -7137,118 +7699,138 @@ async function triggerAutomaticUpdateIfNeeded() {
         return;
     }
 
-    // 计算尚未记录层数：最新消息层数 - 最近的有数据绑定的层数
-    let unrecordedMessages = 0;
-    const totalMessages = liveChat.length - 1; // 排除楼层0，总楼层数
-    let lastRecordedFloor = 0; // 最近的有数据绑定的楼层号
+    // ========== 按表独立更新频率逻辑 ==========
 
-    // 从最新楼层开始往前找，找到最近的有数据绑定的楼层
-    for (let i = liveChat.length - 1; i > 0; i--) { // 从最新楼层开始，排除楼层0
-        const message = liveChat[i];
-        if (message.TavernDB_ACU_Data) {
-            lastRecordedFloor = i; // 楼层号（数组索引）
-            break;
-        }
-    }
-
-    // 尚未记录层数 = 总楼层数 - 最近有数据绑定的楼层号
-    unrecordedMessages = totalMessages - lastRecordedFloor;
-
-    const skipLatestN = currentSettings.autoUpdateFrequency ?? 0; // 最新N层不更新
-    const updateBatchSize = currentSettings.updateBatchSize || 1; // 每次更新楼层数
-    const requiredUnrecorded = skipLatestN + updateBatchSize; // 需要的未记录层数
-
-    console.log('[自动更新] 触发器: 参数检查', {
-        skipLatestN,
-        updateBatchSize,
-        requiredUnrecorded,
-        unrecordedMessages,
-        totalMessages,
-        lastRecordedFloor
+    // 1. 收集所有数据表的 updateConfig
+    const sheetKeys = Object.keys(currentJsonTableData).filter(k => {
+        const v = currentJsonTableData[k];
+        return v && typeof v === 'object' && v.content && Array.isArray(v.content);
     });
 
-    if (unrecordedMessages < requiredUnrecorded) {
-        console.log(`[自动更新] 触发器: 尚未记录层数 (${unrecordedMessages}) 未达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。跳过。`);
+    if (sheetKeys.length === 0) {
+        console.log('[自动更新] 触发器: 没有有效的数据表');
         return;
     }
 
-    // 当未记录层数达到或超过所需层数时触发更新
-    console.log(`[自动更新] 触发器: 尚未记录层数 (${unrecordedMessages}) 达到触发条件 (${requiredUnrecorded} = 最新${skipLatestN}层不更新 + 每次更新${updateBatchSize}层)。开始更新。`);
-    showToast(`触发自动更新：未记录层数 ${unrecordedMessages} >= 触发条件 ${requiredUnrecorded}`, 'info');
+    // 2. 全局默认值
+    const globalSkipLatestN = currentSettings.autoUpdateFrequency ?? 0;
+    const globalBatchSize = currentSettings.updateBatchSize || 1;
 
-    // 新的处理逻辑：只处理需要更新的楼层
-    // 跳过最新N层，只处理接下来的updateBatchSize层
-    // 参考参考文档：特殊处理：当起始楼层为1时，包含0层
-    const actualMessages = liveChat.filter((_, index) => index > 0);
-    const totalActualMessages = actualMessages.length;
-    let startIndex = Math.max(0, totalActualMessages - skipLatestN - updateBatchSize);
-    let endIndex = startIndex + updateBatchSize;
+    // 3. 扫描聊天记录，找到每个表的最后更新楼层
+    const totalFloors = liveChat.length; // 总楼层数（包括楼层0）
 
-    // 特殊处理：当起始楼层为1时，包含0层
-    if (startIndex === 0) {
-        startIndex = -1; // 从-1开始，这样i+1会得到0
-        endIndex = endIndex - 1; // 调整endIndex以保持批次大小不变
-    }
+    // 查找每个表的最后更新楼层
+    const perSheetLastUpdated = {}; // key -> lastUpdatedFloor
+    let globalLastRecordedFloor = 0;
 
-    const indicesToActuallyUpdate = [];
-    for (let i = startIndex; i < endIndex; i++) {
-        if (i < totalActualMessages) {
-            // 转换为原始索引（加上1，因为排除了楼层0）
-            // 特殊处理：当startIndex为-1时，包含楼层0
-            const floorIndex = i + 1;
-            if (floorIndex >= 0) { // 确保楼层索引有效
-                indicesToActuallyUpdate.push(floorIndex);
+    for (let i = liveChat.length - 1; i > 0; i--) {
+        const msg = liveChat[i];
+        if (!msg) continue;
+
+        // 检查该消息是否有 TavernDB_ACU_Data
+        if (msg.TavernDB_ACU_Data) {
+            // 如果有 TavernDB_ACU_ModifiedKeys，只标记对应表
+            const modifiedKeys = msg.TavernDB_ACU_ModifiedKeys;
+            if (modifiedKeys && Array.isArray(modifiedKeys)) {
+                for (const key of modifiedKeys) {
+                    if (!perSheetLastUpdated[key]) {
+                        perSheetLastUpdated[key] = i;
+                    }
+                }
+            } else {
+                // 没有 ModifiedKeys，说明是旧格式，认为全部表都在该楼层更新了
+                for (const key of sheetKeys) {
+                    if (!perSheetLastUpdated[key]) {
+                        perSheetLastUpdated[key] = i;
+                    }
+                }
+            }
+
+            // 记录全局最后已记录楼层
+            if (globalLastRecordedFloor === 0) {
+                globalLastRecordedFloor = i;
             }
         }
     }
 
-    // 修复：当 skipLatestN = 0 时，需要从楼层1开始处理updateBatchSize层
-    // 例如：totalActualMessages = 6, skipLatestN = 0, updateBatchSize = 6
-    // 应该处理楼层1到楼层6（共6层）
-    if (skipLatestN === 0 && indicesToActuallyUpdate.length === 0 && totalActualMessages >= updateBatchSize) {
-        // 重新计算：从楼层1开始，处理updateBatchSize层
-        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
-            indicesToActuallyUpdate.push(i + 1); // 楼层号从1开始
+    // 4. 逐表判断是否需要更新
+    const tablesToUpdate = []; // { sheetKey, indices, batchSize }
+    const totalMessages = totalFloors - 1; // 排除楼层0
+
+    for (const sheetKey of sheetKeys) {
+        const table = currentJsonTableData[sheetKey];
+        const config = table.updateConfig || {};
+
+        // 读取每个表的独立配置，-1 回退到全局
+        const rawFreq = Number.isFinite(config.updateFrequency) ? config.updateFrequency : -1;
+        const rawBatch = Number.isFinite(config.batchSize) ? config.batchSize : -1;
+        const rawSkip = Number.isFinite(config.skipFloors) ? config.skipFloors : -1;
+
+        const frequency = (rawFreq === -1) ? globalSkipLatestN : rawFreq;
+        const batchSize = (rawBatch === -1) ? globalBatchSize : rawBatch;
+        const skipFloors = (rawSkip === -1) ? globalSkipLatestN : rawSkip;
+
+        // frequency 为 0 表示该表不参与自动更新
+        if (frequency <= 0 && rawFreq === 0) {
+            console.log(`[自动更新] 表 ${sheetKey}: 已配置为不自动更新 (frequency=0)，跳过`);
+            continue;
         }
-    } else if (skipLatestN === 0 && startIndex === -1 && totalActualMessages >= updateBatchSize) {
-        // 如果startIndex被设置为-1（包含楼层0），但skipLatestN=0时不应该包含楼层0
-        // 重新计算：从楼层1开始，处理updateBatchSize层
-        indicesToActuallyUpdate.length = 0; // 清空之前的结果
-        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
-            indicesToActuallyUpdate.push(i + 1); // 楼层号从1开始
+
+        // 该表的最后更新楼层
+        const lastUpdated = perSheetLastUpdated[sheetKey] || 0;
+
+        // 有效未记录层数 = 总AI楼层 - 跳过楼层 - 最后更新楼层
+        const effectiveTotal = Math.max(0, totalMessages - skipFloors);
+        const effectiveUnrecorded = Math.max(0, effectiveTotal - lastUpdated);
+        const threshold = batchSize;
+
+        console.log(`[自动更新] 表 ${sheetKey}: frequency=${frequency}, batchSize=${batchSize}, skipFloors=${skipFloors}, lastUpdated=${lastUpdated}, effectiveUnrecorded=${effectiveUnrecorded}, threshold=${threshold}`);
+
+        if (frequency > 0 && effectiveUnrecorded >= frequency && threshold > 0) {
+            // 计算需要更新的楼层范围
+            const startFloor = lastUpdated + 1;
+            const endFloor = Math.min(totalMessages - skipFloors, startFloor + batchSize - 1);
+
+            if (startFloor <= endFloor && startFloor > 0) {
+                tablesToUpdate.push({
+                    sheetKey,
+                    startFloor,
+                    endFloor,
+                    batchSize
+                });
+                console.log(`[自动更新] 表 ${sheetKey}: 需要更新，楼层范围 ${startFloor}-${endFloor}`);
+            }
         }
     }
 
-    if (indicesToActuallyUpdate.length === 0) {
-        console.warn('[自动更新] 触发器: 没有需要更新的楼层');
+    if (tablesToUpdate.length === 0) {
+        console.log('[自动更新] 触发器: 没有表格需要更新');
         return;
     }
 
-    // 计算实际楼层范围（用于显示和调用）
-    const floorStart = indicesToActuallyUpdate[0];
-    const floorEnd = indicesToActuallyUpdate[indicesToActuallyUpdate.length - 1];
+    // 5. 合并楼层范围，执行更新
+    // 找到所有需要更新的楼层的最大范围
+    let minFloor = Infinity;
+    let maxFloor = 0;
+    const modifiedSheetKeys = [];
 
-    console.log(`[自动更新] 触发器: 将处理楼层 ${floorStart} 到 ${floorEnd}，共 ${indicesToActuallyUpdate.length} 层`);
-    console.log('[自动更新] 触发器: 楼层计算详情', {
-        totalActualMessages,
-        skipLatestN,
-        updateBatchSize,
-        startIndex: startIndex + 1, // 转换为1-based楼层号
-        endIndex: endIndex, // 转换为1-based楼层号
-        actualIndices: indicesToActuallyUpdate // 已经是1-based楼层号
-    });
-
-    if (indicesToActuallyUpdate.length > 1) {
-        showToast(`检测到 ${indicesToActuallyUpdate.length} 条未更新记录，将开始批量处理。`, 'info');
-    } else {
-        showToast(`检测到新消息，将触发数据库增量更新。`, 'info');
+    for (const item of tablesToUpdate) {
+        minFloor = Math.min(minFloor, item.startFloor);
+        maxFloor = Math.max(maxFloor, item.endFloor);
+        modifiedSheetKeys.push(item.sheetKey);
     }
 
-    console.log('[自动更新] 触发器: 开始执行更新，处理楼层:', indicesToActuallyUpdate);
+    console.log(`[自动更新] 触发器: 需要更新 ${tablesToUpdate.length} 个表，合并楼层范围 ${minFloor}-${maxFloor}`);
+    console.log('[自动更新] 触发器: 待更新表:', modifiedSheetKeys);
+
+    showToast(`触发自动更新：${tablesToUpdate.length} 个表需要更新`, 'info');
+
     isAutoUpdating = true;
     try {
-        // 使用 updateDatabaseByFloorRange 进行更新
-        const success = await updateDatabaseByFloorRange(floorStart, floorEnd);
+        // 记录本次更新涉及的表的 key，用于后续 per-sheet 判断
+        window._currentAutoUpdateModifiedKeys = modifiedSheetKeys;
+
+        const success = await updateDatabaseByFloorRange(minFloor, maxFloor);
         console.log('[自动更新] 触发器: 更新完成，结果:', success);
 
         if (success) {
@@ -7263,8 +7845,10 @@ async function triggerAutomaticUpdateIfNeeded() {
         showToast(`自动更新出错: ${error.message}`, 'error');
     } finally {
         isAutoUpdating = false;
+        window._currentAutoUpdateModifiedKeys = null;
     }
 }
+
 
 /**
  * 注册事件监听器
