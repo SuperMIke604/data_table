@@ -2745,9 +2745,9 @@ function showDataOverview() {
             overviewContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载数据概览...</em>';
 
             // 遍历聊天记录，查找包含数据库数据的消息 - 参考参考文档：楼层号直接使用数组索引
-            // 配色参考弹窗主视觉（iOS风格）
+            // iOS 26 毛玻璃风格
             let html = '<div class="overview-content">';
-            html += '<h3 style="color: var(--ios-text); margin-bottom: 20px;">聊天记录数据概览</h3>';
+            html += '<h3>聊天记录数据概览</h3>';
 
             for (let i = chat.length - 1; i >= 0; i--) {
                 const message = chat[i];
@@ -2795,27 +2795,24 @@ function showDataOverview() {
                     const displayStyle = isExpanded ? 'block' : 'none';
                     const buttonText = isExpanded ? '收起详情' : '展开详情';
 
-                    // 配色参考弹窗主视觉（iOS风格）
-                    html += `<div class="message-data-card" data-message-index="${i}" style="
-                        background: var(--ios-gray); border: 1px solid var(--ios-border); border-radius: 10px; 
-                        padding: 15px; margin-bottom: 15px; color: var(--ios-text);
-                    ">`;
-                    html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
-                    html += `<h4 style="margin: 0; color: var(--ios-text);">楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
-                    html += `<span style="font-size: 12px; color: var(--ios-text-secondary);">${escapeHtml(timestamp)}</span>`;
+                    // iOS 26 毛玻璃卡片
+                    html += `<div class="message-data-card" data-message-index="${i}">`;
+                    html += `<div class="message-card-header">`;
+                    html += `<h4>楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
+                    html += `<span class="timestamp">${escapeHtml(timestamp)}</span>`;
                     html += `</div>`;
 
                     // 显示数据统计
                     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
-                    html += `<div style="margin-bottom: 10px;">`;
-                    html += `<p style="margin: 5px 0; color: var(--ios-text-secondary);">包含 ${tableKeys.length} 个数据表格</p>`;
+                    html += `<div class="message-stats">`;
+                    html += `<p>包含 ${tableKeys.length} 个数据表格</p>`;
 
                     // 显示每个表格的简要信息
                     tableKeys.forEach(sheetKey => {
                         const table = messageData[sheetKey];
                         if (table && table.name && table.content) {
                             const rowCount = table.content.length - 1; // 减去表头
-                            html += `<div style="background: var(--ios-gray-dark); padding: 8px; margin: 5px 0; border-radius: 6px; font-size: 12px;">`;
+                            html += `<div class="sheet-tag">`;
                             html += `<strong>${escapeHtml(table.name)}</strong>: ${rowCount} 条记录`;
                             if (table.sourceData && table.sourceData.note) {
                                 html += ` - ${escapeHtml(table.sourceData.note)}`;
@@ -2827,12 +2824,8 @@ function showDataOverview() {
                     html += `</div>`;
 
                     // 详情展开区域（在操作按钮之前）
-                    html += `<div class="message-details" data-message-index="${i}" style="
-                        display: ${displayStyle}; margin-top: 15px; padding-top: 15px; 
-                        background: transparent; 
-                        border-radius: 6px; padding: 0; margin-bottom: 15px;
-                    ">`;
-                    html += `<div class="details-content" style="padding: 0;">`;
+                    html += `<div class="message-details" data-message-index="${i}" style="display: ${displayStyle};">`;
+                    html += `<div class="details-content">`;
                     if (isExpanded) {
                         html += loadMessageDetails(i, messageData);
                     } else {
@@ -2842,15 +2835,9 @@ function showDataOverview() {
                     html += `</div>`;
 
                     // 操作按钮 - 展示在每个条目的底部
-                    html += `<div style="text-align: right; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ios-border);">`;
-                    html += `<button class="toggle-details-btn" data-message-index="${i}" style="
-                        background: var(--ios-blue); color: white; border: none; padding: 5px 10px; 
-                        border-radius: 6px; cursor: pointer; margin-right: 5px; font-size: 12px;
-                    ">${buttonText}</button>`;
-                    html += `<button class="delete-message-btn" data-message-index="${i}" style="
-                        background: #dc3545; color: white; border: none; padding: 5px 10px; 
-                        border-radius: 6px; cursor: pointer; font-size: 12px;
-                    ">删除记录</button>`;
+                    html += `<div class="message-card-actions">`;
+                    html += `<button class="toggle-details-btn" data-message-index="${i}">${buttonText}</button>`;
+                    html += `<button class="delete-message-btn" data-message-index="${i}">删除记录</button>`;
                     html += `</div>`;
                     html += `</div>`;
                 }
@@ -2859,22 +2846,12 @@ function showDataOverview() {
             if (dataCount === 0) {
                 html += '<p style="text-align: center; color: var(--ios-text-secondary); font-style: italic;">暂无数据库记录</p>';
             } else {
-                html += `<div style="margin-top: 20px; padding: 10px; background: var(--ios-gray-dark); border-radius: 8px; text-align: center;">`;
-                html += `<p style="margin: 0; color: var(--ios-text-secondary);">共找到 ${dataCount} 条数据库记录</p>`;
+                html += `<div class="overview-summary">`;
+                html += `<p>共找到 ${dataCount} 条数据库记录</p>`;
                 html += `</div>`;
             }
 
             html += '</div>';
-
-            // 添加样式 - 参考弹窗主视觉
-            html += `
-                <style>
-                    .overview-content { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif; }
-                    .message-data-card:hover { border-color: var(--ios-blue) !important; box-shadow: 0 2px 8px rgba(0, 122, 255, 0.15); }
-                    .toggle-details-btn:hover { background: var(--ios-blue-hover) !important; }
-                    .delete-message-btn:hover { background: #c82333 !important; }
-                </style>
-            `;
 
             overviewContainer.innerHTML = html;
 
@@ -3758,7 +3735,7 @@ async function handleDeleteMessage(e) {
  * 加载消息详情内容
  */
 function loadMessageDetails(messageIndex, messageData) {
-    let html = '<div class="expanded-details-content" style="padding: 0; background: transparent;">';
+    let html = '<div class="expanded-details-content">';
 
     const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
 
@@ -3769,68 +3746,24 @@ function loadMessageDetails(messageIndex, messageData) {
             const table = messageData[sheetKey];
             if (!table || !table.name || !table.content) return;
 
-            // 表格容器 - iOS风格卡片设计，参考主视觉
-            html += `<div class="table-section" data-sheet-key="${sheetKey}" style="
-                margin-bottom: 20px; 
-                border: 1px solid var(--ios-border); 
-                border-radius: 12px; 
-                padding: 16px; 
-                background: var(--ios-surface);
-                box-shadow: 0 2px 8px var(--ios-shadow);
-            ">`;
+            // 表格容器 - iOS 26 毛玻璃卡片
+            html += `<div class="table-section" data-sheet-key="${sheetKey}">`;
 
-            // 表格标题栏 - 使用iOS风格
-            html += `<div style="
-                display: flex; 
-                justify-content: space-between; 
-                align-items: center; 
-                margin-bottom: 16px;
-                padding-bottom: 12px;
-                border-bottom: 1px solid var(--ios-gray-dark);
-            ">`;
-            html += `<h4 class="table-title" style="
-                margin: 0; 
-                color: var(--ios-text); 
-                font-size: 16px;
-                font-weight: 600;
-            ">${escapeHtml(table.name)}</h4>`;
-            html += `<button class="delete-table-btn" data-sheet-key="${sheetKey}" data-message-index="${messageIndex}" style="
-                background: #dc3545; 
-                color: white; 
-                border: none; 
-                padding: 6px 12px; 
-                border-radius: 8px; 
-                cursor: pointer; 
-                font-size: 12px;
-                font-weight: 500;
-                transition: all 0.2s ease;
-            " onmouseover="this.style.background='#c82333'; this.style.transform='translateY(-1px)';" 
-               onmouseout="this.style.background='#dc3545'; this.style.transform='translateY(0)';"
-            >删除表格</button>`;
+            // 表格标题栏
+            html += `<div class="table-section-header">`;
+            html += `<h4>${escapeHtml(table.name)}</h4>`;
+            html += `<button class="delete-table-btn" data-sheet-key="${sheetKey}" data-message-index="${messageIndex}">删除表格</button>`;
             html += `</div>`;
 
             // 显示表格元数据（如果有）
             if (table.sourceData && table.sourceData.note) {
-                html += `<div class="table-metadata" style="
-                    background: var(--ios-gray); 
-                    padding: 12px; 
-                    margin-bottom: 16px; 
-                    border-radius: 8px; 
-                    font-size: 13px; 
-                    color: var(--ios-text-secondary);
-                    border-left: 3px solid var(--ios-blue);
-                ">`;
-                html += `<p style="margin: 0; line-height: 1.5;">备注: ${escapeHtml(table.sourceData.note)}</p>`;
+                html += `<div class="table-metadata">`;
+                html += `<p>备注: ${escapeHtml(table.sourceData.note)}</p>`;
                 html += `</div>`;
             }
 
-            // 条目列表容器 - 卡片式布局，参考主视觉
-            html += `<div class="entries-list-container" style="
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-                margin-top: 12px;
-            ">`;
+            // 条目列表容器
+            html += `<div class="entries-list-container">`;
 
             const rows = table.content.slice(1);
             rows.forEach((row, rowIndex) => {
@@ -3838,83 +3771,23 @@ function loadMessageDetails(messageIndex, messageData) {
                 // 将所有字段值用 | 分隔符合并为一个字符串
                 const combinedValue = rowData.map(cell => cell || '').join(' | ');
 
-                // 每个条目为一个卡片 - 参考主视觉配色
-                html += `<div class="entry-card" data-row-index="${rowIndex}" data-sheet-key="${sheetKey}" style="
-                    background: transparent;
-                ">`;
+                // 每个条目
+                html += `<div class="entry-card" data-row-index="${rowIndex}" data-sheet-key="${sheetKey}">`;
 
-                // 输入框区域 - 参考主视觉配色
-                html += `<div class="entry-input-container" style="
-                    margin-bottom: 12px;
-                ">`;
+                // 输入框区域
+                html += `<div style="margin-bottom: 12px;">`;
                 html += `<textarea class="cell-input" `;
                 html += `data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
-                html += `data-message-index="${messageIndex}" `;
-                html += `style="
-                    background: var(--ios-gray) !important;
-                    color: var(--ios-text) !important;
-                    border: 1px solid var(--ios-border) !important;
-                    width: 100% !important;
-                    min-width: 100% !important;
-                    padding: 12px 16px !important;
-                    border-radius: 10px !important;
-                    font-size: 14px !important;
-                    transition: all 0.2s ease !important;
-                    resize: vertical !important;
-                    min-height: 80px !important;
-                    height: auto !important;
-                    overflow-y: auto !important;
-                    white-space: pre-wrap !important;
-                    word-wrap: break-word !important;
-                    overflow-wrap: break-word !important;
-                    line-height: 1.6 !important;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
-                    display: block !important;
-                    box-sizing: border-box !important;
-                " onfocus="this.style.borderColor='var(--ios-blue)'; this.style.outline='none'; this.style.boxShadow='0 0 0 3px rgba(0, 122, 255, 0.1)'; this.style.background='var(--ios-surface)';" 
-                   onblur="this.style.borderColor='var(--ios-border)'; this.style.boxShadow='none'; this.style.background='var(--ios-gray)';"
-                   onmouseover="if(document.activeElement !== this) this.style.borderColor='var(--ios-blue-hover)';"
-                   onmouseout="if(document.activeElement !== this) this.style.borderColor='var(--ios-border)';"
-                >${escapeHtml(combinedValue)}</textarea>`;
+                html += `data-message-index="${messageIndex}"`;
+                html += `>${escapeHtml(combinedValue)}</textarea>`;
                 html += `</div>`;
 
-                // 操作按钮区域 - 水平排列，参考主视觉
-                html += `<div class="entry-actions" style="
-                    display: flex;
-                    gap: 8px;
-                    justify-content: flex-end;
-                    align-items: center;
-                ">`;
+                // 操作按钮区域
+                html += `<div class="entry-actions">`;
                 html += `<button class="save-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
-                html += `data-message-index="${messageIndex}" style="
-                    background: #28a745; 
-                    color: white; 
-                    border: none; 
-                    border-radius: 8px; 
-                    cursor: pointer; 
-                    padding: 8px 16px; 
-                    font-size: 13px;
-                    font-weight: 500;
-                    transition: all 0.2s ease;
-                    min-width: 80px;
-                " onmouseover="this.style.background='#218838'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)';" 
-                   onmouseout="this.style.background='#28a745'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
-                >保存</button>`;
+                html += `data-message-index="${messageIndex}">保存</button>`;
                 html += `<button class="delete-row-btn" data-sheet-key="${sheetKey}" data-row-index="${rowIndex}" `;
-                html += `data-message-index="${messageIndex}" style="
-                    background: #dc3545; 
-                    color: white; 
-                    border: none; 
-                    border-radius: 8px; 
-                    cursor: pointer; 
-                    padding: 8px 16px; 
-                    font-size: 13px;
-                    font-weight: 500;
-                    transition: all 0.2s ease;
-                    min-width: 80px;
-                " onmouseover="this.style.background='#c82333'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)';" 
-                   onmouseout="this.style.background='#dc3545'; this.style.transform='translateY(0)'; this.style.boxShadow='none';"
-                >删除</button>`;
+                html += `data-message-index="${messageIndex}">删除</button>`;
                 html += `</div>`;
 
                 html += `</div>`;
@@ -4477,9 +4350,9 @@ function generateAllTablesHtml(messageData) {
         }
     }
     if (!tablesHtml) {
-        tablesHtml = `<div class="data-manage-card" style="margin-bottom: 16px;">
+        tablesHtml = `<div class="data-manage-card">
             <h3>数据内容</h3>
-            <pre style="background-color: var(--ios-gray); padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(JSON.stringify(messageData, null, 2))}</pre>
+            <pre class="dm-code-block">${escapeHtml(JSON.stringify(messageData, null, 2))}</pre>
         </div>`;
     }
     return tablesHtml;
@@ -4531,56 +4404,47 @@ function generateDiffTablesHtml(oldData, newData) {
             return;
         }
         const tableName = (newTable && newTable.name) || (oldTable && oldTable.name) || key;
-        html += `<div class="data-manage-card" style="margin-bottom: 16px;">
+        html += `<div class="data-manage-card">
             <h3>${escapeHtml(tableName)}（仅显示有变化的行）</h3>
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
+            <div class="dm-table-wrap">
+                <table class="dm-table">
                     <thead>
-                        <tr style="background-color: var(--ios-gray-dark);">`;
+                        <tr>`;
         if (headers && headers.length > 0) {
             headers.forEach(header => {
-                html += `<th style="padding: 12px 8px; text-align: left; border: 1px solid var(--ios-border); font-weight: 600; white-space: nowrap;">${escapeHtml(header || '')}</th>`;
+                html += `<th>${escapeHtml(header || '')}</th>`;
             });
         }
         html += `</tr></thead><tbody>`;
         diffRows.forEach((item, index) => {
-            // 行级背景色：删除=浅红，新增=浅绿，修改=默认背景（按列高亮）
-            let rowBg = '';
+            // 行级 CSS 类：删除=浅红，新增=浅绿，修改=默认
+            let rowClass = '';
             if (item.type === 'deleted') {
-                rowBg = 'background-color: rgba(255,0,0,0.12);';
+                rowClass = 'dm-row-deleted';
             } else if (item.type === 'added') {
-                rowBg = 'background-color: rgba(0,200,0,0.08);';
-            } else {
-                // 修改行使用交替行背景，具体高亮由单元格控制
-                rowBg = (index % 2 === 0)
-                    ? 'background-color: var(--ios-surface);'
-                    : 'background-color: var(--ios-gray);';
+                rowClass = 'dm-row-added';
             }
-            html += `<tr style="${rowBg}">`;
+            html += `<tr class="${rowClass}">`;
             const row = item.row || [];
             const changedCols = item.changedCols || [];
             headers.forEach((_, colIndex) => {
                 const cellContent = (row && row[colIndex]) ? row[colIndex] : '';
-                let cellBg = '';
+                let cellClass = '';
                 if (item.type === 'deleted') {
-                    // 删除行：整行都浅红背景
-                    cellBg = 'background-color: rgba(255,0,0,0.12);';
+                    cellClass = 'dm-cell-deleted';
                 } else if (item.type === 'added') {
-                    // 新增行：整行都浅绿背景
-                    cellBg = 'background-color: rgba(0,200,0,0.12);';
+                    cellClass = 'dm-cell-added';
                 } else if (item.type === 'modified' && changedCols[colIndex]) {
-                    // 修改行：仅有变化的列使用浅绿背景
-                    cellBg = 'background-color: rgba(0,200,0,0.18);';
+                    cellClass = 'dm-cell-modified';
                 }
-                const style = `padding: 10px 8px; border: 1px solid var(--ios-border); vertical-align: top; word-break: break-word;${cellBg}`;
-                html += `<td style="${style}">${escapeHtml(cellContent)}</td>`;
+                html += `<td class="${cellClass}">${escapeHtml(cellContent)}</td>`;
             });
             html += `</tr>`;
         });
         html += `</tbody></table></div></div>`;
     });
     if (!html) {
-        html = `<div class="data-manage-card" style="margin-bottom: 16px;">
+        html = `<div class="data-manage-card">
             <h3>数据内容</h3>
             <p class="data-manage-notes">相比上一楼层未检测到变化，已隐藏详细表格。</p>
         </div>`;
@@ -4607,24 +4471,24 @@ function findPreviousDbMessage(chat, fromIndex) {
  */
 function generateTableHtml(tableName, content) {
     if (!content || content.length === 0) {
-        return `<div class="data-manage-card" style="margin-bottom: 16px;">
+        return `<div class="data-manage-card">
             <h3>${escapeHtml(tableName)}</h3>
             <p class="data-manage-notes">表格内容为空</p>
         </div>`;
     }
 
-    let html = `<div class="data-manage-card" style="margin-bottom: 16px;">
+    let html = `<div class="data-manage-card">
         <h3>${escapeHtml(tableName)}</h3>
-        <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
+        <div class="dm-table-wrap">
+            <table class="dm-table">
                 <thead>
-                    <tr style="background-color: var(--ios-gray-dark);">`;
+                    <tr>`;
 
     // 表头
     const headers = content[0];
     if (headers && headers.length > 0) {
         headers.forEach(header => {
-            html += `<th style="padding: 12px 8px; text-align: left; border: 1px solid var(--ios-border); font-weight: 600; white-space: nowrap;">${escapeHtml(header || '')}</th>`;
+            html += `<th>${escapeHtml(header || '')}</th>`;
         });
     }
 
@@ -4633,11 +4497,11 @@ function generateTableHtml(tableName, content) {
     // 数据行
     for (let i = 1; i < content.length; i++) {
         const row = content[i];
-        html += `<tr style="background-color: ${i % 2 === 0 ? 'var(--ios-gray)' : 'var(--ios-surface)'};">`;
+        html += `<tr>`;
         row.forEach(cell => {
             const cellContent = cell || '';
             const cellClass = cellContent === '' ? 'data-manage-notes' : '';
-            html += `<td style="padding: 10px 8px; border: 1px solid var(--ios-border); vertical-align: top; word-break: break-word;" class="${cellClass}">${escapeHtml(cellContent)}</td>`;
+            html += `<td class="${cellClass}">${escapeHtml(cellContent)}</td>`;
         });
         html += `</tr>`;
     }

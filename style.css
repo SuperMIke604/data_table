@@ -1,20 +1,32 @@
-/* iOS 扁平风格弹窗样式 */
+/* ============================================================
+   iOS 26 毛玻璃风格 — Data Manage & Data Preview
+   ============================================================ */
+
+/* --- 弹窗主容器 --- */
 .data-manage-popup {
+    /* 设计令牌 */
     --ios-blue: #007AFF;
     --ios-blue-hover: #0051D5;
     --ios-blue-active: #0041B5;
-    --ios-gray: #F2F2F7;
-    --ios-gray-dark: #E5E5EA;
-    --ios-text: #000000;
+    --ios-gray: rgba(245, 245, 250, 0.7);
+    --ios-gray-dark: rgba(229, 229, 234, 0.75);
+    --ios-text: #1c1c1e;
     --ios-text-secondary: #8E8E93;
-    --ios-border: #C6C6C8;
-    --ios-surface: #FFFFFF;
-    --ios-shadow: rgba(0, 0, 0, 0.1);
-    
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --ios-border: rgba(60, 60, 67, 0.18);
+    --ios-surface: rgba(255, 255, 255, 0.6);
+    --ios-shadow: rgba(0, 0, 0, 0.08);
+    --ios-separator: rgba(60, 60, 67, 0.2);
+    --ios-green: #34C759;
+    --ios-green-hover: #2DB84D;
+    --ios-red: #FF3B30;
+    --ios-red-hover: #E0342B;
+
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Roboto, Arial, sans-serif;
     font-size: 16px;
     color: var(--ios-text);
-    background-color: transparent;
+    background: linear-gradient(145deg, rgba(240,240,245,0.5) 0%, rgba(230,233,240,0.5) 100%);
+    background-image: radial-gradient(circle at 30% 40%, rgba(255,255,255,0.15) 0%, transparent 20%),
+                      radial-gradient(circle at 70% 80%, rgba(200,220,255,0.1) 0%, transparent 25%);
     border-radius: 0;
     box-shadow: none;
     padding: 0;
@@ -25,29 +37,51 @@
     box-sizing: border-box;
 }
 
-/* 标题 */
+/* --- 标题 --- */
 .data-manage-popup h2 {
     font-size: 22px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--ios-text);
     text-align: center;
     margin: 0 0 20px 0;
     padding-bottom: 15px;
-    border-bottom: 1px solid var(--ios-border);
+    border-bottom: 1px solid var(--ios-separator);
+    letter-spacing: 1px;
+    text-shadow: 0 1px 3px rgba(255,255,255,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-/* Tab导航 */
+/* 标题左右渐变装饰线 */
+.data-manage-popup h2::before,
+.data-manage-popup h2::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to var(--dir, right), transparent, var(--ios-separator), transparent);
+    margin: 0 16px;
+    opacity: 0.8;
+}
+.data-manage-popup h2::before { --dir: right; }
+.data-manage-popup h2::after  { --dir: left; }
+
+/* --- Tab 导航 --- */
 .data-manage-tabs-nav {
     display: flex;
     gap: 0;
     margin-bottom: 20px;
-    background-color: var(--ios-surface);
-    border-radius: 10px;
+    background: var(--ios-surface);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border-radius: 14px;
     width: 100%;
     max-width: 100%;
     min-width: 100%;
     overflow: hidden;
-    box-shadow: 0 1px 4px var(--ios-shadow);
+    box-shadow: 0 4px 16px -4px var(--ios-shadow),
+                inset 0 1px 2px rgba(255,255,255,0.5);
+    border: 1px solid rgba(255, 255, 255, 0.45);
 }
 
 .data-manage-tab-button {
@@ -59,26 +93,27 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     border-bottom: 2px solid transparent;
     position: relative;
 }
 
 .data-manage-tab-button:hover {
-    background-color: var(--ios-gray);
+    background-color: rgba(245, 245, 250, 0.6);
     color: var(--ios-text);
 }
 
 .data-manage-tab-button.active {
     color: white;
     border-bottom-color: var(--ios-blue-active);
-    background-color: var(--ios-blue-active);
+    background: linear-gradient(135deg, var(--ios-blue) 0%, var(--ios-blue-active) 100%);
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
 }
 
-/* Tab内容 */
+/* --- Tab 内容 --- */
 .data-manage-tab-content {
     display: none;
-    animation: fadeIn 0.3s ease;
+    animation: dmFadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     width: 100%;
     max-width: 100%;
     min-width: 100%;
@@ -88,10 +123,10 @@
     display: block;
 }
 
-@keyframes fadeIn {
+@keyframes dmFadeIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(8px);
     }
     to {
         opacity: 1;
@@ -99,32 +134,37 @@
     }
 }
 
-/* 卡片样式 */
+/* --- 卡片：毛玻璃效果 --- */
 .data-manage-card {
-    background-color: var(--ios-surface);
-    border-radius: 12px;
+    background: var(--ios-surface);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border-radius: 20px;
     padding: 20px;
     margin-bottom: 16px;
-    box-shadow: 0 2px 8px var(--ios-shadow);
+    box-shadow: 0 10px 30px -10px var(--ios-shadow),
+                inset 0 1px 2px rgba(255,255,255,0.6);
+    border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .data-manage-card h3 {
     font-size: 18px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--ios-text);
     margin: 0 0 16px 0;
     padding-bottom: 12px;
-    border-bottom: 1px solid var(--ios-gray-dark);
+    border-bottom: 1px solid var(--ios-separator);
+    letter-spacing: 0.5px;
 }
 
-/* 网格布局 */
+/* --- 网格布局 --- */
 .data-manage-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
     gap: 16px;
 }
 
-/* 表单元素 */
+/* --- 表单元素 --- */
 .data-manage-popup label {
     display: block;
     margin-bottom: 8px;
@@ -138,14 +178,16 @@
 .data-manage-popup textarea {
     width: 100%;
     padding: 12px 16px;
-    background-color: var(--ios-gray);
+    background: var(--ios-gray);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--ios-border);
-    border-radius: 10px;
+    border-radius: 12px;
     color: var(--ios-text);
     font-size: 16px;
     font-family: inherit;
     box-sizing: border-box;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-appearance: none;
     appearance: none;
 }
@@ -155,8 +197,15 @@
 .data-manage-popup textarea:focus {
     outline: none;
     border-color: var(--ios-blue);
-    background-color: var(--ios-surface);
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    background: var(--ios-surface);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12),
+                0 2px 8px rgba(0, 122, 255, 0.08);
+}
+
+.data-manage-popup input:hover,
+.data-manage-popup select:hover,
+.data-manage-popup textarea:hover {
+    border-color: rgba(0, 122, 255, 0.4);
 }
 
 .data-manage-popup textarea {
@@ -164,56 +213,67 @@
     resize: vertical;
 }
 
-/* 按钮样式 - iOS扁平风格 */
+/* --- 按钮 — iOS 26 风格 --- */
 .data-manage-popup button,
 .data-manage-popup .button {
     padding: 12px 24px;
     border: none;
-    border-radius: 10px;
+    border-radius: 14px;
     font-size: 16px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     text-align: center;
     font-family: inherit;
     -webkit-appearance: none;
     appearance: none;
+    letter-spacing: 0.3px;
 }
 
 .data-manage-popup button.primary,
 .data-manage-popup .button.primary {
-    background-color: var(--ios-blue);
+    background: linear-gradient(135deg, var(--ios-blue) 0%, var(--ios-blue-active) 100%);
     color: white;
-    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+    box-shadow: 0 4px 14px rgba(0, 122, 255, 0.35);
 }
 
 .data-manage-popup button.primary:hover {
-    background-color: var(--ios-blue-hover);
-    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
-    transform: translateY(-1px);
+    background: linear-gradient(135deg, var(--ios-blue-hover) 0%, #003DA0 100%);
+    box-shadow: 0 6px 20px rgba(0, 122, 255, 0.45);
+    transform: translateY(-2px);
 }
 
 .data-manage-popup button.primary:active {
     transform: translateY(0);
-    box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
 }
 
 .data-manage-popup button.secondary {
-    background-color: var(--ios-gray-dark);
+    background: var(--ios-gray);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     color: var(--ios-text);
+    border: 1px solid var(--ios-border);
 }
 
 .data-manage-popup button.secondary:hover {
-    background-color: var(--ios-border);
+    background: var(--ios-gray-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--ios-shadow);
+}
+
+.data-manage-popup button.secondary:active {
+    transform: translateY(0);
 }
 
 .data-manage-popup button:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: not-allowed;
     transform: none !important;
+    box-shadow: none !important;
 }
 
-/* 按钮组 */
+/* --- 按钮组 --- */
 .data-manage-button-group {
     display: flex;
     flex-wrap: wrap;
@@ -222,7 +282,7 @@
     margin-top: 20px;
 }
 
-/* 输入组 */
+/* --- 输入组 --- */
 .data-manage-input-group {
     display: flex;
     align-items: center;
@@ -243,15 +303,23 @@
     min-width: 0;
 }
 
-/* 复选框组 */
+/* --- 复选框组 --- */
 .data-manage-checkbox-group {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 12px;
-    background-color: var(--ios-gray);
-    border-radius: 10px;
+    background: var(--ios-gray);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 12px;
     margin-bottom: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.2s ease;
+}
+
+.data-manage-checkbox-group:hover {
+    background: rgba(245, 245, 250, 0.85);
 }
 
 .data-manage-checkbox-group input[type="checkbox"] {
@@ -267,16 +335,19 @@
     flex: 1;
 }
 
-/* 单选按钮样式 */
+/* --- 单选按钮 --- */
 .data-manage-radio-group {
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 20px;
     padding: 10px;
-    border-radius: 8px;
-    background-color: var(--ios-gray);
+    border-radius: 12px;
+    background: var(--ios-gray);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     margin-top: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .data-manage-radio-group input[type="radio"] {
@@ -291,15 +362,15 @@
     border-radius: 50%;
     background-color: var(--ios-surface);
     position: relative;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .data-manage-radio-group input[type="radio"]:checked {
     border-color: var(--ios-blue);
     background-color: var(--ios-surface);
-    box-shadow: 0 2px 4px rgba(0, 122, 255, 0.2);
+    box-shadow: 0 2px 6px rgba(0, 122, 255, 0.25);
 }
 
 .data-manage-radio-group input[type="radio"]:checked::after {
@@ -311,13 +382,13 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background-color: var(--ios-blue);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(135deg, var(--ios-blue) 0%, var(--ios-blue-active) 100%);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .data-manage-radio-group input[type="radio"]:hover {
-    border-color: var(--ios-blue);
-    box-shadow: 0 2px 4px rgba(0, 122, 255, 0.15);
+    border-color: rgba(0, 122, 255, 0.5);
+    box-shadow: 0 2px 6px rgba(0, 122, 255, 0.18);
 }
 
 .data-manage-radio-group input[type="radio"]:active {
@@ -326,11 +397,11 @@
 
 .data-manage-radio-group input[type="radio"]:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
 }
 
 .data-manage-radio-group input[type="radio"]:checked:focus {
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.25), 0 2px 4px rgba(0, 122, 255, 0.2);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2), 0 2px 6px rgba(0, 122, 255, 0.25);
 }
 
 .data-manage-radio-group label {
@@ -341,33 +412,38 @@
     gap: 8px;
 }
 
-/* 状态显示 */
+/* --- 状态显示 --- */
 .data-manage-status-display {
     text-align: center;
     padding: 16px;
-    border: 1px dashed var(--ios-border);
-    border-radius: 10px;
-    background-color: var(--ios-gray);
+    border: 1px dashed var(--ios-separator);
+    border-radius: 14px;
+    background: var(--ios-gray);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     margin-bottom: 16px;
     color: var(--ios-text-secondary);
 }
 
-/* 说明文字 */
+/* --- 说明文字 --- */
 .data-manage-notes {
     font-size: 13px;
     color: var(--ios-text-secondary);
     margin-top: 8px;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
-/* 提示词片段样式 */
+/* --- 提示词片段 --- */
 .data-manage-prompt-segment {
     margin-bottom: 16px;
     border: 1px solid var(--ios-border);
-    border-radius: 10px;
+    border-radius: 16px;
     padding: 12px;
-    background-color: var(--ios-surface);
-    box-shadow: 0 1px 4px var(--ios-shadow);
+    background: var(--ios-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px -4px var(--ios-shadow),
+                inset 0 1px 1px rgba(255,255,255,0.4);
 }
 
 .data-manage-prompt-segment-toolbar {
@@ -383,9 +459,9 @@
     min-width: 0;
     max-width: 150px;
     padding: 8px 12px;
-    background-color: var(--ios-gray);
+    background: var(--ios-gray);
     border: 1px solid var(--ios-border);
-    border-radius: 8px;
+    border-radius: 10px;
     color: var(--ios-text);
     font-size: 14px;
     font-family: inherit;
@@ -396,30 +472,32 @@
 .data-manage-prompt-segment-role:focus {
     outline: none;
     border-color: var(--ios-blue);
-    background-color: var(--ios-surface);
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    background: var(--ios-surface);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
 }
 
 .data-manage-prompt-segment-delete-btn {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     border: none;
-    background-color: #FF3B30;
+    background: linear-gradient(135deg, var(--ios-red) 0%, #E0342B 100%);
     color: white;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
 }
 
 .data-manage-prompt-segment-delete-btn:hover {
-    background-color: #FF2D20;
+    background: linear-gradient(135deg, #E0342B 0%, #C02720 100%);
     transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
 }
 
 .data-manage-prompt-segment-delete-btn:active {
@@ -430,25 +508,472 @@
     width: 100%;
     min-height: 80px;
     padding: 12px;
-    background-color: var(--ios-gray);
+    background: var(--ios-gray);
     border: 1px solid var(--ios-border);
-    border-radius: 8px;
+    border-radius: 10px;
     color: var(--ios-text);
     font-size: 14px;
     font-family: inherit;
     resize: vertical;
     box-sizing: border-box;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .data-manage-prompt-segment-content:focus {
     outline: none;
     border-color: var(--ios-blue);
-    background-color: var(--ios-surface);
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    background: var(--ios-surface);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
 }
 
-/* 响应式设计 */
+/* ============================================================
+   数据概览 — 消息卡片 & 详情面板
+   ============================================================ */
+
+.overview-content {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.overview-content h3 {
+    color: var(--ios-text);
+    margin-bottom: 20px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* 消息卡片 */
+.message-data-card {
+    background: var(--ios-surface);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 20px;
+    padding: 18px;
+    margin-bottom: 16px;
+    color: var(--ios-text);
+    box-shadow: 0 8px 24px -6px var(--ios-shadow),
+                inset 0 1px 2px rgba(255,255,255,0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.message-data-card:hover {
+    border-color: rgba(0, 122, 255, 0.35) !important;
+    box-shadow: 0 10px 30px -8px rgba(0, 122, 255, 0.15),
+                inset 0 1px 2px rgba(255,255,255,0.5);
+    transform: translateY(-1px);
+}
+
+/* 卡片头部 */
+.message-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.message-card-header h4 {
+    margin: 0;
+    color: var(--ios-text);
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.message-card-header .timestamp {
+    font-size: 12px;
+    color: var(--ios-text-secondary);
+}
+
+/* 数据统计 */
+.message-stats {
+    margin-bottom: 12px;
+}
+
+.message-stats p {
+    margin: 5px 0;
+    color: var(--ios-text-secondary);
+    font-size: 14px;
+}
+
+.sheet-tag {
+    background: var(--ios-gray-dark);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    padding: 8px 12px;
+    margin: 5px 0;
+    border-radius: 10px;
+    font-size: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* 详情区域 */
+.message-details {
+    margin-top: 15px;
+    padding-top: 15px;
+}
+
+.expanded-details-content {
+    animation: dmFadeIn 0.3s ease-in;
+    padding: 0;
+    background: transparent;
+}
+
+/* 操作按钮区域 */
+.message-card-actions {
+    text-align: right;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--ios-separator);
+}
+
+/* 展开/收起按钮 */
+.toggle-details-btn {
+    background: linear-gradient(135deg, var(--ios-blue) 0%, var(--ios-blue-active) 100%);
+    color: white;
+    border: none;
+    padding: 7px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-right: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(0, 122, 255, 0.25);
+    letter-spacing: 0.3px;
+}
+
+.toggle-details-btn:hover {
+    background: linear-gradient(135deg, var(--ios-blue-hover) 0%, #003DA0 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+}
+
+.toggle-details-btn:active {
+    transform: translateY(0);
+}
+
+/* 删除记录按钮 */
+.delete-message-btn {
+    background: linear-gradient(135deg, var(--ios-red) 0%, #E0342B 100%);
+    color: white;
+    border: none;
+    padding: 7px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(255, 59, 48, 0.25);
+    letter-spacing: 0.3px;
+}
+
+.delete-message-btn:hover {
+    background: linear-gradient(135deg, #E0342B 0%, #C02720 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.35);
+}
+
+.delete-message-btn:active {
+    transform: translateY(0);
+}
+
+/* 概览底部统计 */
+.overview-summary {
+    margin-top: 20px;
+    padding: 12px;
+    background: var(--ios-gray-dark);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 14px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.overview-summary p {
+    margin: 0;
+    color: var(--ios-text-secondary);
+}
+
+/* ============================================================
+   详情面板 — 表格区域 & 编辑区
+   ============================================================ */
+
+/* 表格区段卡片 */
+.table-section {
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 20px;
+    padding: 16px;
+    background: var(--ios-surface);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    box-shadow: 0 8px 24px -6px var(--ios-shadow),
+                inset 0 1px 2px rgba(255,255,255,0.5);
+}
+
+.table-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ios-separator);
+}
+
+.table-section-header h4 {
+    margin: 0;
+    color: var(--ios-text);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+/* 删除表格按钮 */
+.delete-table-btn {
+    background: linear-gradient(135deg, var(--ios-red) 0%, #E0342B 100%);
+    color: white;
+    border: none;
+    padding: 7px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(255, 59, 48, 0.25);
+}
+
+.delete-table-btn:hover {
+    background: linear-gradient(135deg, #E0342B 0%, #C02720 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.35);
+}
+
+.delete-table-btn:active {
+    transform: translateY(0);
+}
+
+/* 表格元数据提示 */
+.table-metadata {
+    background: var(--ios-gray);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    padding: 12px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    color: var(--ios-text-secondary);
+    border-left: 3px solid var(--ios-blue);
+    line-height: 1.5;
+}
+
+.table-metadata p {
+    margin: 0;
+}
+
+/* 条目列表 */
+.entries-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+/* 编辑 textarea — 覆盖宿主样式 */
+.cell-input {
+    background: var(--ios-gray) !important;
+    color: var(--ios-text) !important;
+    border: 1px solid var(--ios-border) !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    padding: 12px 16px !important;
+    border-radius: 14px !important;
+    font-size: 14px !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    resize: vertical !important;
+    min-height: 80px !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    line-height: 1.6 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", Roboto, sans-serif !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+.cell-input:focus {
+    border-color: var(--ios-blue) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12) !important;
+    background: var(--ios-surface) !important;
+}
+
+.cell-input:hover {
+    border-color: rgba(0, 122, 255, 0.4) !important;
+}
+
+/* 条目操作按钮 */
+.entry-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.save-row-btn {
+    background: linear-gradient(135deg, var(--ios-green) 0%, var(--ios-green-hover) 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 80px;
+    box-shadow: 0 2px 6px rgba(52, 199, 89, 0.3);
+}
+
+.save-row-btn:hover {
+    background: linear-gradient(135deg, var(--ios-green-hover) 0%, #28A745 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 199, 89, 0.4);
+}
+
+.save-row-btn:active {
+    transform: translateY(0);
+}
+
+.delete-row-btn {
+    background: linear-gradient(135deg, var(--ios-red) 0%, #E0342B 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 80px;
+    box-shadow: 0 2px 6px rgba(255, 59, 48, 0.25);
+}
+
+.delete-row-btn:hover {
+    background: linear-gradient(135deg, #E0342B 0%, #C02720 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.35);
+}
+
+.delete-row-btn:active {
+    transform: translateY(0);
+}
+
+/* ============================================================
+   数据预览 & 表格通用
+   ============================================================ */
+
+/* 数据表格 */
+.dm-table-wrap {
+    overflow-x: auto;
+}
+
+.dm-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 14px;
+    margin-top: 12px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--ios-border);
+}
+
+.dm-table thead tr {
+    background: var(--ios-gray-dark);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.dm-table th {
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--ios-separator);
+    color: var(--ios-text);
+    font-size: 13px;
+    letter-spacing: 0.3px;
+}
+
+.dm-table td {
+    padding: 10px;
+    vertical-align: top;
+    word-break: break-word;
+    border-bottom: 1px solid rgba(60, 60, 67, 0.08);
+    color: var(--ios-text);
+}
+
+.dm-table tbody tr {
+    transition: background 0.15s ease;
+}
+
+.dm-table tbody tr:nth-child(odd) {
+    background: var(--ios-surface);
+}
+
+.dm-table tbody tr:nth-child(even) {
+    background: var(--ios-gray);
+}
+
+.dm-table tbody tr:hover {
+    background: rgba(0, 122, 255, 0.04);
+}
+
+.dm-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Diff 高亮 */
+.dm-row-deleted {
+    background-color: rgba(255, 59, 48, 0.1) !important;
+}
+
+.dm-row-added {
+    background-color: rgba(52, 199, 89, 0.08) !important;
+}
+
+.dm-cell-deleted {
+    background-color: rgba(255, 59, 48, 0.12) !important;
+}
+
+.dm-cell-added {
+    background-color: rgba(52, 199, 89, 0.12) !important;
+}
+
+.dm-cell-modified {
+    background-color: rgba(52, 199, 89, 0.18) !important;
+}
+
+/* 代码块 fallback */
+.dm-code-block {
+    background: var(--ios-gray);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 14px;
+    border-radius: 14px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 13px;
+    border: 1px solid var(--ios-border);
+}
+
+/* ============================================================
+   响应式
+   ============================================================ */
+
 @media (max-width: 1024px) {
     .data-manage-popup {
         width: 100% !important;
@@ -456,16 +981,16 @@
         min-width: 100% !important;
         padding: 0;
     }
-    
+
     .data-manage-input-group {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .data-manage-input-group label {
         margin-bottom: 8px;
     }
-    
+
     .data-manage-input-group input {
         width: 100%;
     }
@@ -479,71 +1004,39 @@
         max-width: 100% !important;
         min-width: 100% !important;
     }
-    
+
     .data-manage-tabs-nav {
         flex-direction: column;
+        border-radius: 14px;
     }
-    
+
     .data-manage-tab-button {
-        border-bottom: 1px solid var(--ios-border);
+        border-bottom: 1px solid var(--ios-separator);
         border-right: none;
     }
-    
+
     .data-manage-tab-button.active {
         border-bottom-color: var(--ios-blue-active);
-        background-color: var(--ios-blue-active);
+        background: linear-gradient(135deg, var(--ios-blue) 0%, var(--ios-blue-active) 100%);
         color: white;
     }
-    
+
     .data-manage-grid {
         grid-template-columns: 1fr;
     }
-    
-}
 
-/* 数据概览样式 */
-.overview-content {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
-
-.message-data-card {
-    transition: all 0.2s;
-}
-
-.message-data-card:hover {
-    border-color: var(--ios-blue) !important;
-    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.15);
-}
-
-.toggle-details-btn:hover {
-    background: var(--ios-blue-active) !important;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 122, 255, 0.3);
-}
-
-.delete-message-btn:hover {
-    background: #c82333 !important;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
-}
-
-.toggle-details-btn:active,
-.delete-message-btn:active {
-    transform: translateY(0);
-}
-
-.expanded-details-content {
-    animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
+    .data-manage-card {
+        border-radius: 16px;
+        padding: 16px;
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
+
+    .message-data-card {
+        border-radius: 16px;
+        padding: 14px;
+    }
+
+    .table-section {
+        border-radius: 16px;
+        padding: 14px;
     }
 }
-
