@@ -887,7 +887,6 @@
 }
 
 .dm-table {
-    width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 14px;
@@ -910,7 +909,7 @@
     white-space: nowrap;
     border-bottom: 1px solid var(--ios-separator);
     color: var(--ios-text);
-    font-size: 13px;
+    font-size: 14px;
     letter-spacing: 0.3px;
 }
 
