@@ -912,14 +912,20 @@
     color: var(--ios-text);
     font-size: 13px;
     letter-spacing: 0.3px;
+    min-width: 60px;
 }
 
 .dm-table td {
     padding: 10px;
     vertical-align: top;
-    word-break: break-word;
     border-bottom: 1px solid rgba(60, 60, 67, 0.08);
     color: var(--ios-text);
+    min-width: 60px;
+    max-width: 300px;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    line-height: 1.5;
 }
 
 .dm-table tbody tr {
@@ -1069,20 +1075,17 @@
 
     .dm-table {
         font-size: 12px;
-        min-width: 600px;
+        min-width: 500px;
     }
 
-    .dm-table th,
-    .dm-table td {
-        min-width: 120px;
-        max-width: 200px;
+    .dm-table th {
+        min-width: 50px;
         padding: 8px 6px;
-        white-space: normal;
-        word-break: break-word;
     }
 
-    .dm-table th:first-child,
-    .dm-table td:first-child {
-        min-width: 80px;
+    .dm-table td {
+        min-width: 50px;
+        max-width: 180px;
+        padding: 8px 6px;
     }
 }
