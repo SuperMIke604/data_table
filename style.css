@@ -1250,6 +1250,27 @@
    响应式
    ============================================================ */
 
+/* 移动端窗口默认全屏 */
+@media (max-width: 768px) {
+    .dm-window {
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        border-radius: 0;
+        min-width: unset;
+        min-height: unset;
+    }
+
+    .dm-window .dm-window-resize {
+        display: none;
+    }
+
+    .dm-window .dm-btn-maximize {
+        display: none;
+    }
+}
+
 @media (max-width: 1024px) {
     .data-manage-popup {
         width: 100% !important;

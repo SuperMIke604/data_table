@@ -1327,7 +1327,6 @@ function openDataManagePopup() {
                 <button class="data-manage-tab-button" data-tab="api">API设置</button>
                 <button class="data-manage-tab-button" data-tab="worldbook">世界书</button>
                 <button class="data-manage-tab-button" data-tab="data">数据管理</button>
-                <button class="data-manage-tab-button" data-tab="sheetsettings">表格设置</button>
             </div>
             
             <!-- Tab内容 -->
@@ -1597,20 +1596,6 @@ function openDataManagePopup() {
                     </div>
                 </div>
             </div>
-            
-            <div id="data-manage-tab-sheetsettings" class="data-manage-tab-content">
-                <div class="data-manage-card">
-                    <h3>表格独立更新设置</h3>
-                    <p class="data-manage-notes">为每个表格配置独立的更新参数。设为 <b>-1</b> 表示沿用全局设置，设为 <b>0</b> 表示该表不参与自动更新。</p>
-                    <div id="data-manage-sheet-settings-list" style="margin-top: 16px;">
-                        <em style="color: var(--ios-text-secondary);">加载中...</em>
-                    </div>
-                    <div class="data-manage-button-group" style="margin-top: 16px;">
-                        <button id="data-manage-save-sheet-settings" class="primary">保存所有表格设置</button>
-                        <button id="data-manage-reset-sheet-settings" class="secondary">全部重置为沿用全局</button>
-                    </div>
-                </div>
-            </div>
         </div>
     `;
 
@@ -1682,8 +1667,6 @@ function setupPopupEventListeners() {
     // 数据管理 Tab 的按钮
     setupDataTabListeners(parentDoc);
 
-    // 表格设置 Tab 的按钮
-    setupSheetSettingsTabListeners(parentDoc);
 }
 
 /**
@@ -1723,10 +1706,6 @@ function switchTab(tabName) {
         updateWorldbookSourceView();
     }
 
-    // 如果切换到表格设置Tab，渲染设置UI
-    if (tabName === 'sheetsettings') {
-        renderSheetSettingsUI();
-    }
 }
 
 /**
@@ -4536,171 +4515,43 @@ function setupDataTabListeners(parentDoc) {
 }
 
 // ============================================================
-//  表格独立更新设置 — renderSheetSettingsUI & setupSheetSettingsTabListeners
+//  findPreviousDbMessage — 查找指定索引之前的上一条数据库消息
 // ============================================================
 
 /**
- * 渲染表格独立更新设置 UI
+ * 查找指定消息索引之前最近的包含数据库数据的消息
+ * @param {Array} chat - 聊天记录数组
+ * @param {number} currentIndex - 当前消息索引
+ * @returns {object|null} { index, data } 或 null
  */
-function renderSheetSettingsUI() {
-    const parentDoc = (window.parent && window.parent !== window)
-        ? window.parent.document
-        : document;
+function findPreviousDbMessage(chat, currentIndex) {
+    for (let i = currentIndex - 1; i >= 0; i--) {
+        const msg = chat[i];
+        if (!msg) continue;
 
-    const listContainer = parentDoc.getElementById('data-manage-sheet-settings-list');
-    if (!listContainer) return;
-
-    if (!currentJsonTableData) {
-        listContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">暂无数据库加载，请先在聊天中生成数据后再配置。</em>';
-        return;
-    }
-
-    const sheetKeys = Object.keys(currentJsonTableData).filter(k => {
-        const v = currentJsonTableData[k];
-        return v && typeof v === 'object' && v.content && Array.isArray(v.content);
-    });
-
-    if (sheetKeys.length === 0) {
-        listContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">当前数据库没有有效的表格。</em>';
-        return;
-    }
-
-    // 全局默认值（用于显示参考）
-    const globalFreq = currentSettings.autoUpdateFrequency ?? 0;
-    const globalBatch = currentSettings.updateBatchSize || 1;
-
-    let html = `<p class="data-manage-notes" style="margin-bottom: 12px;">
-        当前全局设置：最新N层不更新 = <b>${globalFreq}</b>，每次更新楼层数 = <b>${globalBatch}</b>
-    </p>`;
-
-    sheetKeys.forEach((key, idx) => {
-        const table = currentJsonTableData[key];
-        const name = table.name || key;
-        const config = table.updateConfig || {};
-
-        const freqVal = Number.isFinite(config.updateFrequency) ? config.updateFrequency : -1;
-        const batchVal = Number.isFinite(config.batchSize) ? config.batchSize : -1;
-        const skipVal = Number.isFinite(config.skipFloors) ? config.skipFloors : -1;
-        const depthVal = Number.isFinite(config.contextDepth) ? config.contextDepth : -1;
-
-        html += `
-        <div class="data-manage-card" style="margin-bottom: 12px; padding: 16px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <h4 style="margin: 0; font-size: 15px; font-weight: 600; color: var(--ios-text);">
-                    ${escapeHtml(name)}
-                </h4>
-                <span style="font-size: 12px; color: var(--ios-text-secondary);">Key: ${escapeHtml(key)}</span>
-            </div>
-            <div class="data-manage-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
-                <div>
-                    <label style="font-size: 13px;">更新频率 (updateFrequency)</label>
-                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="updateFrequency" value="${freqVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
-                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, 0=不自动更新, >0=每N层AI回复更新一次</p>
-                </div>
-                <div>
-                    <label style="font-size: 13px;">批量大小 (batchSize)</label>
-                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="batchSize" value="${batchVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
-                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, >0=每次更新的楼层数</p>
-                </div>
-                <div>
-                    <label style="font-size: 13px;">跳过楼层数 (skipFloors)</label>
-                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="skipFloors" value="${skipVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
-                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, >=0=最新N层不计入触发条件</p>
-                </div>
-                <div>
-                    <label style="font-size: 13px;">上下文深度 (contextDepth)</label>
-                    <input type="number" class="sheet-cfg-input" data-sheet-key="${key}" data-cfg-field="contextDepth" value="${depthVal}" min="-1" step="1" style="padding: 8px 12px; font-size: 14px;">
-                    <p class="data-manage-notes" style="margin-top: 4px; font-size: 11px;">-1=沿用全局, >0=AI可见的最新消息数量</p>
-                </div>
-            </div>
-        </div>`;
-    });
-
-    listContainer.innerHTML = html;
-}
-
-/**
- * 设置表格设置 Tab 的事件监听器
- */
-function setupSheetSettingsTabListeners(parentDoc) {
-    // 保存所有表格设置
-    const saveBtn = parentDoc.getElementById('data-manage-save-sheet-settings');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function () {
-            _saveAllSheetSettings();
-        });
-    }
-
-    // 重置所有表格设置
-    const resetBtn = parentDoc.getElementById('data-manage-reset-sheet-settings');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', function () {
-            if (!confirm('确定要将所有表格的独立设置重置为沿用全局（-1）吗？')) return;
-            _resetAllSheetSettings();
-        });
-    }
-}
-
-/**
- * 从 UI 读取并保存所有表格的 updateConfig
- */
-function _saveAllSheetSettings() {
-    const parentDoc = (window.parent && window.parent !== window)
-        ? window.parent.document
-        : document;
-
-    if (!currentJsonTableData) {
-        showToast('数据库未加载', 'warning');
-        return;
-    }
-
-    const inputs = parentDoc.querySelectorAll('.sheet-cfg-input');
-    inputs.forEach(input => {
-        const sheetKey = input.dataset.sheetKey;
-        const field = input.dataset.cfgField;
-        const value = parseInt(input.value);
-
-        if (!sheetKey || !field || isNaN(value)) return;
-
-        const table = currentJsonTableData[sheetKey];
-        if (!table) return;
-
-        if (!table.updateConfig) {
-            table.updateConfig = {};
+        if (msg.TavernDB_ACU_Data) {
+            return { index: i, data: msg.TavernDB_ACU_Data };
         }
-        table.updateConfig[field] = value;
-    });
 
-    // 保存到聊天记录
-    saveJsonTableToChatHistory(currentJsonTableData);
-    showToast('所有表格的独立更新设置已保存', 'success');
-}
-
-/**
- * 将所有表格的 updateConfig 重置为 -1
- */
-function _resetAllSheetSettings() {
-    if (!currentJsonTableData) {
-        showToast('数据库未加载', 'warning');
-        return;
-    }
-
-    for (const key of Object.keys(currentJsonTableData)) {
-        const table = currentJsonTableData[key];
-        if (table && typeof table === 'object') {
-            table.updateConfig = {
-                updateFrequency: -1,
-                batchSize: -1,
-                skipFloors: -1,
-                contextDepth: -1
-            };
+        // 兼容旧格式：从消息文本中解析 JSON
+        if (msg.mes) {
+            try {
+                let jsonData = null;
+                const jsonMatch = msg.mes.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    jsonData = JSON.parse(jsonMatch[1]);
+                } else {
+                    try { jsonData = JSON.parse(msg.mes); } catch (_) { /* not JSON */ }
+                }
+                if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
+                    return { index: i, data: jsonData };
+                }
+            } catch (_) { /* skip */ }
         }
     }
-
-    saveJsonTableToChatHistory(currentJsonTableData);
-    renderSheetSettingsUI(); // 刷新 UI
-    showToast('所有表格设置已重置为沿用全局', 'success');
+    return null;
 }
+
 
 /**
  * 数据预览 — 卡片式布局 (Card-based Data Preview)
@@ -6371,10 +6222,7 @@ async function saveJsonTableToChatHistory(targetMessageIndex = -1) {
     // 使用深拷贝来存储数据快照，防止所有消息引用同一个对象
     targetMessage.TavernDB_ACU_Data = JSON.parse(JSON.stringify(currentJsonTableData));
 
-    // 记录本次更新涉及的表的 key（用于 per-sheet 更新频率追踪）
-    if (window._currentAutoUpdateModifiedKeys && Array.isArray(window._currentAutoUpdateModifiedKeys)) {
-        targetMessage.TavernDB_ACU_ModifiedKeys = [...window._currentAutoUpdateModifiedKeys];
-    }
+
     console.log(`已将数据库附加到索引 ${finalIndex} 的消息。正在保存聊天记录...`);
 
     // 保存聊天记录
@@ -7699,138 +7547,95 @@ async function triggerAutomaticUpdateIfNeeded() {
         return;
     }
 
-    // ========== 按表独立更新频率逻辑 ==========
+    // 计算尚未记录层数：最新消息层数 - 最近的有数据绑定的层数
+    let unrecordedMessages = 0;
+    const totalMessages = liveChat.length - 1; // 排除楼层0，总楼层数
+    let lastRecordedFloor = 0; // 最近的有数据绑定的楼层号
 
-    // 1. 收集所有数据表的 updateConfig
-    const sheetKeys = Object.keys(currentJsonTableData).filter(k => {
-        const v = currentJsonTableData[k];
-        return v && typeof v === 'object' && v.content && Array.isArray(v.content);
+    // 从最新楼层开始往前找，找到最近的有数据绑定的楼层
+    for (let i = liveChat.length - 1; i > 0; i--) {
+        const message = liveChat[i];
+        if (message.TavernDB_ACU_Data) {
+            lastRecordedFloor = i;
+            break;
+        }
+    }
+
+    // 尚未记录层数 = 总楼层数 - 最近有数据绑定的楼层号
+    unrecordedMessages = totalMessages - lastRecordedFloor;
+
+    const skipLatestN = currentSettings.autoUpdateFrequency ?? 0;
+    const updateBatchSize = currentSettings.updateBatchSize || 1;
+    const requiredUnrecorded = skipLatestN + updateBatchSize;
+
+    console.log('[自动更新] 触发器: 参数检查', {
+        skipLatestN,
+        updateBatchSize,
+        requiredUnrecorded,
+        unrecordedMessages,
+        totalMessages,
+        lastRecordedFloor
     });
 
-    if (sheetKeys.length === 0) {
-        console.log('[自动更新] 触发器: 没有有效的数据表');
+    if (unrecordedMessages < requiredUnrecorded) {
+        console.log(`[自动更新] 触发器: 尚未记录层数 (${unrecordedMessages}) 未达到触发条件 (${requiredUnrecorded})。跳过。`);
         return;
     }
 
-    // 2. 全局默认值
-    const globalSkipLatestN = currentSettings.autoUpdateFrequency ?? 0;
-    const globalBatchSize = currentSettings.updateBatchSize || 1;
+    // 当未记录层数达到或超过所需层数时触发更新
+    console.log(`[自动更新] 触发器: 尚未记录层数 (${unrecordedMessages}) 达到触发条件 (${requiredUnrecorded})。开始更新。`);
+    showToast(`触发自动更新：未记录层数 ${unrecordedMessages} >= 触发条件 ${requiredUnrecorded}`, 'info');
 
-    // 3. 扫描聊天记录，找到每个表的最后更新楼层
-    const totalFloors = liveChat.length; // 总楼层数（包括楼层0）
+    const actualMessages = liveChat.filter((_, index) => index > 0);
+    const totalActualMessages = actualMessages.length;
+    let startIndex = Math.max(0, totalActualMessages - skipLatestN - updateBatchSize);
+    let endIndex = startIndex + updateBatchSize;
 
-    // 查找每个表的最后更新楼层
-    const perSheetLastUpdated = {}; // key -> lastUpdatedFloor
-    let globalLastRecordedFloor = 0;
+    if (startIndex === 0) {
+        startIndex = -1;
+        endIndex = endIndex - 1;
+    }
 
-    for (let i = liveChat.length - 1; i > 0; i--) {
-        const msg = liveChat[i];
-        if (!msg) continue;
-
-        // 检查该消息是否有 TavernDB_ACU_Data
-        if (msg.TavernDB_ACU_Data) {
-            // 如果有 TavernDB_ACU_ModifiedKeys，只标记对应表
-            const modifiedKeys = msg.TavernDB_ACU_ModifiedKeys;
-            if (modifiedKeys && Array.isArray(modifiedKeys)) {
-                for (const key of modifiedKeys) {
-                    if (!perSheetLastUpdated[key]) {
-                        perSheetLastUpdated[key] = i;
-                    }
-                }
-            } else {
-                // 没有 ModifiedKeys，说明是旧格式，认为全部表都在该楼层更新了
-                for (const key of sheetKeys) {
-                    if (!perSheetLastUpdated[key]) {
-                        perSheetLastUpdated[key] = i;
-                    }
-                }
-            }
-
-            // 记录全局最后已记录楼层
-            if (globalLastRecordedFloor === 0) {
-                globalLastRecordedFloor = i;
+    const indicesToActuallyUpdate = [];
+    for (let i = startIndex; i < endIndex; i++) {
+        if (i < totalActualMessages) {
+            const floorIndex = i + 1;
+            if (floorIndex >= 0) {
+                indicesToActuallyUpdate.push(floorIndex);
             }
         }
     }
 
-    // 4. 逐表判断是否需要更新
-    const tablesToUpdate = []; // { sheetKey, indices, batchSize }
-    const totalMessages = totalFloors - 1; // 排除楼层0
-
-    for (const sheetKey of sheetKeys) {
-        const table = currentJsonTableData[sheetKey];
-        const config = table.updateConfig || {};
-
-        // 读取每个表的独立配置，-1 回退到全局
-        const rawFreq = Number.isFinite(config.updateFrequency) ? config.updateFrequency : -1;
-        const rawBatch = Number.isFinite(config.batchSize) ? config.batchSize : -1;
-        const rawSkip = Number.isFinite(config.skipFloors) ? config.skipFloors : -1;
-
-        const frequency = (rawFreq === -1) ? globalSkipLatestN : rawFreq;
-        const batchSize = (rawBatch === -1) ? globalBatchSize : rawBatch;
-        const skipFloors = (rawSkip === -1) ? globalSkipLatestN : rawSkip;
-
-        // frequency 为 0 表示该表不参与自动更新
-        if (frequency <= 0 && rawFreq === 0) {
-            console.log(`[自动更新] 表 ${sheetKey}: 已配置为不自动更新 (frequency=0)，跳过`);
-            continue;
+    if (skipLatestN === 0 && indicesToActuallyUpdate.length === 0 && totalActualMessages >= updateBatchSize) {
+        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
+            indicesToActuallyUpdate.push(i + 1);
         }
-
-        // 该表的最后更新楼层
-        const lastUpdated = perSheetLastUpdated[sheetKey] || 0;
-
-        // 有效未记录层数 = 总AI楼层 - 跳过楼层 - 最后更新楼层
-        const effectiveTotal = Math.max(0, totalMessages - skipFloors);
-        const effectiveUnrecorded = Math.max(0, effectiveTotal - lastUpdated);
-        const threshold = batchSize;
-
-        console.log(`[自动更新] 表 ${sheetKey}: frequency=${frequency}, batchSize=${batchSize}, skipFloors=${skipFloors}, lastUpdated=${lastUpdated}, effectiveUnrecorded=${effectiveUnrecorded}, threshold=${threshold}`);
-
-        if (frequency > 0 && effectiveUnrecorded >= frequency && threshold > 0) {
-            // 计算需要更新的楼层范围
-            const startFloor = lastUpdated + 1;
-            const endFloor = Math.min(totalMessages - skipFloors, startFloor + batchSize - 1);
-
-            if (startFloor <= endFloor && startFloor > 0) {
-                tablesToUpdate.push({
-                    sheetKey,
-                    startFloor,
-                    endFloor,
-                    batchSize
-                });
-                console.log(`[自动更新] 表 ${sheetKey}: 需要更新，楼层范围 ${startFloor}-${endFloor}`);
-            }
+    } else if (skipLatestN === 0 && startIndex === -1 && totalActualMessages >= updateBatchSize) {
+        indicesToActuallyUpdate.length = 0;
+        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
+            indicesToActuallyUpdate.push(i + 1);
         }
     }
 
-    if (tablesToUpdate.length === 0) {
-        console.log('[自动更新] 触发器: 没有表格需要更新');
+    if (indicesToActuallyUpdate.length === 0) {
+        console.warn('[自动更新] 触发器: 没有需要更新的楼层');
         return;
     }
 
-    // 5. 合并楼层范围，执行更新
-    // 找到所有需要更新的楼层的最大范围
-    let minFloor = Infinity;
-    let maxFloor = 0;
-    const modifiedSheetKeys = [];
+    const floorStart = indicesToActuallyUpdate[0];
+    const floorEnd = indicesToActuallyUpdate[indicesToActuallyUpdate.length - 1];
 
-    for (const item of tablesToUpdate) {
-        minFloor = Math.min(minFloor, item.startFloor);
-        maxFloor = Math.max(maxFloor, item.endFloor);
-        modifiedSheetKeys.push(item.sheetKey);
+    console.log(`[自动更新] 触发器: 将处理楼层 ${floorStart} 到 ${floorEnd}，共 ${indicesToActuallyUpdate.length} 层`);
+
+    if (indicesToActuallyUpdate.length > 1) {
+        showToast(`检测到 ${indicesToActuallyUpdate.length} 条未更新记录，将开始批量处理。`, 'info');
+    } else {
+        showToast(`检测到新消息，将触发数据库增量更新。`, 'info');
     }
-
-    console.log(`[自动更新] 触发器: 需要更新 ${tablesToUpdate.length} 个表，合并楼层范围 ${minFloor}-${maxFloor}`);
-    console.log('[自动更新] 触发器: 待更新表:', modifiedSheetKeys);
-
-    showToast(`触发自动更新：${tablesToUpdate.length} 个表需要更新`, 'info');
 
     isAutoUpdating = true;
     try {
-        // 记录本次更新涉及的表的 key，用于后续 per-sheet 判断
-        window._currentAutoUpdateModifiedKeys = modifiedSheetKeys;
-
-        const success = await updateDatabaseByFloorRange(minFloor, maxFloor);
+        const success = await updateDatabaseByFloorRange(floorStart, floorEnd);
         console.log('[自动更新] 触发器: 更新完成，结果:', success);
 
         if (success) {
@@ -7845,7 +7650,6 @@ async function triggerAutomaticUpdateIfNeeded() {
         showToast(`自动更新出错: ${error.message}`, 'error');
     } finally {
         isAutoUpdating = false;
-        window._currentAutoUpdateModifiedKeys = null;
     }
 }
 
