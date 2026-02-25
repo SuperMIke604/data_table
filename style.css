@@ -24,9 +24,9 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Roboto, Arial, sans-serif;
     font-size: 16px;
     color: var(--ios-text);
-    background: linear-gradient(145deg, rgba(240,240,245,0.5) 0%, rgba(230,233,240,0.5) 100%);
-    background-image: radial-gradient(circle at 30% 40%, rgba(255,255,255,0.15) 0%, transparent 20%),
-                      radial-gradient(circle at 70% 80%, rgba(200,220,255,0.1) 0%, transparent 25%);
+    background: linear-gradient(145deg, rgba(240, 240, 245, 0.5) 0%, rgba(230, 233, 240, 0.5) 100%);
+    background-image: radial-gradient(circle at 30% 40%, rgba(255, 255, 255, 0.15) 0%, transparent 20%),
+        radial-gradient(circle at 70% 80%, rgba(200, 220, 255, 0.1) 0%, transparent 25%);
     border-radius: 0;
     box-shadow: none;
     padding: 0;
@@ -47,7 +47,7 @@
     padding-bottom: 15px;
     border-bottom: 1px solid var(--ios-separator);
     letter-spacing: 1px;
-    text-shadow: 0 1px 3px rgba(255,255,255,0.6);
+    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.6);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -63,8 +63,14 @@
     margin: 0 16px;
     opacity: 0.8;
 }
-.data-manage-popup h2::before { --dir: right; }
-.data-manage-popup h2::after  { --dir: left; }
+
+.data-manage-popup h2::before {
+    --dir: right;
+}
+
+.data-manage-popup h2::after {
+    --dir: left;
+}
 
 /* --- Tab 导航 --- */
 .data-manage-tabs-nav {
@@ -80,7 +86,7 @@
     min-width: 100%;
     overflow: hidden;
     box-shadow: 0 4px 16px -4px var(--ios-shadow),
-                inset 0 1px 2px rgba(255,255,255,0.5);
+        inset 0 1px 2px rgba(255, 255, 255, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.45);
 }
 
@@ -128,6 +134,7 @@
         opacity: 0;
         transform: translateY(8px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -143,7 +150,7 @@
     padding: 20px;
     margin-bottom: 16px;
     box-shadow: 0 10px 30px -10px var(--ios-shadow),
-                inset 0 1px 2px rgba(255,255,255,0.6);
+        inset 0 1px 2px rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
@@ -199,7 +206,7 @@
     border-color: var(--ios-blue);
     background: var(--ios-surface);
     box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12),
-                0 2px 8px rgba(0, 122, 255, 0.08);
+        0 2px 8px rgba(0, 122, 255, 0.08);
 }
 
 .data-manage-popup input:hover,
@@ -234,13 +241,13 @@
 .data-manage-popup .button.primary {
     background: linear-gradient(135deg, var(--ios-blue) 0%, var(--ios-blue-active) 100%);
     color: white;
-    box-shadow: 0 4px 14px rgba(0, 122, 255, 0.35);
+    box-shadow: 0 1px 4px rgba(0, 122, 255, 0.2);
 }
 
 .data-manage-popup button.primary:hover {
     background: linear-gradient(135deg, var(--ios-blue-hover) 0%, #003DA0 100%);
-    box-shadow: 0 6px 20px rgba(0, 122, 255, 0.45);
-    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.28);
+    transform: translateY(-1px);
 }
 
 .data-manage-popup button.primary:active {
@@ -443,7 +450,7 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 4px 16px -4px var(--ios-shadow),
-                inset 0 1px 1px rgba(255,255,255,0.4);
+        inset 0 1px 1px rgba(255, 255, 255, 0.4);
 }
 
 .data-manage-prompt-segment-toolbar {
@@ -552,14 +559,14 @@
     margin-bottom: 16px;
     color: var(--ios-text);
     box-shadow: 0 8px 24px -6px var(--ios-shadow),
-                inset 0 1px 2px rgba(255,255,255,0.5);
+        inset 0 1px 2px rgba(255, 255, 255, 0.5);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .message-data-card:hover {
     border-color: rgba(0, 122, 255, 0.35) !important;
     box-shadow: 0 10px 30px -8px rgba(0, 122, 255, 0.15),
-                inset 0 1px 2px rgba(255,255,255,0.5);
+        inset 0 1px 2px rgba(255, 255, 255, 0.5);
     transform: translateY(-1px);
 }
 
@@ -637,14 +644,14 @@
     font-size: 12px;
     font-weight: 600;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 6px rgba(0, 122, 255, 0.25);
+    box-shadow: 0 1px 3px rgba(0, 122, 255, 0.15);
     letter-spacing: 0.3px;
 }
 
 .toggle-details-btn:hover {
     background: linear-gradient(135deg, var(--ios-blue-hover) 0%, #003DA0 100%) !important;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 122, 255, 0.22);
 }
 
 .toggle-details-btn:active {
@@ -662,14 +669,14 @@
     font-size: 12px;
     font-weight: 600;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 6px rgba(255, 59, 48, 0.25);
+    box-shadow: 0 1px 3px rgba(255, 59, 48, 0.15);
     letter-spacing: 0.3px;
 }
 
 .delete-message-btn:hover {
     background: linear-gradient(135deg, #E0342B 0%, #C02720 100%) !important;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(220, 53, 69, 0.22);
 }
 
 .delete-message-btn:active {
@@ -707,7 +714,7 @@
     backdrop-filter: blur(18px) saturate(180%);
     -webkit-backdrop-filter: blur(18px) saturate(180%);
     box-shadow: 0 8px 24px -6px var(--ios-shadow),
-                inset 0 1px 2px rgba(255,255,255,0.5);
+        inset 0 1px 2px rgba(255, 255, 255, 0.5);
 }
 
 .table-section-header {
@@ -833,13 +840,13 @@
     font-weight: 600;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     min-width: 80px;
-    box-shadow: 0 2px 6px rgba(52, 199, 89, 0.3);
+    box-shadow: 0 1px 3px rgba(52, 199, 89, 0.18);
 }
 
 .save-row-btn:hover {
     background: linear-gradient(135deg, var(--ios-green-hover) 0%, #28A745 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(52, 199, 89, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(52, 199, 89, 0.25);
 }
 
 .save-row-btn:active {
@@ -857,13 +864,13 @@
     font-weight: 600;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     min-width: 80px;
-    box-shadow: 0 2px 6px rgba(255, 59, 48, 0.25);
+    box-shadow: 0 1px 3px rgba(255, 59, 48, 0.15);
 }
 
 .delete-row-btn:hover {
     background: linear-gradient(135deg, #E0342B 0%, #C02720 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(255, 59, 48, 0.22);
 }
 
 .delete-row-btn:active {
@@ -1021,13 +1028,34 @@
         color: white;
     }
 
+    /* 概览操作按钮移动端缩小 */
+    .toggle-details-btn,
+    .delete-message-btn {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+
+    .save-row-btn,
+    .delete-row-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+        min-width: 60px;
+    }
+
     .data-manage-grid {
         grid-template-columns: 1fr;
     }
 
     .data-manage-card {
         border-radius: 16px;
-        padding: 16px;
+        padding: 14px;
+        margin-bottom: 12px;
+    }
+
+    .data-manage-card h3 {
+        font-size: 15px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
     }
 
     .message-data-card {
@@ -1038,5 +1066,124 @@
     .table-section {
         border-radius: 16px;
         padding: 14px;
+    }
+
+    /* ---- 数据预览表格 — 移动端适配 ---- */
+
+    /* 表格滚动容器：添加滑动提示 */
+    .dm-table-wrap {
+        -webkit-overflow-scrolling: touch;
+        position: relative;
+        margin: 0 -4px;
+        padding: 0 4px;
+    }
+
+    /* 右侧渐变提示"可横滑" */
+    .dm-table-wrap::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 28px;
+        height: 100%;
+        background: linear-gradient(to left, rgba(255, 255, 255, 0.7), transparent);
+        pointer-events: none;
+        border-radius: 0 14px 14px 0;
+    }
+
+    /* 表格整体缩小 */
+    .dm-table {
+        font-size: 12px;
+        margin-top: 8px;
+        border-radius: 10px;
+        min-width: 520px;
+        /* 保证列不会被压缩到不可读 */
+    }
+
+    .dm-table th {
+        padding: 8px 6px;
+        font-size: 11px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--ios-gray-dark);
+    }
+
+    .dm-table td {
+        padding: 7px 6px;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    /* 固定首列（表格名称 / 序号列） */
+    .dm-table th:first-child,
+    .dm-table td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: inherit;
+        min-width: 60px;
+        max-width: 100px;
+        border-right: 2px solid var(--ios-separator);
+    }
+
+    .dm-table th:first-child {
+        z-index: 3;
+        /* 交叉处（左上角）优先级最高 */
+    }
+
+    /* 消息信息区压缩 */
+    .data-manage-card p {
+        font-size: 13px;
+        margin: 4px 0;
+        line-height: 1.4;
+    }
+
+    /* 预览弹窗标题缩小 */
+    .data-manage-popup h2 {
+        font-size: 18px;
+        margin-bottom: 14px;
+        padding-bottom: 10px;
+    }
+
+    .data-manage-popup h2::before,
+    .data-manage-popup h2::after {
+        margin: 0 10px;
+    }
+
+    /* checkbox 间距紧凑 */
+    .data-manage-checkbox-group {
+        padding: 10px;
+        border-radius: 10px;
+        font-size: 13px;
+    }
+
+    /* 概览详情面板紧凑 */
+    .table-section-header {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .table-section-header h4 {
+        font-size: 14px;
+    }
+
+    .cell-input {
+        font-size: 13px !important;
+        padding: 10px 12px !important;
+        min-height: 60px !important;
+        border-radius: 10px !important;
+    }
+
+    .entry-actions {
+        gap: 6px;
+    }
+
+    /* 代码块 fallback 紧凑 */
+    .dm-code-block {
+        font-size: 11px;
+        padding: 10px;
+        border-radius: 10px;
     }
 }

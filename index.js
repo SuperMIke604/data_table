@@ -4045,10 +4045,33 @@ function saveVisualizedTemplate() {
 }
 
 function setupDataTabListeners(parentDoc) {
-    // 显示数据概览
+    // 辅助函数：隐藏所有三个互斥面板
+    function hideAllDataPanels() {
+        const panels = [
+            'data-manage-template-visualization',
+            'data-manage-overview-area',
+            'data-manage-error-log-area'
+        ];
+        panels.forEach(id => {
+            const el = parentDoc.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+    }
+
+    // 显示数据概览（切换逻辑）
     const showOverviewBtn = parentDoc.getElementById('data-manage-show-overview');
     if (showOverviewBtn) {
-        showOverviewBtn.addEventListener('click', showDataOverview);
+        showOverviewBtn.addEventListener('click', function () {
+            const area = parentDoc.getElementById('data-manage-overview-area');
+            if (!area) return;
+            if (area.style.display === 'block') {
+                area.style.display = 'none';
+            } else {
+                hideAllDataPanels();
+                area.style.display = 'block';
+                showDataOverview();
+            }
+        });
     }
 
     // 关闭概览
@@ -4072,10 +4095,19 @@ function setupDataTabListeners(parentDoc) {
         importCombinedBtn.addEventListener('click', importCombinedSettings);
     }
 
-    // 可视化模板
+    // 可视化模板（切换逻辑）
     const visualizeTemplateBtn = parentDoc.getElementById('data-manage-visualize-template');
     if (visualizeTemplateBtn) {
-        visualizeTemplateBtn.addEventListener('click', visualizeTemplate);
+        visualizeTemplateBtn.addEventListener('click', function () {
+            const area = parentDoc.getElementById('data-manage-template-visualization');
+            if (!area) return;
+            if (area.style.display === 'block') {
+                area.style.display = 'none';
+            } else {
+                hideAllDataPanels();
+                visualizeTemplate();
+            }
+        });
     }
 
     // 保存可视化模板
@@ -4093,12 +4125,18 @@ function setupDataTabListeners(parentDoc) {
         });
     }
 
+    // 报错日志（切换逻辑）
     const showErrorLogBtn = parentDoc.getElementById('data-manage-show-error-log');
     if (showErrorLogBtn) {
         showErrorLogBtn.addEventListener('click', function () {
             const area = parentDoc.getElementById('data-manage-error-log-area');
             const container = parentDoc.getElementById('data-manage-error-log-container');
             if (!area || !container) return;
+            if (area.style.display === 'block') {
+                area.style.display = 'none';
+                return;
+            }
+            hideAllDataPanels();
             const log = getTableEditErrorLog();
             if (!log.length) {
                 container.innerHTML = '<em style="color: var(--ios-text-secondary);">暂无报错日志</em>';
