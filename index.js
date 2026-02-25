@@ -4679,8 +4679,8 @@ async function showDataPreview() {
             id: _dpState.windowId,
             title: `数据预览 — 楼层 ${messageIndex}`,
             content: '<div class="dp-wrapper"></div>',
-            width: '85vw',
-            height: '80vh',
+            width: 900,
+            height: 700,
             onReady: () => {
                 _dpRenderFull();
                 showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
@@ -4737,12 +4737,7 @@ function _dpRenderFull() {
                     <input type="checkbox" data-dp-action="diff-toggle" ${_dpState.diffMode ? 'checked' : ''} />
                     仅显示变化
                 </label>
-                <div class="dp-search-wrapper">
-                    <i class="fa-solid fa-search dp-search-icon"></i>
-                    <input type="text" class="dp-search-input" placeholder="搜索..." value="${escapeHtml(_dpState.search)}" data-dp-action="search" />
-                </div>
                 <button class="dp-action-btn" data-dp-action="undo" title="撤销" ${_dpState.undoStack.length ? '' : 'disabled'}><i class="fa-solid fa-rotate-left"></i></button>
-                <button class="dp-close-btn" data-dp-action="close-panel" title="关闭面板"><i class="fa-solid fa-times"></i></button>
             </div>
         </div>`;
 
@@ -4931,38 +4926,23 @@ function _dpPaginationRange(current, total) {
     return pages;
 }
 
-/* ---------- 事件绑定 ---------- */
 
-let _dpSearchTimer = null;
 
 function _dpBindEvents(wrapper) {
     if (wrapper._dpHandler) wrapper.removeEventListener('click', wrapper._dpHandler);
-    if (wrapper._dpInputHandler) wrapper.removeEventListener('input', wrapper._dpInputHandler);
     if (wrapper._dpChangeHandler) wrapper.removeEventListener('change', wrapper._dpChangeHandler);
 
     const clickHandler = function (e) {
         let target = e.target;
         while (target && target !== wrapper) {
             const action = target.getAttribute('data-dp-action');
-            if (action && action !== 'diff-toggle' && action !== 'search') {
+            if (action && action !== 'diff-toggle') {
                 e.preventDefault();
                 e.stopPropagation();
                 _dpHandleAction(action, target, e);
                 return;
             }
             target = target.parentElement;
-        }
-    };
-
-    const inputHandler = function (e) {
-        const target = e.target;
-        if (target.getAttribute('data-dp-action') === 'search') {
-            clearTimeout(_dpSearchTimer);
-            _dpSearchTimer = setTimeout(() => {
-                _dpState.search = target.value || '';
-                _dpState.page = 1;
-                _dpRenderFull();
-            }, 250);
         }
     };
 
@@ -4975,10 +4955,8 @@ function _dpBindEvents(wrapper) {
     };
 
     wrapper._dpHandler = clickHandler;
-    wrapper._dpInputHandler = inputHandler;
     wrapper._dpChangeHandler = changeHandler;
     wrapper.addEventListener('click', clickHandler);
-    wrapper.addEventListener('input', inputHandler);
     wrapper.addEventListener('change', changeHandler);
 }
 
@@ -5231,7 +5209,9 @@ async function _dpSyncToChat() {
             }
         }
 
-        if (context.saveChatDebounced) {
+        if (context.saveChat) {
+            await context.saveChat();
+        } else if (context.saveChatDebounced) {
             context.saveChatDebounced();
         }
     } catch (e) {
