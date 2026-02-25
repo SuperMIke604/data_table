@@ -886,7 +886,10 @@ function addDataManageButton() {
 
     // 添加点击事件
     buttonElement.addEventListener('click', function (e) {
-        e.stopPropagation();
+        e.preventDefault();
+        // 关闭导航菜单
+        const menu = parentDoc.getElementById('extensionsMenu');
+        if (menu) menu.style.display = 'none';
         console.log('数据管理按钮被点击');
         openDataManagePopup();
     });
@@ -937,7 +940,10 @@ function addDataPreviewButton(extensionsMenu, parentDoc) {
 
     // 添加点击事件
     buttonElement.addEventListener('click', function (e) {
-        e.stopPropagation();
+        e.preventDefault();
+        // 关闭导航菜单
+        const menu = parentDoc.getElementById('extensionsMenu');
+        if (menu) menu.style.display = 'none';
         console.log('数据预览按钮被点击');
         showDataPreview();
     });
