@@ -1003,14 +1003,12 @@
     --ios-red: #FF3B30;
     --ios-red-hover: #E0342B;
 
-    position: relative;
     width: 100%;
-    margin: 15px 0;
-    z-index: 2147483640 !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", Roboto, sans-serif;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     font-size: 14px;
+    height: 100%;
 }
 
 /* --- 底部导航栏 --- */
@@ -1022,13 +1020,9 @@
     background: linear-gradient(145deg, rgba(245, 245, 250, 0.88) 0%, rgba(235, 238, 245, 0.88) 100%);
     backdrop-filter: blur(30px) saturate(180%);
     -webkit-backdrop-filter: blur(30px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.55);
-    border-radius: 16px;
+    border-bottom: 1px solid var(--ios-separator);
     align-items: center;
-    box-shadow: 0 4px 16px -4px var(--ios-shadow),
-        inset 0 1px 2px rgba(255, 255, 255, 0.5);
-    position: relative;
-    z-index: 2147483641 !important;
+    flex-shrink: 0;
 }
 
 .dp-nav-btn {
@@ -1123,41 +1117,12 @@
     color: rgba(255, 255, 255, 0.7);
 }
 
-/* --- 弹出数据面板 --- */
+/* --- 数据面板 --- */
 .dp-data-display {
-    position: absolute;
-    bottom: calc(100% + 10px);
-    left: 0;
-    right: 0;
-    max-height: 80vh;
-    height: auto;
-    background: linear-gradient(145deg, rgba(245, 245, 250, 0.92) 0%, rgba(235, 238, 245, 0.92) 100%);
-    backdrop-filter: blur(40px) saturate(200%);
-    -webkit-backdrop-filter: blur(40px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.55);
-    border-radius: 16px;
-    box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.15),
-        inset 0 1px 2px rgba(255, 255, 255, 0.7);
-    display: none;
-    flex-direction: column;
-    z-index: 2147483642 !important;
-    animation: dpPanelIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.dp-data-display.visible {
+    flex: 1;
     display: flex;
-}
-
-@keyframes dpPanelIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px) scale(0.98);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+    flex-direction: column;
+    overflow: hidden;
 }
 
 /* --- 面板头部 --- */

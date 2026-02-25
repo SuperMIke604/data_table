@@ -4554,9 +4554,8 @@ function findPreviousDbMessage(chat, currentIndex) {
 
 
 /**
- * 数据预览 — 聊天区嵌入式卡片布局 (Chat-Embedded Card-based Data Preview)
+ * 数据预览 — 独立浮动窗口卡片布局 (Floating Window Card-based Data Preview)
  *
- * 参考 可视化数据 脚本实现，嵌入 #chat 区域底部
  * 内部状态管理：
  *   _dpState 保存当前预览的所有运行时状态（表格数据、分页、搜索、undo 栈等）
  */
@@ -4573,9 +4572,8 @@ const _dpState = {
     undoStack: [],             // 撤销栈 [{desc, snapshot}]
     collapsed: false,          // 收起/展开
     activeTabName: null,       // 当前激活的表名
+    windowId: 'dp-preview-window', // 浮动窗口 ID
 };
-
-let _dpObserver = null; // MutationObserver 确保容器在 #chat 末尾
 
 /**
  * 填入输入框 — 参考可视化数据
@@ -4597,7 +4595,7 @@ function _dpSendToChatBox(text) {
 
 /**
  * 显示数据预览 — 入口
- * 嵌入 #chat 区域底部（参考可视化数据的 insertHtmlToPage）
+ * 使用独立浮动窗口渲染，移动端默认最大化
  */
 async function showDataPreview() {
     if (!isExtensionEnabled()) {
@@ -4676,9 +4674,18 @@ async function showDataPreview() {
         _dpState.collapsed = false;
         _dpState.activeTabName = null;
 
-        // 渲染到 #chat 区域
-        _dpRenderFull();
-        showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
+        // 使用独立浮动窗口渲染
+        createDataManageWindow({
+            id: _dpState.windowId,
+            title: `数据预览 — 楼层 ${messageIndex}`,
+            content: '<div class="dp-wrapper"></div>',
+            width: '85vw',
+            height: '80vh',
+            onReady: () => {
+                _dpRenderFull();
+                showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
+            }
+        });
 
     } catch (error) {
         console.error('显示数据预览失败:', error);
@@ -4691,28 +4698,16 @@ async function showDataPreview() {
 function _dpRenderFull() {
     const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
 
+    // 找到窗口内的 wrapper
+    const wrapper = parentDoc.querySelector('.dp-wrapper');
+    if (!wrapper) return;
+
     // 记忆滚动位置
     let lastScrollX = 0, lastScrollY = 0;
-    const oldContent = parentDoc.querySelector('.dp-panel-content');
+    const oldContent = wrapper.querySelector('.dp-panel-content');
     if (oldContent) {
         lastScrollX = oldContent.scrollLeft;
         lastScrollY = oldContent.scrollTop;
-    }
-
-    // 移除旧的
-    const oldWrapper = parentDoc.querySelector('.dp-wrapper');
-    if (oldWrapper) oldWrapper.remove();
-
-    // 收起状态
-    if (_dpState.collapsed) {
-        const html = `<div class="dp-wrapper">
-            <div class="dp-expand-trigger" data-dp-action="expand">
-                <i class="fa-solid fa-database"></i>
-                <span>数据预览 · 楼层 ${_dpState.messageIndex} (${_dpState.tables.length} 表)</span>
-            </div>
-        </div>`;
-        _dpInsertToChat(parentDoc, html);
-        return;
     }
 
     const t = _dpState.tables[_dpState.activeTab];
@@ -4825,35 +4820,27 @@ function _dpRenderFull() {
         panelHtml += '</div>';
     }
 
-    // 组装：wrapper = data-display(弹出面板) + nav-container(底部导航)
-    const currentTabName = _dpState.activeTabName || t.name;
-    let navHtml = '<div class="dp-nav-container">';
+    // Tab 导航
+    let tabHtml = '<div class="dp-nav-container">';
     _dpState.tables.forEach((tbl, idx) => {
         const isActive = idx === _dpState.activeTab ? 'active' : '';
-        navHtml += `<button class="dp-nav-btn ${isActive}" data-dp-action="tab" data-tab-index="${idx}">
+        tabHtml += `<button class="dp-nav-btn ${isActive}" data-dp-action="tab" data-tab-index="${idx}">
             <i class="fa-solid fa-table"></i>
             <span>${escapeHtml(tbl.name)}</span>
             <span class="dp-tab-count">(${tbl.rows.length})</span>
         </button>`;
     });
-    navHtml += '<div class="dp-nav-spacer"></div>';
-    navHtml += `<div class="dp-actions-group">
-        <div class="dp-nav-divider"></div>
-        <button class="dp-action-btn" data-dp-action="collapse" title="收起面板"><i class="fa-solid fa-chevron-down"></i></button>
-        <button class="dp-action-btn dp-btn-danger" data-dp-action="close" title="关闭预览"><i class="fa-solid fa-times"></i></button>
-    </div>`;
-    navHtml += '</div>';
+    tabHtml += '</div>';
 
-    const fullHtml = `<div class="dp-wrapper">
-        <div class="dp-data-display visible">${panelHtml}</div>
-        ${navHtml}
-    </div>`;
+    // 组装所有内容
+    wrapper.innerHTML = tabHtml + panelHtml;
 
-    _dpInsertToChat(parentDoc, fullHtml);
+    // 绑定事件
+    _dpBindEvents(wrapper);
 
     // 恢复滚动位置
     setTimeout(() => {
-        const newContent = parentDoc.querySelector('.dp-panel-content');
+        const newContent = wrapper.querySelector('.dp-panel-content');
         if (newContent) {
             newContent.scrollLeft = lastScrollX;
             newContent.scrollTop = lastScrollY;
@@ -4861,42 +4848,7 @@ function _dpRenderFull() {
     }, 0);
 }
 
-/**
- * 插入到 #chat 末尾 — 参考可视化数据
- */
-function _dpInsertToChat(parentDoc, html) {
-    // 移除旧的
-    const old = parentDoc.querySelector('.dp-wrapper');
-    if (old) old.remove();
-
-    const chat = parentDoc.querySelector('#chat');
-
-    // 创建临时容器来解析 HTML
-    const temp = parentDoc.createElement('div');
-    temp.innerHTML = html;
-    const wrapper = temp.firstElementChild;
-
-    if (chat) {
-        chat.appendChild(wrapper);
-    } else {
-        parentDoc.body.appendChild(wrapper);
-    }
-
-    // 绑定事件
-    _dpBindEvents(wrapper);
-
-    // MutationObserver 确保面板始终在 #chat 末尾
-    if (_dpObserver) _dpObserver.disconnect();
-    if (chat) {
-        _dpObserver = new MutationObserver(() => {
-            const w = parentDoc.querySelector('.dp-wrapper');
-            if (w && chat.lastElementChild !== w) {
-                chat.appendChild(w);
-            }
-        });
-        _dpObserver.observe(chat, { childList: true });
-    }
-}
+/* _dpInsertToChat 已移除 — 改用 createDataManageWindow 浮动窗口 */
 
 /**
  * 获取当前 tab 的展示行（集成搜索 + diff 过滤）
@@ -4986,16 +4938,13 @@ let _dpSearchTimer = null;
 function _dpBindEvents(wrapper) {
     if (wrapper._dpHandler) wrapper.removeEventListener('click', wrapper._dpHandler);
     if (wrapper._dpInputHandler) wrapper.removeEventListener('input', wrapper._dpInputHandler);
-
-    // 阻止事件冒泡到宿主
-    wrapper.addEventListener('click', function (e) { e.stopPropagation(); }, true);
-    wrapper.addEventListener('mousedown', function (e) { e.stopPropagation(); }, true);
+    if (wrapper._dpChangeHandler) wrapper.removeEventListener('change', wrapper._dpChangeHandler);
 
     const clickHandler = function (e) {
         let target = e.target;
         while (target && target !== wrapper) {
             const action = target.getAttribute('data-dp-action');
-            if (action) {
+            if (action && action !== 'diff-toggle' && action !== 'search') {
                 e.preventDefault();
                 e.stopPropagation();
                 _dpHandleAction(action, target, e);
@@ -5017,31 +4966,32 @@ function _dpBindEvents(wrapper) {
         }
     };
 
+    // checkbox 的 checked 变化需用 change 事件
+    const changeHandler = function (e) {
+        const target = e.target;
+        if (target.getAttribute('data-dp-action') === 'diff-toggle') {
+            _dpHandleAction('diff-toggle', target, e);
+        }
+    };
+
     wrapper._dpHandler = clickHandler;
     wrapper._dpInputHandler = inputHandler;
+    wrapper._dpChangeHandler = changeHandler;
     wrapper.addEventListener('click', clickHandler);
     wrapper.addEventListener('input', inputHandler);
+    wrapper.addEventListener('change', changeHandler);
 }
 
 function _dpHandleAction(action, target, e) {
     switch (action) {
         case 'tab': {
             const idx = parseInt(target.getAttribute('data-tab-index'));
-            if (!isNaN(idx) && idx >= 0 && idx < _dpState.tables.length) {
-                // 如果点击已激活的 tab，关闭面板
-                if (idx === _dpState.activeTab) {
-                    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
-                    const panel = parentDoc.querySelector('.dp-data-display');
-                    if (panel) {
-                        panel.classList.toggle('visible');
-                    }
-                } else {
-                    _dpState.activeTab = idx;
-                    _dpState.page = 1;
-                    _dpState.search = '';
-                    _dpState.activeTabName = _dpState.tables[idx].name;
-                    _dpRenderFull();
-                }
+            if (!isNaN(idx) && idx >= 0 && idx < _dpState.tables.length && idx !== _dpState.activeTab) {
+                _dpState.activeTab = idx;
+                _dpState.page = 1;
+                _dpState.search = '';
+                _dpState.activeTabName = _dpState.tables[idx].name;
+                _dpRenderFull();
             }
             break;
         }
@@ -5058,7 +5008,7 @@ function _dpHandleAction(action, target, e) {
             break;
         }
         case 'diff-toggle': {
-            _dpState.diffMode = target.checked;
+            _dpState.diffMode = !!target.checked;
             _dpState.page = 1;
             const s = loadSettings();
             s.previewOnlyShowChanges = _dpState.diffMode;
@@ -5075,21 +5025,9 @@ function _dpHandleAction(action, target, e) {
             _dpState.collapsed = false;
             _dpRenderFull();
             break;
-        case 'close-panel': {
-            // 关闭面板但保留导航栏
-            const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
-            const panel = parentDoc.querySelector('.dp-data-display');
-            if (panel) panel.classList.remove('visible');
-            // 取消所有 tab 激活
-            parentDoc.querySelectorAll('.dp-nav-btn').forEach(btn => btn.classList.remove('active'));
-            break;
-        }
         case 'close': {
-            // 完全关闭预览
-            const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
-            const w = parentDoc.querySelector('.dp-wrapper');
-            if (w) w.remove();
-            if (_dpObserver) { _dpObserver.disconnect(); _dpObserver = null; }
+            // 关闭浮动窗口
+            DataManageWindowManager.close(_dpState.windowId);
             break;
         }
         case 'undo':
