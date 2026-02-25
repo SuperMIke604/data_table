@@ -1,4 +1,4 @@
-/* global SillyTavern */
+﻿/* global SillyTavern */
 
 // ==================== 扩展配置 ====================
 // 参考: https://github.com/city-unit/st-extension-example/blob/master/index.js
@@ -4183,10 +4183,30 @@ function setupDataTabListeners(parentDoc) {
 }
 
 /**
- * 显示数据预览
+ * 数据预览 — 卡片式布局 (Card-based Data Preview)
+ *
+ * 内部状态管理：
+ *   _dpState 保存当前预览的所有运行时状态（表格数据、分页、搜索、undo 栈等）
+ */
+const _dpState = {
+    messageIndex: -1,          // 当前数据所在的聊天楼层
+    messageData: null,         // 原始引用 (TavernDB_ACU_Data)
+    previousData: null,        // 上一楼层数据（用于 diff）
+    tables: [],                // [{key, name, headers, rows}]
+    activeTab: 0,              // 当前选中的 tab 序号
+    page: 1,                   // 当前页码
+    perPage: 20,               // 每页卡片数
+    search: '',                // 搜索关键词
+    diffMode: false,           // 是否仅展示变化
+    undoStack: [],             // 撤销栈 [{desc, snapshot}]
+    collapsed: false,          // 收起/展开
+};
+
+/**
+ * 显示数据预览 — 入口
+ * 改为直接在数据管理弹窗内渲染（不再使用 SillyTavern callGenericPopup）
  */
 async function showDataPreview() {
-    // 检查扩展是否启用
     if (!isExtensionEnabled()) {
         showToast('扩展未启用，请先在设置中启用数据管理扩展', 'warning');
         return;
@@ -4194,66 +4214,38 @@ async function showDataPreview() {
 
     try {
         const context = SillyTavern.getContext();
-
         if (!context || !context.chat || context.chat.length === 0) {
             showToast('没有聊天记录可查看', 'warning');
             return;
         }
 
         const chat = context.chat;
-
-        // 从后往前查找包含数据库数据的消息
         let messageIndex = -1;
         let messageData = null;
-        let messageType = '';
-        let timestamp = '';
 
         for (let i = chat.length - 1; i >= 0; i--) {
             const message = chat[i];
-
-            // 优先检查 TavernDB_ACU_Data 字段
             if (message && message.TavernDB_ACU_Data) {
-                messageIndex = i; // 直接使用数组索引，不计算0层
+                messageIndex = i;
                 messageData = message.TavernDB_ACU_Data;
-                messageType = message.name || '未知';
-                timestamp = message.send_date || new Date().toISOString();
                 break;
             }
-
-            // 然后检查消息文本中的JSON数据
             if (message && message.mes) {
-                // 尝试解析消息中的JSON数据
                 try {
                     const mesText = message.mes;
-                    // 查找JSON格式的数据
+                    let jsonData = null;
                     const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
                     if (jsonMatch) {
-                        const jsonData = JSON.parse(jsonMatch[1]);
-                        if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
-                            messageIndex = i; // 直接使用数组索引，不计算0层
-                            messageData = jsonData;
-                            messageType = message.name || '未知';
-                            timestamp = message.send_date || new Date().toISOString();
-                            break;
-                        }
+                        jsonData = JSON.parse(jsonMatch[1]);
+                    } else {
+                        try { jsonData = JSON.parse(mesText); } catch (_) { /* not JSON */ }
                     }
-
-                    // 尝试直接解析为JSON
-                    try {
-                        const jsonData = JSON.parse(mesText);
-                        if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
-                            messageIndex = i; // 直接使用数组索引，不计算0层
-                            messageData = jsonData;
-                            messageType = message.name || '未知';
-                            timestamp = message.send_date || new Date().toISOString();
-                            break;
-                        }
-                    } catch (e) {
-                        // 不是JSON格式，继续查找
+                    if (jsonData && typeof jsonData === 'object' && jsonData.mate && jsonData.mate.type === 'chatSheets') {
+                        messageIndex = i;
+                        messageData = jsonData;
+                        break;
                     }
-                } catch (e) {
-                    // 解析失败，继续查找
-                }
+                } catch (_) { /* skip */ }
             }
         }
 
@@ -4262,115 +4254,574 @@ async function showDataPreview() {
             return;
         }
 
-        // 生成表格HTML
-        let tablesHtml = '';
-        const settings = loadSettings();
-        const previewOnlyChanges = !!(settings && settings.previewOnlyShowChanges);
+        const prevMsg = findPreviousDbMessage(chat, messageIndex);
 
-        if (typeof messageData === 'object') {
-            if (previewOnlyChanges) {
-                const previous = findPreviousDbMessage(chat, messageIndex);
-                if (previous && previous.data) {
-                    tablesHtml = generateDiffTablesHtml(previous.data, messageData);
-                } else {
-                    tablesHtml = generateAllTablesHtml(messageData);
-                }
-            } else {
-                tablesHtml = generateAllTablesHtml(messageData);
+        const tables = [];
+        for (const [key, value] of Object.entries(messageData)) {
+            if (value && typeof value === 'object' && value.content && Array.isArray(value.content) && value.content.length > 0) {
+                const headers = value.content[0] || [];
+                const rows = value.content.slice(1);
+                tables.push({ key, name: value.name || key, headers, rows });
             }
         }
 
-        // 创建预览弹窗HTML
-        const previewHtml = `
-            <div class="data-manage-popup" style="max-width: 100%;">
-                <h2>数据预览</h2>
-                <div class="data-manage-card" style="margin-bottom: 12px;">
-                    <label class="data-manage-checkbox-group" style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="data-preview-only-changes" ${previewOnlyChanges ? 'checked' : ''} />
-                        <span>仅显示相对于上一楼层有变化的数据（删除标红，新增和修改标绿）</span>
-                    </label>
-                </div>
-                <div class="data-manage-card">
-                    <h3>消息信息</h3>
-                    <p><strong>楼层:</strong> ${messageIndex}</p>
-                    <p><strong>类型:</strong> ${escapeHtml(messageType)}</p>
-                    <p><strong>时间:</strong> ${escapeHtml(timestamp)}</p>
-                </div>
-                ${tablesHtml}
-            </div>
-        `;
-
-        // 使用SillyTavern的弹窗API
-        if (context && context.callGenericPopup) {
-            context.callGenericPopup(previewHtml, context.POPUP_TYPE?.DISPLAY || 'display', '数据预览', {
-                wide: true,
-                large: true,
-                allowVerticalScrolling: true,
-                okButton: '关闭',
-                cancelButton: false,
-                callback: function (action) {
-                    console.log('数据预览弹窗关闭:', action);
-                }
-            });
-
-            // 绑定数据预览开关事件（稍后执行，等待DOM渲染）
-            setTimeout(() => {
-                const parentDoc = (window.parent && window.parent !== window)
-                    ? window.parent.document
-                    : document;
-                const checkbox = parentDoc.getElementById('data-preview-only-changes');
-                if (checkbox) {
-                    checkbox.addEventListener('change', function () {
-                        const s = loadSettings();
-                        s.previewOnlyShowChanges = this.checked;
-                        currentSettings.previewOnlyShowChanges = this.checked;
-                        saveSettings();
-                        // 重新打开预览以应用新的展示模式
-                        showDataPreview();
-                    });
-                }
-            }, 50);
-        } else {
-            // 如果没有callGenericPopup，使用简单的弹窗
-            const popup = window.open('', 'dataPreviewPopup', 'width=900,height=700,scrollbars=yes');
-            popup.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>数据预览</title>
-                    <link rel="stylesheet" href="style.css">
-                </head>
-                <body>
-                    ${previewHtml}
-                    <script>
-                        (function() {
-                            const checkbox = document.getElementById('data-preview-only-changes');
-                            if (checkbox && window.opener && window.opener.SillyTavern) {
-                                checkbox.addEventListener('change', function() {
-                                    try {
-                                        const openerWin = window.opener;
-                                        if (openerWin && openerWin.dataManageTogglePreviewOnlyChanges) {
-                                            openerWin.dataManageTogglePreviewOnlyChanges(this.checked);
-                                        }
-                                    } catch (e) {
-                                        console.error('更新数据预览开关失败:', e);
-                                    }
-                                });
-                            }
-                        })();
-                    </script>
-                </body>
-                </html>
-            `);
+        if (tables.length === 0) {
+            showToast('未找到有效的数据表格', 'warning');
+            return;
         }
 
-        showToast(`已显示楼层 ${messageIndex} 的数据预览`, 'success');
+        const settings = loadSettings();
+        _dpState.messageIndex = messageIndex;
+        _dpState.messageData = messageData;
+        _dpState.previousData = prevMsg ? prevMsg.data : null;
+        _dpState.tables = tables;
+        _dpState.activeTab = 0;
+        _dpState.page = 1;
+        _dpState.search = '';
+        _dpState.diffMode = !!(settings && settings.previewOnlyShowChanges);
+        _dpState.undoStack = [];
+        _dpState.collapsed = false;
+
+        _dpRenderFull();
+        showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
 
     } catch (error) {
         console.error('显示数据预览失败:', error);
         showToast(`显示数据预览失败: ${error.message}`, 'error');
     }
 }
+
+/* ---------- 渲染主体 ---------- */
+
+function _dpRenderFull() {
+    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+
+    let wrapper = parentDoc.getElementById('dm-preview-wrapper');
+    if (!wrapper) {
+        const popup = parentDoc.querySelector('.data-manage-popup');
+        if (popup) {
+            wrapper = parentDoc.createElement('div');
+            wrapper.id = 'dm-preview-wrapper';
+            wrapper.className = 'dm-preview-wrapper';
+            popup.appendChild(wrapper);
+        } else {
+            console.error('无法找到数据管理弹窗容器');
+            return;
+        }
+    }
+
+    if (_dpState.collapsed) {
+        wrapper.innerHTML = `
+            <div class="dm-preview-toolbar">
+                <span class="dm-toolbar-info"><i class="fa-solid fa-database"></i> 数据预览 (已收起)</span>
+                <div class="dm-toolbar-actions">
+                    <button class="dm-toolbar-btn" data-dp-action="expand" title="展开"><i class="fa-solid fa-chevron-down"></i></button>
+                </div>
+            </div>`;
+        _dpBindEvents(wrapper);
+        return;
+    }
+
+    const t = _dpState.tables[_dpState.activeTab];
+    if (!t) return;
+
+    let displayRows = _dpGetDisplayRows(t);
+    const totalItems = displayRows.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / _dpState.perPage));
+    if (_dpState.page > totalPages) _dpState.page = totalPages;
+    const startIdx = (_dpState.page - 1) * _dpState.perPage;
+    const endIdx = Math.min(startIdx + _dpState.perPage, totalItems);
+    const pageRows = displayRows.slice(startIdx, endIdx);
+
+    let html = '';
+
+    // 工具栏
+    html += `
+        <div class="dm-preview-toolbar">
+            <div class="dm-search-box">
+                <i class="fa-solid fa-search dm-search-icon"></i>
+                <input type="text" placeholder="搜索..." value="${escapeHtml(_dpState.search)}" data-dp-action="search" />
+            </div>
+            <span class="dm-toolbar-info">楼层 ${_dpState.messageIndex} · ${startIdx + 1}-${endIdx} / ${totalItems}项</span>
+            <label class="dm-diff-toggle">
+                <input type="checkbox" data-dp-action="diff-toggle" ${_dpState.diffMode ? 'checked' : ''} />
+                仅显示变化
+            </label>
+            <div class="dm-toolbar-actions">
+                <button class="dm-toolbar-btn" data-dp-action="undo" title="撤销" ${_dpState.undoStack.length ? '' : 'disabled'}><i class="fa-solid fa-rotate-left"></i></button>
+                <span class="dm-toolbar-divider"></span>
+                <button class="dm-toolbar-btn" data-dp-action="collapse" title="收起"><i class="fa-solid fa-chevron-up"></i></button>
+                <button class="dm-toolbar-btn dm-btn-danger" data-dp-action="close" title="关闭预览"><i class="fa-solid fa-times"></i></button>
+            </div>
+        </div>`;
+
+    // Tab 导航
+    if (_dpState.tables.length > 1) {
+        html += '<div class="dm-preview-tabs">';
+        _dpState.tables.forEach((tbl, idx) => {
+            const rowCount = tbl.rows.length;
+            html += `<div class="dm-preview-tab ${idx === _dpState.activeTab ? 'active' : ''}" data-dp-action="tab" data-tab-index="${idx}">
+                ${escapeHtml(tbl.name)} <span class="dm-tab-count">(${rowCount})</span>
+            </div>`;
+        });
+        html += '</div>';
+    }
+
+    // 卡片网格
+    html += '<div class="dm-card-content-area"><div class="dm-card-grid">';
+
+    if (pageRows.length === 0) {
+        html += '<div class="dm-empty-state">没有匹配的数据</div>';
+    } else {
+        const headers = t.headers;
+        pageRows.forEach(item => {
+            const row = item.row;
+            const realIdx = item.realIndex;
+            const diffType = item.diffType || '';
+            const changedCols = item.changedCols || [];
+
+            let cardClass = 'dm-data-card';
+            if (diffType === 'added') cardClass += ' dm-card-added';
+            else if (diffType === 'deleted') cardClass += ' dm-card-deleted';
+            else if (diffType === 'modified') cardClass += ' dm-card-modified';
+
+            // 卡片标题（取第二列的值，或第一个非空列）
+            let cardTitle = '';
+            for (let ci = 1; ci < row.length; ci++) {
+                if (row[ci] && String(row[ci]).trim()) { cardTitle = String(row[ci]); break; }
+            }
+            if (!cardTitle && row.length > 0) cardTitle = String(row[0] || '');
+            if (!cardTitle) cardTitle = `条目 ${realIdx + 1}`;
+
+            let badgeHtml = '';
+            if (diffType === 'added') badgeHtml = '<span class="dm-diff-badge dm-badge-new">新增</span>';
+            else if (diffType === 'deleted') badgeHtml = '<span class="dm-diff-badge dm-badge-del">删除</span>';
+            else if (diffType === 'modified') badgeHtml = '<span class="dm-diff-badge dm-badge-mod">修改</span>';
+
+            html += `<div class="${cardClass}" data-real-index="${realIdx}">`;
+            html += `<div class="dm-card-head" data-dp-action="card-menu" data-real-index="${realIdx}">
+                <span class="dm-card-index">#${realIdx + 1}</span>
+                <span class="dm-card-title">${escapeHtml(cardTitle)}</span>
+                ${badgeHtml}
+            </div>`;
+            html += '<div class="dm-card-body">';
+
+            // 键值对（跳过首列空白列）
+            for (let ci = 1; ci < headers.length; ci++) {
+                const headerName = headers[ci] || `列${ci}`;
+                const cellVal = (row[ci] !== undefined && row[ci] !== null) ? String(row[ci]) : '';
+                let rowClass = 'dm-card-row';
+                if (diffType === 'modified' && changedCols[ci]) rowClass += ' dm-cell-changed';
+                if (diffType === 'deleted') rowClass += ' dm-cell-deleted-val';
+
+                html += `<div class="${rowClass}" data-dp-action="edit-cell" data-real-index="${realIdx}" data-col="${ci}">
+                    <div class="dm-card-label">${escapeHtml(headerName)}</div>
+                    <div class="dm-card-value">${escapeHtml(cellVal) || '<i style="color:var(--ios-text-secondary)">空</i>'}</div>
+                </div>`;
+            }
+
+            html += '</div></div>';
+        });
+    }
+
+    html += '</div></div>';
+
+    // 分页
+    if (totalPages > 1) {
+        html += '<div class="dm-pagination">';
+        html += `<div class="dm-page-btn ${_dpState.page <= 1 ? 'disabled' : ''}" data-dp-action="page" data-page="${_dpState.page - 1}">‹</div>`;
+        const pages = _dpPaginationRange(_dpState.page, totalPages);
+        pages.forEach(p => {
+            if (p === '...') {
+                html += '<span class="dm-page-ellipsis">…</span>';
+            } else {
+                html += `<div class="dm-page-btn ${p === _dpState.page ? 'active' : ''}" data-dp-action="page" data-page="${p}">${p}</div>`;
+            }
+        });
+        html += `<div class="dm-page-btn ${_dpState.page >= totalPages ? 'disabled' : ''}" data-dp-action="page" data-page="${_dpState.page + 1}">›</div>`;
+        html += '</div>';
+    }
+
+    wrapper.innerHTML = html;
+    _dpBindEvents(wrapper);
+}
+
+/**
+ * 获取当前 tab 的展示行（集成搜索 + diff 过滤）
+ */
+function _dpGetDisplayRows(tableObj) {
+    const key = tableObj.key;
+    const headers = tableObj.headers;
+    const rows = tableObj.rows;
+
+    let annotated = rows.map((row, idx) => ({ row, realIndex: idx, diffType: '', changedCols: [] }));
+
+    if (_dpState.diffMode && _dpState.previousData) {
+        const oldTable = _dpState.previousData[key];
+        if (oldTable && Array.isArray(oldTable.content)) {
+            const oldRows = oldTable.content.slice(1);
+            const maxLen = Math.max(rows.length, oldRows.length);
+            const result = [];
+            for (let i = 0; i < maxLen; i++) {
+                const oldRow = oldRows[i];
+                const newRow = rows[i];
+                if (oldRow && !newRow) {
+                    result.push({ row: oldRow, realIndex: i, diffType: 'deleted', changedCols: [] });
+                } else if (!oldRow && newRow) {
+                    result.push({ row: newRow, realIndex: i, diffType: 'added', changedCols: [] });
+                } else if (oldRow && newRow) {
+                    if (JSON.stringify(oldRow) !== JSON.stringify(newRow)) {
+                        const cc = [];
+                        const colCount = Math.max(oldRow.length, newRow.length, headers.length);
+                        for (let c = 0; c < colCount; c++) {
+                            cc[c] = ((oldRow[c] ?? '') !== (newRow[c] ?? ''));
+                        }
+                        result.push({ row: newRow, realIndex: i, diffType: 'modified', changedCols: cc });
+                    }
+                }
+            }
+            annotated = result;
+        }
+    } else if (_dpState.previousData) {
+        const oldTable = _dpState.previousData[key];
+        if (oldTable && Array.isArray(oldTable.content)) {
+            const oldRows = oldTable.content.slice(1);
+            annotated = rows.map((row, idx) => {
+                const oldRow = oldRows[idx];
+                let diffType = '';
+                let changedCols = [];
+                if (!oldRow) {
+                    diffType = 'added';
+                } else if (JSON.stringify(oldRow) !== JSON.stringify(row)) {
+                    diffType = 'modified';
+                    const colCount = Math.max(oldRow.length, row.length, headers.length);
+                    for (let c = 0; c < colCount; c++) {
+                        changedCols[c] = ((oldRow[c] ?? '') !== (row[c] ?? ''));
+                    }
+                }
+                return { row, realIndex: idx, diffType, changedCols };
+            });
+        }
+    }
+
+    if (_dpState.search) {
+        const kw = _dpState.search.toLowerCase();
+        annotated = annotated.filter(item => {
+            return item.row.some(cell => String(cell || '').toLowerCase().includes(kw));
+        });
+    }
+
+    return annotated;
+}
+
+function _dpPaginationRange(current, total) {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages = [];
+    pages.push(1);
+    if (current > 3) pages.push('...');
+    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+        pages.push(i);
+    }
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+}
+
+/* ---------- 事件绑定 ---------- */
+
+let _dpSearchTimer = null;
+
+function _dpBindEvents(wrapper) {
+    if (wrapper._dpHandler) wrapper.removeEventListener('click', wrapper._dpHandler);
+    if (wrapper._dpInputHandler) wrapper.removeEventListener('input', wrapper._dpInputHandler);
+
+    const clickHandler = function (e) {
+        let target = e.target;
+        while (target && target !== wrapper) {
+            const action = target.getAttribute('data-dp-action');
+            if (action) {
+                e.preventDefault();
+                e.stopPropagation();
+                _dpHandleAction(action, target, e);
+                return;
+            }
+            target = target.parentElement;
+        }
+    };
+
+    const inputHandler = function (e) {
+        const target = e.target;
+        if (target.getAttribute('data-dp-action') === 'search') {
+            clearTimeout(_dpSearchTimer);
+            _dpSearchTimer = setTimeout(() => {
+                _dpState.search = target.value || '';
+                _dpState.page = 1;
+                _dpRenderFull();
+            }, 250);
+        }
+    };
+
+    wrapper._dpHandler = clickHandler;
+    wrapper._dpInputHandler = inputHandler;
+    wrapper.addEventListener('click', clickHandler);
+    wrapper.addEventListener('input', inputHandler);
+}
+
+function _dpHandleAction(action, target, e) {
+    switch (action) {
+        case 'tab': {
+            const idx = parseInt(target.getAttribute('data-tab-index'));
+            if (!isNaN(idx) && idx >= 0 && idx < _dpState.tables.length) {
+                _dpState.activeTab = idx;
+                _dpState.page = 1;
+                _dpState.search = '';
+                _dpRenderFull();
+            }
+            break;
+        }
+        case 'page': {
+            const p = parseInt(target.getAttribute('data-page'));
+            const t = _dpState.tables[_dpState.activeTab];
+            if (!t) break;
+            const displayRows = _dpGetDisplayRows(t);
+            const totalPages = Math.max(1, Math.ceil(displayRows.length / _dpState.perPage));
+            if (!isNaN(p) && p >= 1 && p <= totalPages) {
+                _dpState.page = p;
+                _dpRenderFull();
+            }
+            break;
+        }
+        case 'diff-toggle': {
+            _dpState.diffMode = target.checked;
+            _dpState.page = 1;
+            const s = loadSettings();
+            s.previewOnlyShowChanges = _dpState.diffMode;
+            currentSettings.previewOnlyShowChanges = _dpState.diffMode;
+            saveSettings();
+            _dpRenderFull();
+            break;
+        }
+        case 'collapse':
+            _dpState.collapsed = true;
+            _dpRenderFull();
+            break;
+        case 'expand':
+            _dpState.collapsed = false;
+            _dpRenderFull();
+            break;
+        case 'close': {
+            const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+            const w = parentDoc.getElementById('dm-preview-wrapper');
+            if (w) w.remove();
+            break;
+        }
+        case 'undo':
+            _dpUndo();
+            break;
+        case 'edit-cell':
+            _dpShowEditDialog(target);
+            break;
+        case 'card-menu':
+            _dpShowContextMenu(target, e);
+            break;
+        default:
+            break;
+    }
+}
+
+/* ---------- 编辑单元格 ---------- */
+
+function _dpShowEditDialog(target) {
+    const realIdx = parseInt(target.getAttribute('data-real-index'));
+    const col = parseInt(target.getAttribute('data-col'));
+    const t = _dpState.tables[_dpState.activeTab];
+    if (!t || isNaN(realIdx) || isNaN(col)) return;
+
+    const row = t.rows[realIdx];
+    if (!row) return;
+
+    const headerName = t.headers[col] || `列${col}`;
+    const currentVal = (row[col] !== undefined && row[col] !== null) ? String(row[col]) : '';
+
+    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+
+    const overlay = parentDoc.createElement('div');
+    overlay.className = 'dm-edit-overlay';
+    overlay.innerHTML = `
+        <div class="dm-edit-dialog">
+            <h4><i class="fa-solid fa-pen"></i> 编辑 — ${escapeHtml(headerName)}</h4>
+            <textarea id="dm-edit-textarea">${escapeHtml(currentVal)}</textarea>
+            <div class="dm-dialog-actions">
+                <button class="dm-dialog-btn" id="dm-edit-cancel">取消</button>
+                <button class="dm-dialog-btn dm-btn-primary" id="dm-edit-save">保存</button>
+            </div>
+        </div>
+    `;
+    parentDoc.body.appendChild(overlay);
+
+    const textarea = overlay.querySelector('#dm-edit-textarea');
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    overlay.querySelector('#dm-edit-cancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+
+    overlay.querySelector('#dm-edit-save').addEventListener('click', async () => {
+        const newVal = textarea.value;
+        if (newVal === currentVal) { overlay.remove(); return; }
+
+        _dpPushUndo(`编辑 [${headerName}] 行${realIdx + 1}`);
+        t.rows[realIdx][col] = newVal;
+        await _dpSyncToChat();
+
+        overlay.remove();
+        _dpRenderFull();
+        showToast('单元格已更新', 'success');
+    });
+}
+
+/* ---------- 右键/点击菜单 ---------- */
+
+function _dpShowContextMenu(target, e) {
+    const realIdx = parseInt(target.getAttribute('data-real-index'));
+    const t = _dpState.tables[_dpState.activeTab];
+    if (!t || isNaN(realIdx)) return;
+
+    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+
+    parentDoc.querySelectorAll('.dm-context-backdrop, .dm-context-menu').forEach(el => el.remove());
+
+    const backdrop = parentDoc.createElement('div');
+    backdrop.className = 'dm-context-backdrop';
+
+    const menu = parentDoc.createElement('div');
+    menu.className = 'dm-context-menu';
+
+    const rect = target.getBoundingClientRect();
+    let top = rect.bottom + 4;
+    let left = rect.left;
+    if (top + 200 > window.innerHeight) top = rect.top - 200;
+    if (left + 180 > window.innerWidth) left = window.innerWidth - 190;
+    menu.style.top = top + 'px';
+    menu.style.left = left + 'px';
+
+    const row = t.rows[realIdx];
+    const allText = row ? row.slice(1).map(c => c || '').join('\n') : '';
+
+    menu.innerHTML = `
+        <div class="dm-context-item" data-ctx="copy"><i class="fa-solid fa-copy" style="width:16px"></i> 复制内容</div>
+        <div class="dm-context-item" data-ctx="edit"><i class="fa-solid fa-pen-to-square" style="width:16px"></i> 编辑条目</div>
+        <div class="dm-context-item dm-ctx-danger" data-ctx="delete"><i class="fa-solid fa-trash" style="width:16px"></i> 删除条目</div>
+        <div class="dm-context-item dm-ctx-close" data-ctx="close"><i class="fa-solid fa-xmark" style="width:16px"></i> 关闭</div>
+    `;
+
+    const closeMenu = () => { backdrop.remove(); menu.remove(); };
+    backdrop.addEventListener('click', closeMenu);
+
+    menu.addEventListener('click', async (ev) => {
+        let el = ev.target;
+        while (el && el !== menu) {
+            const ctx = el.getAttribute('data-ctx');
+            if (ctx) {
+                closeMenu();
+                if (ctx === 'copy') {
+                    try {
+                        await (window.parent || window).navigator.clipboard.writeText(allText);
+                        showToast('已复制到剪贴板', 'success');
+                    } catch (_) {
+                        showToast('复制失败', 'error');
+                    }
+                } else if (ctx === 'edit') {
+                    for (let ci = 1; ci < t.headers.length; ci++) {
+                        if (row[ci] !== undefined) {
+                            const fakeTarget = document.createElement('div');
+                            fakeTarget.setAttribute('data-real-index', realIdx);
+                            fakeTarget.setAttribute('data-col', ci);
+                            _dpShowEditDialog(fakeTarget);
+                            break;
+                        }
+                    }
+                } else if (ctx === 'delete') {
+                    await _dpDeleteRow(realIdx);
+                }
+                return;
+            }
+            el = el.parentElement;
+        }
+    });
+
+    parentDoc.body.appendChild(backdrop);
+    parentDoc.body.appendChild(menu);
+}
+
+/* ---------- 删除行 ---------- */
+
+async function _dpDeleteRow(realIdx) {
+    const t = _dpState.tables[_dpState.activeTab];
+    if (!t || realIdx < 0 || realIdx >= t.rows.length) return;
+
+    _dpPushUndo(`删除行 #${realIdx + 1}`);
+    t.rows.splice(realIdx, 1);
+
+    await _dpSyncToChat();
+    _dpRenderFull();
+    showToast(`已删除第 ${realIdx + 1} 条`, 'success');
+}
+
+/* ---------- 撤销 ---------- */
+
+function _dpPushUndo(desc) {
+    const snapshot = {};
+    for (const tbl of _dpState.tables) {
+        snapshot[tbl.key] = JSON.parse(JSON.stringify(tbl.rows));
+    }
+    _dpState.undoStack.push({ desc, snapshot });
+    if (_dpState.undoStack.length > 30) _dpState.undoStack.shift();
+}
+
+async function _dpUndo() {
+    if (_dpState.undoStack.length === 0) {
+        showToast('没有可撤销的操作', 'warning');
+        return;
+    }
+    const { desc, snapshot } = _dpState.undoStack.pop();
+    for (const tbl of _dpState.tables) {
+        if (snapshot[tbl.key]) {
+            tbl.rows = snapshot[tbl.key];
+        }
+    }
+    await _dpSyncToChat();
+    _dpRenderFull();
+    showToast(`已撤销: ${desc}`, 'success');
+}
+
+/* ---------- 同步到聊天记录 ---------- */
+
+async function _dpSyncToChat() {
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat) return;
+
+        const message = context.chat[_dpState.messageIndex];
+        if (!message || !message.TavernDB_ACU_Data) return;
+
+        for (const tbl of _dpState.tables) {
+            const tableData = message.TavernDB_ACU_Data[tbl.key];
+            if (tableData && tableData.content) {
+                tableData.content = [tbl.headers, ...tbl.rows];
+            }
+        }
+
+        if (context.saveChatDebounced) {
+            context.saveChatDebounced();
+        }
+    } catch (e) {
+        console.error('同步数据到聊天记录失败:', e);
+        showToast('同步数据失败', 'error');
+    }
+}
+
+/* ---------- 兼容：保留 generateAllTablesHtml / generateTableHtml / generateDiffTablesHtml ---------- */
 
 /**
  * 生成完整表格HTML（不做diff）
@@ -4404,14 +4855,10 @@ function generateDiffTablesHtml(oldData, newData) {
     keys.forEach(key => {
         const oldTable = oldData[key];
         const newTable = newData[key];
-        if (!newTable || !newTable.content || !Array.isArray(newTable.content)) {
-            return;
-        }
+        if (!newTable || !newTable.content || !Array.isArray(newTable.content)) return;
         const oldContent = (oldTable && Array.isArray(oldTable.content)) ? oldTable.content : [];
         const newContent = newTable.content;
-        if (!newContent.length) {
-            return;
-        }
+        if (!newContent.length) return;
         const headers = newContent[0] || (oldContent[0] || []);
         const maxRows = Math.max(oldContent.length, newContent.length);
         const diffRows = [];
@@ -4423,57 +4870,36 @@ function generateDiffTablesHtml(oldData, newData) {
             } else if (!oldRow && newRow) {
                 diffRows.push({ type: 'added', row: newRow });
             } else if (oldRow && newRow && JSON.stringify(oldRow) !== JSON.stringify(newRow)) {
-                // 记录列级别的差异信息
                 const changedCols = [];
                 const colCount = Math.max(oldRow.length, newRow.length, headers.length);
                 for (let c = 0; c < colCount; c++) {
-                    const oldCell = oldRow[c] ?? '';
-                    const newCell = newRow[c] ?? '';
-                    changedCols[c] = (oldCell !== newCell);
+                    changedCols[c] = ((oldRow[c] ?? '') !== (newRow[c] ?? ''));
                 }
                 diffRows.push({ type: 'modified', row: newRow, changedCols });
             }
         }
-        if (diffRows.length === 0) {
-            return;
-        }
+        if (diffRows.length === 0) return;
         const tableName = (newTable && newTable.name) || (oldTable && oldTable.name) || key;
         html += `<div class="data-manage-card">
             <h3>${escapeHtml(tableName)}（仅显示有变化的行）</h3>
-            <div class="dm-table-wrap">
-                <table class="dm-table">
-                    <thead>
-                        <tr>`;
-        // 跳过首列空白列
+            <div class="dm-table-wrap"><table class="dm-table"><thead><tr>`;
         const displayHeaders = headers.slice(1);
-        if (displayHeaders.length > 0) {
-            displayHeaders.forEach(header => {
-                html += `<th>${escapeHtml(header || '')}</th>`;
-            });
-        }
+        displayHeaders.forEach(header => { html += `<th>${escapeHtml(header || '')}</th>`; });
         html += `</tr></thead><tbody>`;
-        diffRows.forEach((item, index) => {
-            // 行级 CSS 类：删除=浅红，新增=浅绿，修改=默认
+        diffRows.forEach(item => {
             let rowClass = '';
-            if (item.type === 'deleted') {
-                rowClass = 'dm-row-deleted';
-            } else if (item.type === 'added') {
-                rowClass = 'dm-row-added';
-            }
+            if (item.type === 'deleted') rowClass = 'dm-row-deleted';
+            else if (item.type === 'added') rowClass = 'dm-row-added';
             html += `<tr class="${rowClass}">`;
             const row = item.row || [];
             const changedCols = item.changedCols || [];
             displayHeaders.forEach((_, colIndex) => {
                 const origIndex = colIndex + 1;
-                const cellContent = (row && row[origIndex]) ? row[origIndex] : '';
+                const cellContent = (row[origIndex]) ? row[origIndex] : '';
                 let cellClass = '';
-                if (item.type === 'deleted') {
-                    cellClass = 'dm-cell-deleted';
-                } else if (item.type === 'added') {
-                    cellClass = 'dm-cell-added';
-                } else if (item.type === 'modified' && changedCols[origIndex]) {
-                    cellClass = 'dm-cell-modified';
-                }
+                if (item.type === 'deleted') cellClass = 'dm-cell-deleted';
+                else if (item.type === 'added') cellClass = 'dm-cell-added';
+                else if (item.type === 'modified' && changedCols[origIndex]) cellClass = 'dm-cell-modified';
                 html += `<td class="${cellClass}">${escapeHtml(cellContent)}</td>`;
             });
             html += `</tr>`;
@@ -4490,20 +4916,6 @@ function generateDiffTablesHtml(oldData, newData) {
 }
 
 /**
- * 查找指定索引之前最近一条包含数据库数据的消息
- */
-function findPreviousDbMessage(chat, fromIndex) {
-    if (!chat || !Array.isArray(chat)) return null;
-    for (let i = fromIndex - 1; i >= 0; i--) {
-        const message = chat[i];
-        if (message && message.TavernDB_ACU_Data) {
-            return { index: i, data: message.TavernDB_ACU_Data };
-        }
-    }
-    return null;
-}
-
-/**
  * 生成表格HTML
  */
 function generateTableHtml(tableName, content) {
@@ -4516,29 +4928,19 @@ function generateTableHtml(tableName, content) {
 
     let html = `<div class="data-manage-card">
         <h3>${escapeHtml(tableName)}</h3>
-        <div class="dm-table-wrap">
-            <table class="dm-table">
-                <thead>
-                    <tr>`;
+        <div class="dm-table-wrap"><table class="dm-table"><thead><tr>`;
 
-    // 表头（跳过首列空白列）
     const headers = content[0] ? content[0].slice(1) : [];
-    if (headers.length > 0) {
-        headers.forEach(header => {
-            html += `<th>${escapeHtml(header || '')}</th>`;
-        });
-    }
+    headers.forEach(header => { html += `<th>${escapeHtml(header || '')}</th>`; });
 
     html += `</tr></thead><tbody>`;
 
-    // 数据行（跳过首列）
     for (let i = 1; i < content.length; i++) {
         const row = content[i].slice(1);
         html += `<tr>`;
         row.forEach(cell => {
             const cellContent = cell || '';
-            const cellClass = cellContent === '' ? 'data-manage-notes' : '';
-            html += `<td class="${cellClass}">${escapeHtml(cellContent)}</td>`;
+            html += `<td class="${cellContent === '' ? 'data-manage-notes' : ''}">${escapeHtml(cellContent)}</td>`;
         });
         html += `</tr>`;
     }
