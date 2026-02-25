@@ -912,15 +912,14 @@
     color: var(--ios-text);
     font-size: 13px;
     letter-spacing: 0.3px;
-    min-width: 60px;
 }
 
 .dm-table td {
     padding: 10px;
+    text-align: left;
     vertical-align: top;
     border-bottom: 1px solid rgba(60, 60, 67, 0.08);
     color: var(--ios-text);
-    min-width: 60px;
     max-width: 300px;
     word-break: break-word;
     overflow-wrap: break-word;
@@ -1067,7 +1066,7 @@
         padding: 14px;
     }
 
-    /* 移动端表格：固定列宽 + 横向滚动 */
+    /* 移动端表格 */
     .dm-table-wrap {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -1077,14 +1076,8 @@
         font-size: 12px;
     }
 
-    .dm-table th {
-        min-width: 50px;
-        padding: 8px 6px;
-    }
-
+    .dm-table th,
     .dm-table td {
-        min-width: 50px;
-        max-width: 180px;
         padding: 8px 6px;
     }
 }
