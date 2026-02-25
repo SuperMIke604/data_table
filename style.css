@@ -1048,14 +1048,7 @@
 
     .data-manage-card {
         border-radius: 16px;
-        padding: 14px;
-        margin-bottom: 12px;
-    }
-
-    .data-manage-card h3 {
-        font-size: 15px;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
+        padding: 16px;
     }
 
     .message-data-card {
@@ -1068,122 +1061,28 @@
         padding: 14px;
     }
 
-    /* ---- 数据预览表格 — 移动端适配 ---- */
-
-    /* 表格滚动容器：添加滑动提示 */
+    /* 移动端表格：固定列宽 + 横向滚动 */
     .dm-table-wrap {
+        overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-        position: relative;
-        margin: 0 -4px;
-        padding: 0 4px;
     }
 
-    /* 右侧渐变提示"可横滑" */
-    .dm-table-wrap::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 28px;
-        height: 100%;
-        background: linear-gradient(to left, rgba(255, 255, 255, 0.7), transparent);
-        pointer-events: none;
-        border-radius: 0 14px 14px 0;
-    }
-
-    /* 表格整体缩小 */
     .dm-table {
         font-size: 12px;
-        margin-top: 8px;
-        border-radius: 10px;
-        min-width: 520px;
-        /* 保证列不会被压缩到不可读 */
+        min-width: 600px;
     }
 
-    .dm-table th {
-        padding: 8px 6px;
-        font-size: 11px;
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        background: var(--ios-gray-dark);
-    }
-
+    .dm-table th,
     .dm-table td {
-        padding: 7px 6px;
-        font-size: 12px;
-        line-height: 1.4;
+        min-width: 120px;
+        max-width: 200px;
+        padding: 8px 6px;
+        white-space: normal;
+        word-break: break-word;
     }
 
-    /* 固定首列（表格名称 / 序号列） */
     .dm-table th:first-child,
     .dm-table td:first-child {
-        position: sticky;
-        left: 0;
-        z-index: 1;
-        background: inherit;
-        min-width: 60px;
-        max-width: 100px;
-        border-right: 2px solid var(--ios-separator);
-    }
-
-    .dm-table th:first-child {
-        z-index: 3;
-        /* 交叉处（左上角）优先级最高 */
-    }
-
-    /* 消息信息区压缩 */
-    .data-manage-card p {
-        font-size: 13px;
-        margin: 4px 0;
-        line-height: 1.4;
-    }
-
-    /* 预览弹窗标题缩小 */
-    .data-manage-popup h2 {
-        font-size: 18px;
-        margin-bottom: 14px;
-        padding-bottom: 10px;
-    }
-
-    .data-manage-popup h2::before,
-    .data-manage-popup h2::after {
-        margin: 0 10px;
-    }
-
-    /* checkbox 间距紧凑 */
-    .data-manage-checkbox-group {
-        padding: 10px;
-        border-radius: 10px;
-        font-size: 13px;
-    }
-
-    /* 概览详情面板紧凑 */
-    .table-section-header {
-        flex-direction: column;
-        gap: 8px;
-        align-items: flex-start;
-    }
-
-    .table-section-header h4 {
-        font-size: 14px;
-    }
-
-    .cell-input {
-        font-size: 13px !important;
-        padding: 10px 12px !important;
-        min-height: 60px !important;
-        border-radius: 10px !important;
-    }
-
-    .entry-actions {
-        gap: 6px;
-    }
-
-    /* 代码块 fallback 紧凑 */
-    .dm-code-block {
-        font-size: 11px;
-        padding: 10px;
-        border-radius: 10px;
+        min-width: 80px;
     }
 }

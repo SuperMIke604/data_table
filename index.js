@@ -2740,160 +2740,156 @@ function showDataOverview() {
         }
         const expandedDetails = window.dataManageExpandedDetails;
 
-        if (overviewArea.style.display === 'none' || !overviewArea.style.display) {
-            overviewArea.style.display = 'block';
-            overviewContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载数据概览...</em>';
+        overviewArea.style.display = 'block';
+        overviewContainer.innerHTML = '<em style="color: var(--ios-text-secondary);">正在加载数据概览...</em>';
 
-            // 遍历聊天记录，查找包含数据库数据的消息 - 参考参考文档：楼层号直接使用数组索引
-            // iOS 26 毛玻璃风格
-            let html = '<div class="overview-content">';
-            html += '<h3>聊天记录数据概览</h3>';
+        // 遍历聊天记录，查找包含数据库数据的消息 - 参考参考文档：楼层号直接使用数组索引
+        // iOS 26 毛玻璃风格
+        let html = '<div class="overview-content">';
+        html += '<h3>聊天记录数据概览</h3>';
 
-            for (let i = chat.length - 1; i >= 0; i--) {
-                const message = chat[i];
-                let messageData = null;
+        for (let i = chat.length - 1; i >= 0; i--) {
+            const message = chat[i];
+            let messageData = null;
 
-                // 优先查找 TavernDB_ACU_Data 字段
-                if (message.TavernDB_ACU_Data) {
-                    messageData = message.TavernDB_ACU_Data;
-                } else if (message.mes) {
-                    // 尝试从消息文本中解析JSON数据
-                    try {
-                        const mesText = message.mes;
-                        // 查找JSON格式的数据
-                        const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
-                        if (jsonMatch) {
-                            const jsonData = JSON.parse(jsonMatch[1]);
+            // 优先查找 TavernDB_ACU_Data 字段
+            if (message.TavernDB_ACU_Data) {
+                messageData = message.TavernDB_ACU_Data;
+            } else if (message.mes) {
+                // 尝试从消息文本中解析JSON数据
+                try {
+                    const mesText = message.mes;
+                    // 查找JSON格式的数据
+                    const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                    if (jsonMatch) {
+                        const jsonData = JSON.parse(jsonMatch[1]);
+                        if (jsonData && typeof jsonData === 'object') {
+                            messageData = jsonData;
+                        }
+                    } else {
+                        // 尝试直接解析为JSON
+                        try {
+                            const jsonData = JSON.parse(mesText);
                             if (jsonData && typeof jsonData === 'object') {
                                 messageData = jsonData;
                             }
-                        } else {
-                            // 尝试直接解析为JSON
-                            try {
-                                const jsonData = JSON.parse(mesText);
-                                if (jsonData && typeof jsonData === 'object') {
-                                    messageData = jsonData;
-                                }
-                            } catch (e) {
-                                // 不是JSON格式，继续查找
-                            }
+                        } catch (e) {
+                            // 不是JSON格式，继续查找
                         }
-                    } catch (e) {
-                        // 解析失败，继续查找
                     }
-                }
-
-                if (messageData) {
-                    dataCount++;
-                    // 参考参考文档：楼层号直接使用数组索引（i就是楼层号）
-                    const messageIndex = i;
-                    const timestamp = new Date(message.send_date || message.timestamp || Date.now()).toLocaleString();
-                    const messageType = message.is_user ? '用户消息' : 'AI回复';
-
-                    // 详情展开区域（根据状态决定是否显示）
-                    const isExpanded = expandedDetails.has(i);
-                    const displayStyle = isExpanded ? 'block' : 'none';
-                    const buttonText = isExpanded ? '收起详情' : '展开详情';
-
-                    // iOS 26 毛玻璃卡片
-                    html += `<div class="message-data-card" data-message-index="${i}">`;
-                    html += `<div class="message-card-header">`;
-                    html += `<h4>楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
-                    html += `<span class="timestamp">${escapeHtml(timestamp)}</span>`;
-                    html += `</div>`;
-
-                    // 显示数据统计
-                    const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
-                    html += `<div class="message-stats">`;
-                    html += `<p>包含 ${tableKeys.length} 个数据表格</p>`;
-
-                    // 显示每个表格的简要信息
-                    tableKeys.forEach(sheetKey => {
-                        const table = messageData[sheetKey];
-                        if (table && table.name && table.content) {
-                            const rowCount = table.content.length - 1; // 减去表头
-                            html += `<div class="sheet-tag">`;
-                            html += `<strong>${escapeHtml(table.name)}</strong>: ${rowCount} 条记录`;
-                            if (table.sourceData && table.sourceData.note) {
-                                html += ` - ${escapeHtml(table.sourceData.note)}`;
-                            }
-                            html += `</div>`;
-                        }
-                    });
-
-                    html += `</div>`;
-
-                    // 详情展开区域（在操作按钮之前）
-                    html += `<div class="message-details" data-message-index="${i}" style="display: ${displayStyle};">`;
-                    html += `<div class="details-content">`;
-                    if (isExpanded) {
-                        html += loadMessageDetails(i, messageData);
-                    } else {
-                        html += `<!-- 详情内容将在这里动态加载 -->`;
-                    }
-                    html += `</div>`;
-                    html += `</div>`;
-
-                    // 操作按钮 - 展示在每个条目的底部
-                    html += `<div class="message-card-actions">`;
-                    html += `<button class="toggle-details-btn" data-message-index="${i}">${buttonText}</button>`;
-                    html += `<button class="delete-message-btn" data-message-index="${i}">删除记录</button>`;
-                    html += `</div>`;
-                    html += `</div>`;
+                } catch (e) {
+                    // 解析失败，继续查找
                 }
             }
 
-            if (dataCount === 0) {
-                html += '<p style="text-align: center; color: var(--ios-text-secondary); font-style: italic;">暂无数据库记录</p>';
-            } else {
-                html += `<div class="overview-summary">`;
-                html += `<p>共找到 ${dataCount} 条数据库记录</p>`;
+            if (messageData) {
+                dataCount++;
+                // 参考参考文档：楼层号直接使用数组索引（i就是楼层号）
+                const messageIndex = i;
+                const timestamp = new Date(message.send_date || message.timestamp || Date.now()).toLocaleString();
+                const messageType = message.is_user ? '用户消息' : 'AI回复';
+
+                // 详情展开区域（根据状态决定是否显示）
+                const isExpanded = expandedDetails.has(i);
+                const displayStyle = isExpanded ? 'block' : 'none';
+                const buttonText = isExpanded ? '收起详情' : '展开详情';
+
+                // iOS 26 毛玻璃卡片
+                html += `<div class="message-data-card" data-message-index="${i}">`;
+                html += `<div class="message-card-header">`;
+                html += `<h4>楼层 ${messageIndex} - ${messageType} - 数据库记录</h4>`;
+                html += `<span class="timestamp">${escapeHtml(timestamp)}</span>`;
+                html += `</div>`;
+
+                // 显示数据统计
+                const tableKeys = Object.keys(messageData).filter(k => k.startsWith('sheet_'));
+                html += `<div class="message-stats">`;
+                html += `<p>包含 ${tableKeys.length} 个数据表格</p>`;
+
+                // 显示每个表格的简要信息
+                tableKeys.forEach(sheetKey => {
+                    const table = messageData[sheetKey];
+                    if (table && table.name && table.content) {
+                        const rowCount = table.content.length - 1; // 减去表头
+                        html += `<div class="sheet-tag">`;
+                        html += `<strong>${escapeHtml(table.name)}</strong>: ${rowCount} 条记录`;
+                        if (table.sourceData && table.sourceData.note) {
+                            html += ` - ${escapeHtml(table.sourceData.note)}`;
+                        }
+                        html += `</div>`;
+                    }
+                });
+
+                html += `</div>`;
+
+                // 详情展开区域（在操作按钮之前）
+                html += `<div class="message-details" data-message-index="${i}" style="display: ${displayStyle};">`;
+                html += `<div class="details-content">`;
+                if (isExpanded) {
+                    html += loadMessageDetails(i, messageData);
+                } else {
+                    html += `<!-- 详情内容将在这里动态加载 -->`;
+                }
+                html += `</div>`;
+                html += `</div>`;
+
+                // 操作按钮 - 展示在每个条目的底部
+                html += `<div class="message-card-actions">`;
+                html += `<button class="toggle-details-btn" data-message-index="${i}">${buttonText}</button>`;
+                html += `<button class="delete-message-btn" data-message-index="${i}">删除记录</button>`;
+                html += `</div>`;
                 html += `</div>`;
             }
+        }
 
-            html += '</div>';
+        if (dataCount === 0) {
+            html += '<p style="text-align: center; color: var(--ios-text-secondary); font-style: italic;">暂无数据库记录</p>';
+        } else {
+            html += `<div class="overview-summary">`;
+            html += `<p>共找到 ${dataCount} 条数据库记录</p>`;
+            html += `</div>`;
+        }
 
-            overviewContainer.innerHTML = html;
+        html += '</div>';
 
-            // 绑定概览事件
-            bindOverviewEvents(parentDoc);
+        overviewContainer.innerHTML = html;
 
-            // 加载展开状态的详情内容
-            expandedDetails.forEach(messageIndex => {
-                const detailsArea = overviewContainer.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
-                if (detailsArea) {
-                    const message = chat[messageIndex];
-                    let messageData = null;
-                    if (message.TavernDB_ACU_Data) {
-                        messageData = message.TavernDB_ACU_Data;
-                    } else if (message.mes) {
-                        try {
-                            const mesText = message.mes;
-                            const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
-                            if (jsonMatch) {
-                                messageData = JSON.parse(jsonMatch[1]);
-                            } else {
-                                try {
-                                    messageData = JSON.parse(mesText);
-                                } catch (e) { }
-                            }
-                        } catch (e) { }
-                    }
-                    if (messageData) {
-                        const contentDiv = detailsArea.querySelector('.details-content');
-                        if (contentDiv) {
-                            contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
-                            // 重新绑定详情区域的事件（重要：确保事件可以正常工作）
-                            bindDetailsEventsForMessage(detailsArea, messageIndex);
+        // 绑定概览事件
+        bindOverviewEvents(parentDoc);
+
+        // 加载展开状态的详情内容
+        expandedDetails.forEach(messageIndex => {
+            const detailsArea = overviewContainer.querySelector(`.message-details[data-message-index="${messageIndex}"]`);
+            if (detailsArea) {
+                const message = chat[messageIndex];
+                let messageData = null;
+                if (message.TavernDB_ACU_Data) {
+                    messageData = message.TavernDB_ACU_Data;
+                } else if (message.mes) {
+                    try {
+                        const mesText = message.mes;
+                        const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                        if (jsonMatch) {
+                            messageData = JSON.parse(jsonMatch[1]);
+                        } else {
+                            try {
+                                messageData = JSON.parse(mesText);
+                            } catch (e) { }
                         }
+                    } catch (e) { }
+                }
+                if (messageData) {
+                    const contentDiv = detailsArea.querySelector('.details-content');
+                    if (contentDiv) {
+                        contentDiv.innerHTML = loadMessageDetails(messageIndex, messageData);
+                        // 重新绑定详情区域的事件（重要：确保事件可以正常工作）
+                        bindDetailsEventsForMessage(detailsArea, messageIndex);
                     }
                 }
-            });
+            }
+        });
 
-            showToast(`已加载 ${dataCount} 条数据库记录`, 'success');
-        } else {
-            overviewArea.style.display = 'none';
-        }
+        showToast(`已加载 ${dataCount} 条数据库记录`, 'success');
     } catch (error) {
         console.error('显示数据概览失败:', error);
         showToast(`显示数据概览失败: ${error.message}`, 'error');
