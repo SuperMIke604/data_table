@@ -4554,8 +4554,9 @@ function findPreviousDbMessage(chat, currentIndex) {
 
 
 /**
- * 数据预览 — 卡片式布局 (Card-based Data Preview)
+ * 数据预览 — 聊天区嵌入式卡片布局 (Chat-Embedded Card-based Data Preview)
  *
+ * 参考 可视化数据 脚本实现，嵌入 #chat 区域底部
  * 内部状态管理：
  *   _dpState 保存当前预览的所有运行时状态（表格数据、分页、搜索、undo 栈等）
  */
@@ -4571,11 +4572,32 @@ const _dpState = {
     diffMode: false,           // 是否仅展示变化
     undoStack: [],             // 撤销栈 [{desc, snapshot}]
     collapsed: false,          // 收起/展开
+    activeTabName: null,       // 当前激活的表名
 };
+
+let _dpObserver = null; // MutationObserver 确保容器在 #chat 末尾
+
+/**
+ * 填入输入框 — 参考可视化数据
+ */
+function _dpSendToChatBox(text) {
+    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+    const textarea = parentDoc.querySelector('#send_textarea');
+    if (textarea) {
+        const currentContent = textarea.value || '';
+        const separator = currentContent.trim() ? '\n' : '';
+        const newContent = currentContent + separator + text;
+        textarea.value = newContent;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        showToast('已填入对话框', 'success');
+    } else {
+        showToast('未找到输入框', 'error');
+    }
+}
 
 /**
  * 显示数据预览 — 入口
- * 改为直接在数据管理弹窗内渲染（不再使用 SillyTavern callGenericPopup）
+ * 嵌入 #chat 区域底部（参考可视化数据的 insertHtmlToPage）
  */
 async function showDataPreview() {
     if (!isExtensionEnabled()) {
@@ -4652,36 +4674,11 @@ async function showDataPreview() {
         _dpState.diffMode = !!(settings && settings.previewOnlyShowChanges);
         _dpState.undoStack = [];
         _dpState.collapsed = false;
+        _dpState.activeTabName = null;
 
-        // 使用独立窗口渲染数据预览
-        const previewWindowId = 'dm-preview';
-
-        // 如果预览窗口已打开，先关闭
-        if (DataManageWindowManager.isOpen(previewWindowId)) {
-            const existingWin = DataManageWindowManager.getWindow(previewWindowId);
-            if (existingWin) {
-                existingWin.remove();
-                DataManageWindowManager.unregister(previewWindowId);
-            }
-        }
-
-        createDataManageWindow({
-            id: previewWindowId,
-            title: `数据预览 — 楼层 ${messageIndex}`,
-            content: '<div id="dm-preview-wrapper" class="dm-preview-wrapper"></div>',
-            width: 1000,
-            height: 700,
-            modal: false,
-            resizable: true,
-            maximizable: true,
-            onClose: () => {
-                console.log('数据预览窗口已关闭');
-            },
-            onReady: () => {
-                _dpRenderFull();
-                showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
-            }
-        });
+        // 渲染到 #chat 区域
+        _dpRenderFull();
+        showToast(`已加载楼层 ${messageIndex} 的数据预览 (${tables.length} 张表)`, 'success');
 
     } catch (error) {
         console.error('显示数据预览失败:', error);
@@ -4694,34 +4691,27 @@ async function showDataPreview() {
 function _dpRenderFull() {
     const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
 
-    let wrapper = parentDoc.getElementById('dm-preview-wrapper');
-    if (!wrapper) {
-        // 尝试在预览窗口中查找
-        const previewWin = parentDoc.getElementById('dm-window-dm-preview');
-        if (previewWin) {
-            const body = previewWin.querySelector('.dm-window-body');
-            if (body) {
-                wrapper = parentDoc.createElement('div');
-                wrapper.id = 'dm-preview-wrapper';
-                wrapper.className = 'dm-preview-wrapper';
-                body.appendChild(wrapper);
-            }
-        }
-        if (!wrapper) {
-            console.error('无法找到数据预览容器');
-            return;
-        }
+    // 记忆滚动位置
+    let lastScrollX = 0, lastScrollY = 0;
+    const oldContent = parentDoc.querySelector('.dp-panel-content');
+    if (oldContent) {
+        lastScrollX = oldContent.scrollLeft;
+        lastScrollY = oldContent.scrollTop;
     }
 
+    // 移除旧的
+    const oldWrapper = parentDoc.querySelector('.dp-wrapper');
+    if (oldWrapper) oldWrapper.remove();
+
+    // 收起状态
     if (_dpState.collapsed) {
-        wrapper.innerHTML = `
-            <div class="dm-preview-toolbar">
-                <span class="dm-toolbar-info"><i class="fa-solid fa-database"></i> 数据预览 (已收起)</span>
-                <div class="dm-toolbar-actions">
-                    <button class="dm-toolbar-btn" data-dp-action="expand" title="展开"><i class="fa-solid fa-chevron-down"></i></button>
-                </div>
-            </div>`;
-        _dpBindEvents(wrapper);
+        const html = `<div class="dp-wrapper">
+            <div class="dp-expand-trigger" data-dp-action="expand">
+                <i class="fa-solid fa-database"></i>
+                <span>数据预览 · 楼层 ${_dpState.messageIndex} (${_dpState.tables.length} 表)</span>
+            </div>
+        </div>`;
+        _dpInsertToChat(parentDoc, html);
         return;
     }
 
@@ -4736,45 +4726,36 @@ function _dpRenderFull() {
     const endIdx = Math.min(startIdx + _dpState.perPage, totalItems);
     const pageRows = displayRows.slice(startIdx, endIdx);
 
-    let html = '';
+    let panelHtml = '';
 
-    // 工具栏
-    html += `
-        <div class="dm-preview-toolbar">
-            <div class="dm-search-box">
-                <i class="fa-solid fa-search dm-search-icon"></i>
-                <input type="text" placeholder="搜索..." value="${escapeHtml(_dpState.search)}" data-dp-action="search" />
+    // 面板头部
+    panelHtml += `
+        <div class="dp-panel-header">
+            <div class="dp-panel-title">
+                <i class="fa-solid fa-database"></i>
+                ${escapeHtml(t.name)}
+                <span class="dp-title-info">(${startIdx + 1}-${endIdx} / 共${totalItems}项)</span>
             </div>
-            <span class="dm-toolbar-info">楼层 ${_dpState.messageIndex} · ${startIdx + 1}-${endIdx} / ${totalItems}项</span>
-            <label class="dm-diff-toggle">
-                <input type="checkbox" data-dp-action="diff-toggle" ${_dpState.diffMode ? 'checked' : ''} />
-                仅显示变化
-            </label>
-            <div class="dm-toolbar-actions">
-                <button class="dm-toolbar-btn" data-dp-action="undo" title="撤销" ${_dpState.undoStack.length ? '' : 'disabled'}><i class="fa-solid fa-rotate-left"></i></button>
-                <span class="dm-toolbar-divider"></span>
-                <button class="dm-toolbar-btn" data-dp-action="collapse" title="收起"><i class="fa-solid fa-chevron-up"></i></button>
-                <button class="dm-toolbar-btn dm-btn-danger" data-dp-action="close" title="关闭预览"><i class="fa-solid fa-times"></i></button>
+            <div class="dp-header-actions">
+                <span class="dp-toolbar-info">楼层 ${_dpState.messageIndex}</span>
+                <label class="dp-diff-toggle">
+                    <input type="checkbox" data-dp-action="diff-toggle" ${_dpState.diffMode ? 'checked' : ''} />
+                    仅显示变化
+                </label>
+                <div class="dp-search-wrapper">
+                    <i class="fa-solid fa-search dp-search-icon"></i>
+                    <input type="text" class="dp-search-input" placeholder="搜索..." value="${escapeHtml(_dpState.search)}" data-dp-action="search" />
+                </div>
+                <button class="dp-action-btn" data-dp-action="undo" title="撤销" ${_dpState.undoStack.length ? '' : 'disabled'}><i class="fa-solid fa-rotate-left"></i></button>
+                <button class="dp-close-btn" data-dp-action="close-panel" title="关闭面板"><i class="fa-solid fa-times"></i></button>
             </div>
         </div>`;
 
-    // Tab 导航
-    if (_dpState.tables.length > 1) {
-        html += '<div class="dm-preview-tabs">';
-        _dpState.tables.forEach((tbl, idx) => {
-            const rowCount = tbl.rows.length;
-            html += `<div class="dm-preview-tab ${idx === _dpState.activeTab ? 'active' : ''}" data-dp-action="tab" data-tab-index="${idx}">
-                ${escapeHtml(tbl.name)} <span class="dm-tab-count">(${rowCount})</span>
-            </div>`;
-        });
-        html += '</div>';
-    }
-
     // 卡片网格
-    html += '<div class="dm-card-content-area"><div class="dm-card-grid">';
+    panelHtml += '<div class="dp-panel-content"><div class="dp-card-grid">';
 
     if (pageRows.length === 0) {
-        html += '<div class="dm-empty-state">没有匹配的数据</div>';
+        panelHtml += '<div class="dp-empty-state">没有匹配的数据</div>';
     } else {
         const headers = t.headers;
         pageRows.forEach(item => {
@@ -4783,12 +4764,12 @@ function _dpRenderFull() {
             const diffType = item.diffType || '';
             const changedCols = item.changedCols || [];
 
-            let cardClass = 'dm-data-card';
-            if (diffType === 'added') cardClass += ' dm-card-added';
-            else if (diffType === 'deleted') cardClass += ' dm-card-deleted';
-            else if (diffType === 'modified') cardClass += ' dm-card-modified';
+            let cardClass = 'dp-data-card';
+            if (diffType === 'added') cardClass += ' dp-card-added';
+            else if (diffType === 'deleted') cardClass += ' dp-card-deleted';
+            else if (diffType === 'modified') cardClass += ' dp-card-modified';
 
-            // 卡片标题（取第二列的值，或第一个非空列）
+            // 卡片标题
             let cardTitle = '';
             for (let ci = 1; ci < row.length; ci++) {
                 if (row[ci] && String(row[ci]).trim()) { cardTitle = String(row[ci]); break; }
@@ -4797,56 +4778,124 @@ function _dpRenderFull() {
             if (!cardTitle) cardTitle = `条目 ${realIdx + 1}`;
 
             let badgeHtml = '';
-            if (diffType === 'added') badgeHtml = '<span class="dm-diff-badge dm-badge-new">新增</span>';
-            else if (diffType === 'deleted') badgeHtml = '<span class="dm-diff-badge dm-badge-del">删除</span>';
-            else if (diffType === 'modified') badgeHtml = '<span class="dm-diff-badge dm-badge-mod">修改</span>';
+            if (diffType === 'added') badgeHtml = '<span class="dp-diff-badge dp-badge-new">新增</span>';
+            else if (diffType === 'deleted') badgeHtml = '<span class="dp-diff-badge dp-badge-del">删除</span>';
+            else if (diffType === 'modified') badgeHtml = '<span class="dp-diff-badge dp-badge-mod">修改</span>';
 
-            html += `<div class="${cardClass}" data-real-index="${realIdx}">`;
-            html += `<div class="dm-card-head" data-dp-action="card-menu" data-real-index="${realIdx}">
-                <span class="dm-card-index">#${realIdx + 1}</span>
-                <span class="dm-card-title">${escapeHtml(cardTitle)}</span>
+            panelHtml += `<div class="${cardClass}" data-real-index="${realIdx}">`;
+            panelHtml += `<div class="dp-card-head" data-dp-action="card-menu" data-real-index="${realIdx}">
+                <span class="dp-card-index">#${realIdx + 1}</span>
+                <span class="dp-card-title">${escapeHtml(cardTitle)}</span>
                 ${badgeHtml}
             </div>`;
-            html += '<div class="dm-card-body">';
+            panelHtml += '<div class="dp-card-body">';
 
-            // 键值对（跳过首列空白列）
+            // 键值对
             for (let ci = 1; ci < headers.length; ci++) {
                 const headerName = headers[ci] || `列${ci}`;
                 const cellVal = (row[ci] !== undefined && row[ci] !== null) ? String(row[ci]) : '';
-                let rowClass = 'dm-card-row';
-                if (diffType === 'modified' && changedCols[ci]) rowClass += ' dm-cell-changed';
-                if (diffType === 'deleted') rowClass += ' dm-cell-deleted-val';
+                let rowClass = 'dp-card-row';
+                if (diffType === 'modified' && changedCols[ci]) rowClass += ' dp-cell-changed';
+                if (diffType === 'deleted') rowClass += ' dp-cell-deleted-val';
 
-                html += `<div class="${rowClass}" data-dp-action="edit-cell" data-real-index="${realIdx}" data-col="${ci}">
-                    <div class="dm-card-label">${escapeHtml(headerName)}</div>
-                    <div class="dm-card-value">${escapeHtml(cellVal) || '<i style="color:var(--ios-text-secondary)">空</i>'}</div>
+                panelHtml += `<div class="${rowClass}" data-dp-action="edit-cell" data-real-index="${realIdx}" data-col="${ci}">
+                    <div class="dp-card-label">${escapeHtml(headerName)}</div>
+                    <div class="dp-card-value">${escapeHtml(cellVal) || '<i style="color:var(--ios-text-secondary)">空</i>'}</div>
                 </div>`;
             }
 
-            html += '</div></div>';
+            panelHtml += '</div></div>';
         });
     }
-
-    html += '</div></div>';
+    panelHtml += '</div></div>';
 
     // 分页
     if (totalPages > 1) {
-        html += '<div class="dm-pagination">';
-        html += `<div class="dm-page-btn ${_dpState.page <= 1 ? 'disabled' : ''}" data-dp-action="page" data-page="${_dpState.page - 1}">‹</div>`;
+        panelHtml += '<div class="dp-pagination">';
+        panelHtml += `<div class="dp-page-btn ${_dpState.page <= 1 ? 'disabled' : ''}" data-dp-action="page" data-page="${_dpState.page - 1}">‹</div>`;
         const pages = _dpPaginationRange(_dpState.page, totalPages);
         pages.forEach(p => {
             if (p === '...') {
-                html += '<span class="dm-page-ellipsis">…</span>';
+                panelHtml += '<span class="dp-page-ellipsis">…</span>';
             } else {
-                html += `<div class="dm-page-btn ${p === _dpState.page ? 'active' : ''}" data-dp-action="page" data-page="${p}">${p}</div>`;
+                panelHtml += `<div class="dp-page-btn ${p === _dpState.page ? 'active' : ''}" data-dp-action="page" data-page="${p}">${p}</div>`;
             }
         });
-        html += `<div class="dm-page-btn ${_dpState.page >= totalPages ? 'disabled' : ''}" data-dp-action="page" data-page="${_dpState.page + 1}">›</div>`;
-        html += '</div>';
+        panelHtml += `<div class="dp-page-btn ${_dpState.page >= totalPages ? 'disabled' : ''}" data-dp-action="page" data-page="${_dpState.page + 1}">›</div>`;
+        panelHtml += '</div>';
     }
 
-    wrapper.innerHTML = html;
+    // 组装：wrapper = data-display(弹出面板) + nav-container(底部导航)
+    const currentTabName = _dpState.activeTabName || t.name;
+    let navHtml = '<div class="dp-nav-container">';
+    _dpState.tables.forEach((tbl, idx) => {
+        const isActive = idx === _dpState.activeTab ? 'active' : '';
+        navHtml += `<button class="dp-nav-btn ${isActive}" data-dp-action="tab" data-tab-index="${idx}">
+            <i class="fa-solid fa-table"></i>
+            <span>${escapeHtml(tbl.name)}</span>
+            <span class="dp-tab-count">(${tbl.rows.length})</span>
+        </button>`;
+    });
+    navHtml += '<div class="dp-nav-spacer"></div>';
+    navHtml += `<div class="dp-actions-group">
+        <div class="dp-nav-divider"></div>
+        <button class="dp-action-btn" data-dp-action="collapse" title="收起面板"><i class="fa-solid fa-chevron-down"></i></button>
+        <button class="dp-action-btn dp-btn-danger" data-dp-action="close" title="关闭预览"><i class="fa-solid fa-times"></i></button>
+    </div>`;
+    navHtml += '</div>';
+
+    const fullHtml = `<div class="dp-wrapper">
+        <div class="dp-data-display visible">${panelHtml}</div>
+        ${navHtml}
+    </div>`;
+
+    _dpInsertToChat(parentDoc, fullHtml);
+
+    // 恢复滚动位置
+    setTimeout(() => {
+        const newContent = parentDoc.querySelector('.dp-panel-content');
+        if (newContent) {
+            newContent.scrollLeft = lastScrollX;
+            newContent.scrollTop = lastScrollY;
+        }
+    }, 0);
+}
+
+/**
+ * 插入到 #chat 末尾 — 参考可视化数据
+ */
+function _dpInsertToChat(parentDoc, html) {
+    // 移除旧的
+    const old = parentDoc.querySelector('.dp-wrapper');
+    if (old) old.remove();
+
+    const chat = parentDoc.querySelector('#chat');
+
+    // 创建临时容器来解析 HTML
+    const temp = parentDoc.createElement('div');
+    temp.innerHTML = html;
+    const wrapper = temp.firstElementChild;
+
+    if (chat) {
+        chat.appendChild(wrapper);
+    } else {
+        parentDoc.body.appendChild(wrapper);
+    }
+
+    // 绑定事件
     _dpBindEvents(wrapper);
+
+    // MutationObserver 确保面板始终在 #chat 末尾
+    if (_dpObserver) _dpObserver.disconnect();
+    if (chat) {
+        _dpObserver = new MutationObserver(() => {
+            const w = parentDoc.querySelector('.dp-wrapper');
+            if (w && chat.lastElementChild !== w) {
+                chat.appendChild(w);
+            }
+        });
+        _dpObserver.observe(chat, { childList: true });
+    }
 }
 
 /**
@@ -4938,6 +4987,10 @@ function _dpBindEvents(wrapper) {
     if (wrapper._dpHandler) wrapper.removeEventListener('click', wrapper._dpHandler);
     if (wrapper._dpInputHandler) wrapper.removeEventListener('input', wrapper._dpInputHandler);
 
+    // 阻止事件冒泡到宿主
+    wrapper.addEventListener('click', function (e) { e.stopPropagation(); }, true);
+    wrapper.addEventListener('mousedown', function (e) { e.stopPropagation(); }, true);
+
     const clickHandler = function (e) {
         let target = e.target;
         while (target && target !== wrapper) {
@@ -4975,10 +5028,20 @@ function _dpHandleAction(action, target, e) {
         case 'tab': {
             const idx = parseInt(target.getAttribute('data-tab-index'));
             if (!isNaN(idx) && idx >= 0 && idx < _dpState.tables.length) {
-                _dpState.activeTab = idx;
-                _dpState.page = 1;
-                _dpState.search = '';
-                _dpRenderFull();
+                // 如果点击已激活的 tab，关闭面板
+                if (idx === _dpState.activeTab) {
+                    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+                    const panel = parentDoc.querySelector('.dp-data-display');
+                    if (panel) {
+                        panel.classList.toggle('visible');
+                    }
+                } else {
+                    _dpState.activeTab = idx;
+                    _dpState.page = 1;
+                    _dpState.search = '';
+                    _dpState.activeTabName = _dpState.tables[idx].name;
+                    _dpRenderFull();
+                }
             }
             break;
         }
@@ -5012,15 +5075,21 @@ function _dpHandleAction(action, target, e) {
             _dpState.collapsed = false;
             _dpRenderFull();
             break;
+        case 'close-panel': {
+            // 关闭面板但保留导航栏
+            const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+            const panel = parentDoc.querySelector('.dp-data-display');
+            if (panel) panel.classList.remove('visible');
+            // 取消所有 tab 激活
+            parentDoc.querySelectorAll('.dp-nav-btn').forEach(btn => btn.classList.remove('active'));
+            break;
+        }
         case 'close': {
-            const previewWin = DataManageWindowManager.getWindow('dm-preview');
-            if (previewWin) {
-                _closeDataManageWindow('dm-preview', previewWin, null, null);
-            } else {
-                const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
-                const w = parentDoc.getElementById('dm-preview-wrapper');
-                if (w) w.remove();
-            }
+            // 完全关闭预览
+            const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+            const w = parentDoc.querySelector('.dp-wrapper');
+            if (w) w.remove();
+            if (_dpObserver) { _dpObserver.disconnect(); _dpObserver = null; }
             break;
         }
         case 'undo':
@@ -5054,27 +5123,27 @@ function _dpShowEditDialog(target) {
     const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
 
     const overlay = parentDoc.createElement('div');
-    overlay.className = 'dm-edit-overlay';
+    overlay.className = 'dp-edit-overlay';
     overlay.innerHTML = `
-        <div class="dm-edit-dialog">
+        <div class="dp-edit-dialog">
             <h4><i class="fa-solid fa-pen"></i> 编辑 — ${escapeHtml(headerName)}</h4>
-            <textarea id="dm-edit-textarea">${escapeHtml(currentVal)}</textarea>
-            <div class="dm-dialog-actions">
-                <button class="dm-dialog-btn" id="dm-edit-cancel">取消</button>
-                <button class="dm-dialog-btn dm-btn-primary" id="dm-edit-save">保存</button>
+            <textarea class="dp-edit-textarea">${escapeHtml(currentVal)}</textarea>
+            <div class="dp-dialog-actions">
+                <button class="dp-dialog-btn" id="dp-edit-cancel">取消</button>
+                <button class="dp-dialog-btn dp-btn-primary" id="dp-edit-save">保存</button>
             </div>
         </div>
     `;
     parentDoc.body.appendChild(overlay);
 
-    const textarea = overlay.querySelector('#dm-edit-textarea');
+    const textarea = overlay.querySelector('.dp-edit-textarea');
     textarea.focus();
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 
-    overlay.querySelector('#dm-edit-cancel').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#dp-edit-cancel').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
 
-    overlay.querySelector('#dm-edit-save').addEventListener('click', async () => {
+    overlay.querySelector('#dp-edit-save').addEventListener('click', async () => {
         const newVal = textarea.value;
         if (newVal === currentVal) { overlay.remove(); return; }
 
@@ -5088,7 +5157,7 @@ function _dpShowEditDialog(target) {
     });
 }
 
-/* ---------- 右键/点击菜单 ---------- */
+/* ---------- 右键/点击菜单 — 参考可视化数据 ---------- */
 
 function _dpShowContextMenu(target, e) {
     const realIdx = parseInt(target.getAttribute('data-real-index'));
@@ -5097,31 +5166,42 @@ function _dpShowContextMenu(target, e) {
 
     const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
 
-    parentDoc.querySelectorAll('.dm-context-backdrop, .dm-context-menu').forEach(el => el.remove());
-
-    const backdrop = parentDoc.createElement('div');
-    backdrop.className = 'dm-context-backdrop';
-
-    const menu = parentDoc.createElement('div');
-    menu.className = 'dm-context-menu';
-
-    const rect = target.getBoundingClientRect();
-    let top = rect.bottom + 4;
-    let left = rect.left;
-    if (top + 200 > window.innerHeight) top = rect.top - 200;
-    if (left + 180 > window.innerWidth) left = window.innerWidth - 190;
-    menu.style.top = top + 'px';
-    menu.style.left = left + 'px';
+    // 清除已有菜单
+    parentDoc.querySelectorAll('.dp-menu-backdrop, .dp-cell-menu').forEach(el => el.remove());
 
     const row = t.rows[realIdx];
     const allText = row ? row.slice(1).map(c => c || '').join('\n') : '';
 
-    menu.innerHTML = `
-        <div class="dm-context-item" data-ctx="copy"><i class="fa-solid fa-copy" style="width:16px"></i> 复制内容</div>
-        <div class="dm-context-item" data-ctx="edit"><i class="fa-solid fa-pen-to-square" style="width:16px"></i> 编辑条目</div>
-        <div class="dm-context-item dm-ctx-danger" data-ctx="delete"><i class="fa-solid fa-trash" style="width:16px"></i> 删除条目</div>
-        <div class="dm-context-item dm-ctx-close" data-ctx="close"><i class="fa-solid fa-xmark" style="width:16px"></i> 关闭</div>
-    `;
+    // 构建菜单项
+    let menuItems = '';
+    menuItems += `<div class="dp-cell-menu-item dp-ctx-edit" data-ctx="edit"><i class="fa-solid fa-pen"></i> 编辑内容</div>`;
+    menuItems += `<div class="dp-cell-menu-item dp-ctx-send" data-ctx="send"><i class="fa-solid fa-comment-dots"></i> 填入输入框</div>`;
+    menuItems += `<div class="dp-cell-menu-item dp-ctx-del" data-ctx="delete"><i class="fa-solid fa-trash"></i> 删除整行</div>`;
+    menuItems += `<div class="dp-cell-menu-item dp-ctx-close" data-ctx="close"><i class="fa-solid fa-times"></i> 关闭菜单</div>`;
+
+    const backdrop = parentDoc.createElement('div');
+    backdrop.className = 'dp-menu-backdrop';
+
+    const menu = parentDoc.createElement('div');
+    menu.className = 'dp-cell-menu';
+    menu.innerHTML = menuItems;
+
+    parentDoc.body.appendChild(backdrop);
+    parentDoc.body.appendChild(menu);
+
+    // 定位
+    const winWidth = window.innerWidth;
+    const winHeight = window.innerHeight;
+    const mWidth = menu.offsetWidth;
+    const mHeight = menu.offsetHeight;
+    let left = e.clientX + 10;
+    let top = e.clientY + 10;
+    if (left + mWidth > winWidth) left = e.clientX - mWidth - 10;
+    if (left < 5) left = 5;
+    if (top + mHeight > winHeight) top = e.clientY - mHeight - 10;
+    if (top < 5) top = 5;
+    menu.style.top = top + 'px';
+    menu.style.left = left + 'px';
 
     const closeMenu = () => { backdrop.remove(); menu.remove(); };
     backdrop.addEventListener('click', closeMenu);
@@ -5132,14 +5212,8 @@ function _dpShowContextMenu(target, e) {
             const ctx = el.getAttribute('data-ctx');
             if (ctx) {
                 closeMenu();
-                if (ctx === 'copy') {
-                    try {
-                        await (window.parent || window).navigator.clipboard.writeText(allText);
-                        showToast('已复制到剪贴板', 'success');
-                    } catch (_) {
-                        showToast('复制失败', 'error');
-                    }
-                } else if (ctx === 'edit') {
+                if (ctx === 'edit') {
+                    // 编辑第一个有值的列
                     for (let ci = 1; ci < t.headers.length; ci++) {
                         if (row[ci] !== undefined) {
                             const fakeTarget = document.createElement('div');
@@ -5149,6 +5223,8 @@ function _dpShowContextMenu(target, e) {
                             break;
                         }
                     }
+                } else if (ctx === 'send') {
+                    _dpSendToChatBox(allText);
                 } else if (ctx === 'delete') {
                     await _dpDeleteRow(realIdx);
                 }
@@ -5157,9 +5233,6 @@ function _dpShowContextMenu(target, e) {
             el = el.parentElement;
         }
     });
-
-    parentDoc.body.appendChild(backdrop);
-    parentDoc.body.appendChild(menu);
 }
 
 /* ---------- 删除行 ---------- */

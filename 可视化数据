@@ -1,0 +1,1081 @@
+// ==UserScript==
+// @name         数据库-可视化表格(UI重制版)
+// @namespace    http://tampermonkey.net/
+// @version      19.0
+// @description  [终极版] 包含翻页、撤销修改、填入输入框、防丢失保护、滚动记忆
+// @author       Cline (Refactored)
+// @match        */*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const SCRIPT_ID = 'acu_visualizer_ui_v19_0_final';
+    const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
+    const STORAGE_KEY_PENDING_DELETIONS = 'acu_pending_deletions';
+    const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
+    const STORAGE_KEY_UI_CONFIG = 'acu_ui_config_v19';
+    const STORAGE_KEY_LAST_SNAPSHOT = 'acu_data_snapshot_v19';
+    const STORAGE_KEY_IS_COLLAPSED = 'acu_ui_collapsed_state';
+
+    let isInitialized = false;
+    let isSaving = false;
+    let isEditingOrder = false;
+    let currentDiffMap = new Set();
+    let observer = null;
+
+    // --- 全局状态变量 ---
+    let cachedRawData = null;       // 本地缓存（未保存的数据）
+    let hasUnsavedChanges = false;  // 是否有未保存修改
+    let tablePageStates = {};       // 记录每张表的页码 { "表名": 1 }
+
+    const DEFAULT_CONFIG = {
+        layout: 'horizontal',
+        collapseStyle: 'bar',
+        collapseAlign: 'right',
+        theme: 'retro',
+        cardWidth: 260,
+        fontSize: 13,
+        highlightNew: true,
+        itemsPerPage: 50 // 默认每页50条
+    };
+
+    const THEMES = [
+        { id: 'retro', name: '复古羊皮 (Retro)', icon: 'fa-scroll' },
+        { id: 'dark', name: '极夜深空 (Dark)', icon: 'fa-moon' },
+        { id: 'modern', name: '现代清爽 (Modern)', icon: 'fa-sun' },
+        { id: 'forest', name: '森之物语 (Forest)', icon: 'fa-tree' },
+        { id: 'ocean', name: '深海幽蓝 (Ocean)', icon: 'fa-water' },
+        { id: 'cyber', name: '赛博霓虹 (Cyber)', icon: 'fa-bolt' }
+    ];
+
+    // --- 核心工具函数 ---
+    const getCore = () => {
+        const w = window.parent || window;
+        return {
+            $: window.jQuery || w.jQuery,
+            getDB: () => w.AutoCardUpdaterAPI || window.AutoCardUpdaterAPI,
+            clipboard: w.navigator.clipboard
+        };
+    };
+
+    const updateSaveButtonState = () => {
+        const { $ } = getCore();
+        const $btn = $('#acu-btn-save-global');
+        if (hasUnsavedChanges) {
+            $btn.css('color', '#e74c3c').addClass('fa-beat');
+            $btn.attr('title', '有未保存的修改，点击立即保存到数据库');
+        } else {
+            $btn.css('color', '').removeClass('fa-beat');
+            $btn.attr('title', '保存所有修改');
+        }
+    };
+
+    // 发送文本到酒馆输入框
+    const sendToChatBox = (text) => {
+        const { $ } = getCore();
+        const $textarea = $('#send_textarea');
+        if ($textarea.length) {
+            const currentContent = $textarea.val() || '';
+            const separator = currentContent.trim() ? '\n' : '';
+            const newContent = currentContent + separator + text;
+            $textarea.val(newContent).trigger('input');
+            const inputEvent = new Event('input', { bubbles: true });
+            $textarea[0].dispatchEvent(inputEvent);
+            if (window.toastr) window.toastr.success('已填入对话框');
+        } else {
+            alert('未找到输入框 (#send_textarea)，请确认你在酒馆界面内。');
+        }
+    };
+
+    const getIconForTableName = (name) => {
+        if (!name) return 'fa-table';
+        const n = name.toLowerCase();
+        if (n.includes('主角') || n.includes('角色')) return 'fa-user-circle';
+        if (n.includes('通用') || n.includes('全局')) return 'fa-globe-asia';
+        if (n.includes('装备') || n.includes('背包')) return 'fa-briefcase';
+        if (n.includes('技能') || n.includes('武魂')) return 'fa-dragon';
+        if (n.includes('关系') || n.includes('周边')) return 'fa-user-friends';
+        if (n.includes('任务') || n.includes('日志')) return 'fa-scroll';
+        if (n.includes('总结') || n.includes('大纲')) return 'fa-book-reader';
+        return 'fa-table';
+    };
+
+    const getBadgeStyle = (text) => {
+        if (!text) return '';
+        const str = String(text).trim();
+        if (/^[0-9]+%?$/.test(str) || /^Lv\.\d+$/.test(str)) return 'acu-badge-green';
+        if (str.length <= 4 && !str.includes('http')) return 'acu-badge-neutral';
+        if (['是', '否', '有', '无', '死亡', '存活'].includes(str)) return 'acu-badge-neutral';
+        return '';
+    };
+
+    // --- 存储管理 ---
+    const getActiveTabState = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_ACTIVE_TAB)); } catch (e) { return null; } };
+    const saveActiveTabState = (tableName) => { try { localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, JSON.stringify(tableName)); } catch (e) { console.error(e); } };
+    const getPendingDeletions = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_PENDING_DELETIONS)) || {}; } catch (e) { return {}; } };
+    const savePendingDeletions = (deletions) => { try { localStorage.setItem(STORAGE_KEY_PENDING_DELETIONS, JSON.stringify(deletions)); } catch (e) { console.error(e); } };
+    const getSavedTableOrder = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_TABLE_ORDER)); } catch (e) { return null; } };
+    const saveTableOrder = (tableNames) => { try { localStorage.setItem(STORAGE_KEY_TABLE_ORDER, JSON.stringify(tableNames)); } catch (e) { console.error(e); } };
+    const getConfig = () => { try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY_UI_CONFIG)); return { ...DEFAULT_CONFIG, ...saved }; } catch (e) { return DEFAULT_CONFIG; } };
+    const saveConfig = (newConfig) => { const current = getConfig(); const merged = { ...current, ...newConfig }; try { localStorage.setItem(STORAGE_KEY_UI_CONFIG, JSON.stringify(merged)); } catch (e) { console.error(e); } applyConfigStyles(merged); };
+    const getCollapsedState = () => { try { const val = JSON.parse(localStorage.getItem(STORAGE_KEY_IS_COLLAPSED)); return val === null ? true : val; } catch (e) { return true; } };
+    const saveCollapsedState = (val) => { try { localStorage.setItem(STORAGE_KEY_IS_COLLAPSED, JSON.stringify(val)); } catch (e) { console.error(e); } };
+
+    // --- 快照与Diff ---
+    const loadSnapshot = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_LAST_SNAPSHOT)); } catch (e) { return null; } };
+    const saveSnapshot = (data) => { try { localStorage.setItem(STORAGE_KEY_LAST_SNAPSHOT, JSON.stringify(data)); } catch (e) { console.error(e); } };
+
+    const generateDiffMap = (currentData) => {
+        const lastData = loadSnapshot();
+        const diffSet = new Set();
+        if (!lastData) return diffSet;
+
+        for (const sheetId in currentData) {
+            const newSheet = currentData[sheetId];
+            const oldSheet = lastData[sheetId];
+            if (!newSheet || !newSheet.name) continue;
+            const tableName = newSheet.name;
+            if (!oldSheet) {
+                if (newSheet.content) {
+                    newSheet.content.forEach((row, rIdx) => { if (rIdx > 0) diffSet.add(`${tableName}-row-${rIdx - 1}`); });
+                }
+                continue;
+            }
+            const newRows = newSheet.content || [];
+            const oldRows = oldSheet.content || [];
+            newRows.forEach((row, rIdx) => {
+                if (rIdx === 0) return;
+                const oldRow = oldRows[rIdx];
+                if (!oldRow) {
+                    diffSet.add(`${tableName}-row-${rIdx - 1}`);
+                } else {
+                    row.forEach((cell, cIdx) => {
+                        if (cIdx === 0) return;
+                        const oldCell = oldRow[cIdx];
+                        if (String(cell) !== String(oldCell)) diffSet.add(`${tableName}-${rIdx - 1}-${cIdx}`);
+                    });
+                }
+            });
+        }
+        return diffSet;
+    };
+
+    const applyConfigStyles = (config) => {
+        const { $ } = getCore();
+        const $wrapper = $('.acu-wrapper');
+        if ($wrapper.length) {
+            $wrapper.removeClass(THEMES.map(t => `acu-theme-${t.id}`).join(' '));
+            $wrapper.addClass(`acu-theme-${config.theme}`);
+            $wrapper.css({ '--acu-card-width': `${config.cardWidth}px`, '--acu-font-size': `${config.fontSize}px` });
+        }
+    };
+
+    const addStyles = () => {
+        const { $ } = getCore();
+        $(`#${SCRIPT_ID}-styles`).remove();
+
+        const styles = `
+            <style id="${SCRIPT_ID}-styles">
+                /* --- 基础配色 --- */
+                .acu-theme-retro { --acu-bg-nav: #e6e2d3; --acu-bg-panel: #e6e2d3; --acu-border: #dcd0c0; --acu-text-main: #5e4b35; --acu-text-sub: #999; --acu-btn-bg: #dcd0c0; --acu-btn-hover: #cbbba8; --acu-btn-active-bg: #8d7b6f; --acu-btn-active-text: #fdfaf5; --acu-accent: #7a695f; --acu-table-head: #efebe4; --acu-table-hover: #f0ebe0; --acu-shadow: rgba(0,0,0,0.15); --acu-menu-bg: #fff; --acu-menu-text: #333; --acu-card-bg: #fffef9; --acu-badge-bg: #efebe4; --acu-highlight: #d35400; --acu-highlight-bg: rgba(211, 84, 0, 0.1); }
+                .acu-theme-dark { --acu-bg-nav: rgba(43, 43, 43, 0.95); --acu-bg-panel: rgba(37, 37, 37, 0.95); --acu-border: #444; --acu-text-main: #eee; --acu-text-sub: #aaa; --acu-btn-bg: rgba(58, 58, 58, 0.5); --acu-btn-hover: #4a4a4a; --acu-btn-active-bg: #6a5acd; --acu-btn-active-text: #fff; --acu-accent: #ccc; --acu-table-head: rgba(51, 51, 51, 0.8); --acu-table-hover: rgba(58, 58, 58, 0.5); --acu-shadow: rgba(0,0,0,0.6); --acu-card-bg: rgba(45, 48, 53, 0.6); --acu-badge-bg: #3a3f4b; --acu-menu-bg: #333; --acu-menu-text: #eee; --acu-highlight: #ff6b81; --acu-highlight-bg: rgba(255, 107, 129, 0.15); }
+                .acu-theme-modern { --acu-bg-nav: #ffffff; --acu-bg-panel: #f8f9fa; --acu-border: #e0e0e0; --acu-text-main: #333; --acu-text-sub: #666; --acu-btn-bg: #f1f3f5; --acu-btn-hover: #e9ecef; --acu-btn-active-bg: #007bff; --acu-btn-active-text: #fff; --acu-accent: #007bff; --acu-table-head: #f8f9fa; --acu-table-hover: #f1f3f5; --acu-shadow: rgba(0,0,0,0.1); --acu-card-bg: #ffffff; --acu-badge-bg: #f1f3f5; --acu-menu-bg: #fff; --acu-menu-text: #333; --acu-highlight: #007bff; --acu-highlight-bg: rgba(0, 123, 255, 0.1); }
+                .acu-theme-forest { --acu-bg-nav: #e8f5e9; --acu-bg-panel: #e8f5e9; --acu-border: #c8e6c9; --acu-text-main: #2e7d32; --acu-text-sub: #81c784; --acu-btn-bg: #c8e6c9; --acu-btn-hover: #a5d6a7; --acu-btn-active-bg: #43a047; --acu-btn-active-text: #fff; --acu-accent: #4caf50; --acu-table-head: #dcedc8; --acu-table-hover: #f1f8e9; --acu-shadow: rgba(0,0,0,0.1); --acu-card-bg: #ffffff; --acu-badge-bg: #dcedc8; --acu-menu-bg: #fff; --acu-menu-text: #2e7d32; --acu-highlight: #e67e22; --acu-highlight-bg: rgba(230, 126, 34, 0.1); }
+                .acu-theme-ocean { --acu-bg-nav: #e3f2fd; --acu-bg-panel: #e3f2fd; --acu-border: #bbdefb; --acu-text-main: #1565c0; --acu-text-sub: #64b5f6; --acu-btn-bg: #bbdefb; --acu-btn-hover: #90caf9; --acu-btn-active-bg: #1976d2; --acu-btn-active-text: #fff; --acu-accent: #2196f3; --acu-table-head: #bbdefb; --acu-table-hover: #e1f5fe; --acu-shadow: rgba(0,0,0,0.15); --acu-card-bg: #ffffff; --acu-badge-bg: #e3f2fd; --acu-menu-bg: #fff; --acu-menu-text: #1565c0; --acu-highlight: #e91e63; --acu-highlight-bg: rgba(233, 30, 99, 0.1); }
+                .acu-theme-cyber { --acu-bg-nav: #000000; --acu-bg-panel: #0a0a0a; --acu-border: #333; --acu-text-main: #00ffcc; --acu-text-sub: #ff00ff; --acu-btn-bg: #1a1a1a; --acu-btn-hover: #333; --acu-btn-active-bg: #ff00ff; --acu-btn-active-text: #fff; --acu-accent: #00ffcc; --acu-table-head: #111; --acu-table-hover: #1a1a1a; --acu-shadow: 0 0 10px rgba(0,255,204,0.3); --acu-card-bg: #050505; --acu-badge-bg: #222; --acu-menu-bg: #111; --acu-menu-text: #00ffcc; --acu-highlight: #f1c40f; --acu-highlight-bg: rgba(241, 196, 15, 0.15); }
+
+                /* --- 容器布局 --- */
+                .acu-wrapper { 
+                    position: relative; width: 100%; margin: 15px 0; 
+                    z-index: 2147483640 !important; 
+                    font-family: 'Microsoft YaHei', sans-serif; 
+                    display: flex; flex-direction: column-reverse; 
+                }
+                .acu-nav-container { 
+                    display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; 
+                    background: var(--acu-bg-nav); border: 1px solid var(--acu-border); border-radius: 12px; 
+                    align-items: center; box-shadow: 0 2px 6px var(--acu-shadow); 
+                    position: relative; 
+                    z-index: 2147483641 !important; 
+                }
+                .acu-nav-btn { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1px solid transparent; border-radius: 8px; background: var(--acu-btn-bg); color: var(--acu-text-main); font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s ease; user-select: none; }
+                .acu-nav-btn:hover { background: var(--acu-btn-hover); transform: translateY(-2px); }
+                .acu-nav-btn.active { background: var(--acu-btn-active-bg); color: var(--acu-btn-active-text); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); }
+                .acu-action-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border-radius: 50%; color: var(--acu-accent); cursor: pointer; border: none; transition: all 0.2s; margin-left: 2px; }
+                .acu-action-btn:hover { background: rgba(128,128,128,0.2); color: var(--acu-text-main); transform: scale(1.1); }
+                #acu-btn-save-global { color: var(--acu-btn-active-bg); } #acu-btn-save-global:hover { background: var(--acu-btn-active-bg); color: var(--acu-btn-active-text); }
+
+                /* --- 数据面板 --- */
+                .acu-data-display { 
+                    position: absolute; bottom: calc(100% + 10px); left: 0; right: 0; 
+                    max-height: 80vh; height: auto; 
+                    background: var(--acu-bg-panel); border: 1px solid var(--acu-border); border-radius: 8px; 
+                    box-shadow: 0 8px 30px var(--acu-shadow); 
+                    display: none; flex-direction: column; 
+                    z-index: 2147483642 !important; 
+                    animation: popUp 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28); 
+                }
+                .acu-data-display.visible { display: flex; }
+                @keyframes popUp { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+                .acu-panel-header { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: var(--acu-table-head); border-bottom: 1px dashed var(--acu-border); border-radius: 8px 8px 0 0; }
+                .acu-panel-title { font-weight: bold; color: var(--acu-text-main); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+                .acu-header-actions { display: flex; align-items: center; gap: 10px; }
+                .acu-search-wrapper { position: relative; display: flex; align-items: center; }
+                .acu-search-input { background: var(--acu-btn-bg); border: 1px solid var(--acu-border); color: var(--acu-text-main); padding: 4px 8px 4px 24px; border-radius: 12px; font-size: 12px; width: 120px; transition: width 0.2s; }
+                .acu-search-input:focus { width: 160px; outline: none; border-color: var(--acu-accent); }
+                .acu-search-icon { position: absolute; left: 8px; font-size: 10px; color: var(--acu-text-sub); pointer-events: none; }
+                .acu-close-btn { background: none; border: none; color: var(--acu-text-sub); cursor: pointer; font-size: 16px; padding: 4px; } .acu-close-btn:hover { color: #e74c3c; }
+
+                /* --- 卡片横向滚动列表 --- */
+                .acu-panel-content { 
+                    flex: 1; 
+                    overflow-x: auto; 
+                    overflow-y: hidden; 
+                    padding: 15px; 
+                    background: transparent;
+                    scrollbar-width: thin;
+                    scrollbar-color: var(--acu-accent) transparent;
+                }
+                .acu-card-grid { 
+                    display: flex; 
+                    flex-wrap: nowrap; 
+                    gap: 12px; 
+                    align-items: flex-start;
+                }
+                /* 竖向布局 */
+                .acu-layout-vertical .acu-panel-content {
+                    overflow-x: hidden !important; 
+                    overflow-y: auto !important;   
+                }
+                .acu-layout-vertical .acu-card-grid {
+                    flex-wrap: wrap !important;    
+                    justify-content: center;       
+                    padding-bottom: 20px;
+                }
+                .acu-data-card { 
+                    flex: 0 0 var(--acu-card-width, 260px); 
+                    width: var(--acu-card-width, 260px);
+                    background: var(--acu-card-bg); border: 1px solid var(--acu-border); border-radius: 8px; 
+                    height: auto;
+                    max-height: 60vh; 
+                    overflow-y: auto; 
+                    transition: all 0.2s ease; display: flex; flex-direction: column; position: relative; 
+                }
+                .acu-data-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--acu-shadow); border-color: var(--acu-accent); }
+                .acu-data-card.pending-deletion { opacity: 0.6; border: 1px dashed #e74c3c; }
+                .acu-data-card.pending-deletion::after { content: "待删除"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-15deg); color: #e74c3c; font-size: 24px; font-weight: bold; border: 2px solid #e74c3c; padding: 5px 10px; border-radius: 8px; opacity: 0.8; pointer-events: none; }
+                
+                @keyframes pulse-highlight { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+                .acu-highlight-changed { color: var(--acu-highlight) !important; background-color: var(--acu-highlight-bg); border-radius: 4px; padding: 0 4px; font-weight: bold; animation: pulse-highlight 2s infinite; display: inline-block; }
+                .acu-editable-title.acu-highlight-changed { width: auto; display: inline-block; }
+                
+                /* --- 卡片标题部分 --- */
+                .acu-card-header { 
+                    flex: 0 0 auto; 
+                    padding: 8px 10px; 
+                    background: var(--acu-table-head); 
+                    border-bottom: 1px dashed var(--acu-border); 
+                    font-weight: bold; 
+                    color: var(--acu-text-main); 
+                    font-size: 14px; 
+                    display: flex !important;
+                    flex-direction: row !important;
+                    align-items: center !important;
+                    justify-content: flex-start !important;
+                    gap: 8px;
+                    min-height: 40px; 
+                    height: auto !important;
+                }
+                
+                .acu-editable-title { 
+                    flex: 1; width: auto !important; cursor: pointer; border-bottom: 1px dashed transparent; transition: all 0.2s; 
+                    white-space: pre-wrap !important; overflow: visible !important; word-break: break-word !important; 
+                    text-align: center; line-height: 1.3; margin: 0 !important;
+                }
+                .acu-editable-title:hover { border-bottom-color: var(--acu-accent); color: var(--acu-accent); }
+                
+                .acu-card-index { position: static !important; transform: none !important; margin: 0 !important; flex-shrink: 0; font-size: 11px; color: var(--acu-text-sub); font-weight: normal; background: var(--acu-badge-bg); padding: 2px 6px; border-radius: 4px; }
+                .acu-card-body { padding: 6px 12px; display: flex; flex-direction: column; gap: 0; font-size: var(--acu-font-size, 13px); flex: 1; }
+
+                /* --- 键值对行 --- */
+                .acu-card-row { 
+                    display: block !important; 
+                    padding: 6px 0 !important; 
+                    border-bottom: 1px dashed var(--acu-border); 
+                    cursor: pointer; 
+                    overflow: hidden; 
+                }
+                .acu-card-row:last-child { border-bottom: none; }
+                .acu-card-row:hover { background: var(--acu-table-hover); }
+                
+                .acu-card-label { 
+                    float: left !important; 
+                    clear: left;
+                    width: auto !important;
+                    margin-right: 8px !important;
+                    color: var(--acu-text-sub); 
+                    font-size: 0.9em; 
+                    line-height: 1.5; 
+                    padding-top: 0;
+                }
+                
+                .acu-card-value { 
+                    display: block !important; 
+                    width: auto !important; 
+                    margin: 0 !important; 
+                    text-align: left !important; 
+                    word-break: break-all !important; 
+                    white-space: pre-wrap !important; 
+                    line-height: 1.5 !important; 
+                    color: var(--acu-text-main); 
+                    font-size: 1em; 
+                }
+                
+                .acu-badge { display: inline-block; padding: 1px 8px; border-radius: 12px; font-size: 0.9em; font-weight: 500; line-height: 1.2; }
+                .acu-badge-green { background: rgba(39, 174, 96, 0.15); color: #27ae60; }
+                .acu-badge-neutral { background: var(--acu-badge-bg); color: var(--acu-text-main); border: 1px solid var(--acu-border); }
+
+                /* --- [核心] 分页控件样式 --- */
+                .acu-panel-footer {
+                    flex: 0 0 auto;
+                    padding: 8px;
+                    border-top: 1px dashed var(--acu-border);
+                    background: var(--acu-table-head);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    gap: 5px;
+                    flex-wrap: wrap;
+                }
+                .acu-page-btn {
+                    padding: 4px 10px;
+                    min-width: 32px;
+                    height: 28px;
+                    border-radius: 4px;
+                    border: 1px solid var(--acu-border);
+                    background: var(--acu-btn-bg);
+                    color: var(--acu-text-main);
+                    cursor: pointer;
+                    font-size: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: all 0.2s;
+                }
+                .acu-page-btn:hover:not(.disabled):not(.active) {
+                    background: var(--acu-btn-hover);
+                    transform: translateY(-1px);
+                }
+                .acu-page-btn.active {
+                    background: var(--acu-accent);
+                    color: #fff;
+                    border-color: var(--acu-accent);
+                    font-weight: bold;
+                }
+                .acu-page-btn.disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                .acu-page-info {
+                    font-size: 12px;
+                    color: var(--acu-text-sub);
+                    margin: 0 10px;
+                }
+
+                /* --- 菜单与弹窗 --- */
+                .acu-menu-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: transparent; z-index: 2147483645 !important; }
+                .acu-cell-menu { position: fixed !important; background-color: #fff !important; border: 1px solid #ccc !important; box-shadow: 0 6px 20px rgba(0,0,0,0.3) !important; z-index: 2147483647 !important; border-radius: 8px; overflow: hidden; min-width: 150px; }
+                .acu-wrapper.acu-theme-dark ~ .acu-cell-menu, body.dark .acu-cell-menu { background-color: #333 !important; border-color: #555 !important; }
+                .acu-cell-menu-item { padding: 12px 16px; cursor: pointer; font-size: 14px; display: flex; gap: 12px; align-items: center; color: #333; font-weight: 500; background: transparent; }
+                .acu-wrapper.acu-theme-dark ~ .acu-cell-menu .acu-cell-menu-item { color: #eee; }
+                .acu-cell-menu-item:hover { background-color: #f0f0f0; }
+                .acu-wrapper.acu-theme-dark ~ .acu-cell-menu .acu-cell-menu-item:hover { background-color: #444; }
+                .acu-cell-menu-item#act-delete { color: #e74c3c; }
+                .acu-cell-menu-item#act-delete:hover { background-color: #fff0f0; }
+                .acu-cell-menu-item#act-send { color: #3498db; }
+                .acu-cell-menu-item#act-close { border-top: 1px solid #eee; color: #999; }
+
+                .acu-edit-overlay { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75) !important; z-index: 2147483646 !important; display: flex !important; justify-content: center !important; align-items: center !important; backdrop-filter: blur(2px); }
+                .acu-edit-dialog { background-color: #333 !important; width: 95%; max-width: 500px; max-height: 85vh; padding: 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 15px 50px rgba(0,0,0,0.6); color: #fff !important; border: 1px solid #555; margin: auto !important; overflow-y: auto; }
+                .acu-edit-title { margin: 0; font-size: 16px; font-weight: bold; color: #fff; padding-bottom: 8px; border-bottom: 1px solid #555; }
+                .acu-edit-textarea { width: 100%; height: 140px; padding: 12px; border: none; background-color: rgba(0,0,0,0.3) !important; color: #fff !important; border-radius: 6px; resize: vertical; box-sizing: border-box; font-size: 14px; }
+                .acu-edit-textarea:focus { outline: 1px solid #aaa; }
+                .acu-dialog-btns { display: flex; justify-content: flex-end; gap: 20px; margin-top: 10px; }
+                .acu-dialog-btn { background: none; border: none; cursor: pointer; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 6px; color: #ccc; transition: color 0.2s; }
+                .acu-dialog-btn:hover { color: #fff; }
+                .acu-btn-confirm { color: #4cd964; }
+                .acu-btn-confirm:hover { color: #6eff88; }
+                
+                .acu-order-controls { display: none; width: 100%; text-align: center; background: var(--acu-table-head); padding: 5px; margin-bottom: 5px; border-radius: 4px; border: 1px dashed var(--acu-border); }
+                .acu-order-controls.visible { display: block; }
+                .acu-nav-container.editing-order .acu-nav-btn { border: 1px dashed #f0ad4e; cursor: grab; opacity: 0.8; }
+                .acu-divider { width: 1px; height: 18px; background: var(--acu-border); margin: 0 6px; }
+                .acu-actions-group { display: flex; align-items: center; flex-wrap: nowrap; margin-left: auto; }
+                
+                .acu-settings-item { margin-bottom: 15px; }
+                .acu-settings-label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 13px; color: #ccc; }
+                .acu-settings-val { float: right; color: #4cd964; font-size: 12px; }
+                .acu-slider { width: 100%; height: 4px; background: #555; border-radius: 2px; outline: none; -webkit-appearance: none; }
+                .acu-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: #fff; border-radius: 50%; cursor: pointer; }
+                .acu-select { width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #555; color: #fff; border-radius: 4px; outline: none; }
+                .acu-checkbox { margin-right: 10px; }
+                .acu-btn-block { width: 100%; padding: 10px; background: #444; color: #eee; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
+                .acu-btn-block:hover { background: #555; color: #fff; }
+                
+                /* --- 收起/展开 --- */
+                .acu-expand-trigger {
+                    background: var(--acu-bg-nav); border: 1px solid var(--acu-border); 
+                    box-shadow: 0 2px 6px var(--acu-shadow);
+                    cursor: pointer; color: var(--acu-text-main); font-size: 13px; font-weight: bold;
+                    display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+                    z-index: 2147483645 !important;
+                }
+                .acu-expand-trigger:hover { background: var(--acu-btn-hover); transform: translateY(-2px); }
+
+                .acu-align-right { margin-left: auto; align-self: flex-end; }
+                .acu-align-left { margin-right: auto; margin-left: 0; align-self: flex-start; }
+                
+                .acu-nav-container.acu-left-mode .acu-actions-group { order: -1; margin-left: 0; margin-right: 10px; }
+
+                .acu-col-bar { width: 100%; justify-content: center; padding: 8px 10px; border-radius: 6px; }
+                .acu-col-pill { width: auto !important; padding: 6px 16px; border-radius: 50px; }
+                .acu-col-mini { width: 40px !important; height: 40px !important; padding: 0; justify-content: center; border-radius: 50%; }
+                .acu-col-mini span { display: none; }
+                .acu-expand-trigger:hover { background: var(--acu-btn-hover); transform: translateY(-2px); }
+                #acu-btn-collapse { color: var(--acu-text-sub); }
+                #acu-btn-collapse:hover { color: var(--acu-text-main); background: rgba(0,0,0,0.05); }
+            </style>
+        `;
+        $('head').append(styles);
+    };
+
+    const getTableData = () => { const api = getCore().getDB(); return api && api.exportTableAsJson ? api.exportTableAsJson() : null; };
+    const saveDataToDatabase = async (tableData) => {
+        if (isSaving) return false;
+        isSaving = true;
+        const api = getCore().getDB();
+        if (!api?.importTableAsJson) { isSaving = false; return false; }
+        const $saveBtn = $('#acu-btn-save-global');
+        const originalIcon = $saveBtn.html();
+        $saveBtn.html('<i class="fa-solid fa-spinner fa-spin"></i>').prop('disabled', true);
+        try {
+            const deletions = getPendingDeletions();
+            const processedData = JSON.parse(JSON.stringify(tableData));
+            Object.keys(deletions).forEach(tableKey => {
+                if (processedData[tableKey]?.content) {
+                    deletions[tableKey].sort((a, b) => b - a).forEach(rowIdx => {
+                        if (processedData[tableKey].content[rowIdx + 1]) processedData[tableKey].content.splice(rowIdx + 1, 1);
+                    });
+                }
+            });
+            const success = await api.importTableAsJson(JSON.stringify(processedData));
+            if (success) {
+                savePendingDeletions({});
+                if (window.toastr) window.toastr.success('保存成功！');
+            }
+            isSaving = false; return success;
+        } catch (e) { console.error(e); isSaving = false; return false; } finally { $saveBtn.html(originalIcon).prop('disabled', false); }
+    };
+    const processJsonData = (json) => {
+        const tables = {}; if (!json || typeof json !== 'object') return null;
+        for (const sheetId in json) {
+            if (json[sheetId]?.name) {
+                const sheet = json[sheetId];
+                tables[sheet.name] = { key: sheetId, headers: sheet.content[0] || [], rows: sheet.content.slice(1), rawContent: sheet.content };
+            }
+        }
+        return Object.keys(tables).length > 0 ? tables : null;
+    };
+
+    const showSettingsModal = () => {
+        const { $ } = getCore();
+        $('.acu-edit-overlay').remove();
+        const config = getConfig();
+
+        const dialog = $(`
+            <div class="acu-edit-overlay">
+                <div class="acu-edit-dialog">
+                    <div class="acu-edit-title">设置选项</div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">布局模式 (Layout)</label>
+                        <select id="cfg-layout" class="acu-select">
+                            <option value="horizontal" ${config.layout !== 'vertical' ? 'selected' : ''}>↔️ 横向滚动 (默认)</option>
+                            <option value="vertical" ${config.layout === 'vertical' ? 'selected' : ''}>↕️ 竖向网格 (PC推荐)</option>
+                        </select>
+                    </div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">收起后的样式 (Collapsed Style)</label>
+                        <select id="cfg-col-style" class="acu-select">
+                            <option value="bar" ${config.collapseStyle === 'bar' ? 'selected' : ''}>🟦 全宽长条</option>
+                            <option value="pill" ${config.collapseStyle === 'pill' ? 'selected' : ''}>💊 胶囊按钮</option>
+                            <option value="mini" ${config.collapseStyle === 'mini' ? 'selected' : ''}>🔘 迷你圆钮</option>
+                        </select>
+                    </div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">收起后的位置 (Position)</label>
+                        <select id="cfg-col-align" class="acu-select">
+                            <option value="right" ${config.collapseAlign !== 'left' ? 'selected' : ''}>➡️ 靠右 (默认)</option>
+                            <option value="left" ${config.collapseAlign === 'left' ? 'selected' : ''}>⬅️ 靠左</option>
+                        </select>
+                    </div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">背景主题</label>
+                        <select id="cfg-theme" class="acu-select">
+                            ${THEMES.map(t => `<option value="${t.id}" ${t.id === config.theme ? 'selected' : ''}>${t.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">卡片宽度 <span class="acu-settings-val" id="val-width">${config.cardWidth}px</span></label>
+                        <input type="range" id="cfg-width" class="acu-slider" min="200" max="500" step="10" value="${config.cardWidth}">
+                    </div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">字体大小 <span class="acu-settings-val" id="val-font">${config.fontSize}px</span></label>
+                        <input type="range" id="cfg-font" class="acu-slider" min="12" max="20" step="1" value="${config.fontSize}">
+                    </div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">每页显示条数 <span class="acu-settings-val" id="val-per-page">${config.itemsPerPage}</span></label>
+                        <input type="range" id="cfg-per-page" class="acu-slider" min="10" max="200" step="10" value="${config.itemsPerPage}">
+                    </div>
+                    <div class="acu-settings-item">
+                        <label class="acu-settings-label">
+                            <input type="checkbox" id="cfg-new" class="acu-checkbox" ${config.highlightNew ? 'checked' : ''}>
+                            高亮变化/新增的内容 (Diff)
+                        </label>
+                    </div>
+                    <div class="acu-divider" style="width:100%; height:1px; margin:15px 0; background:#555;"></div>
+                    <button class="acu-btn-block" id="btn-enter-sort"><i class="fa-solid fa-arrows-alt"></i> 进入表格排序模式</button>
+                    <div class="acu-dialog-btns" style="margin-top:20px">
+                        <button class="acu-dialog-btn" id="dlg-close"><i class="fa-solid fa-check"></i> 完成</button>
+                    </div>
+                </div>
+            </div>
+        `);
+        $('body').append(dialog);
+
+        dialog.find('#cfg-layout').on('change', function () { saveConfig({ layout: $(this).val() }); renderInterface(); });
+        dialog.find('#cfg-col-style').on('change', function () { saveConfig({ collapseStyle: $(this).val() }); renderInterface(); });
+        dialog.find('#cfg-col-align').on('change', function () { saveConfig({ collapseAlign: $(this).val() }); renderInterface(); });
+        dialog.find('#cfg-theme').on('change', function () { saveConfig({ theme: $(this).val() }); });
+        dialog.find('#cfg-width').on('input', function () { const val = $(this).val(); dialog.find('#val-width').text(val + 'px'); saveConfig({ cardWidth: val }); });
+        dialog.find('#cfg-font').on('input', function () { const val = $(this).val(); dialog.find('#val-font').text(val + 'px'); saveConfig({ fontSize: val }); });
+        dialog.find('#cfg-per-page').on('input', function () { const val = $(this).val(); dialog.find('#val-per-page').text(val); saveConfig({ itemsPerPage: parseInt(val) }); });
+        dialog.find('#cfg-new').on('change', function () { saveConfig({ highlightNew: $(this).is(':checked') }); renderInterface(); });
+
+        dialog.find('#btn-enter-sort').click(() => {
+            dialog.remove();
+            toggleOrderEditMode();
+        });
+        dialog.find('#dlg-close').click(() => dialog.remove());
+        dialog.on('click', function (e) { if ($(e.target).hasClass('acu-edit-overlay')) dialog.remove(); });
+    };
+
+    const renderInterface = () => {
+        const { $ } = getCore();
+
+        // 1. 记忆滚动条
+        let lastScrollX = 0;
+        let lastScrollY = 0;
+        const $oldContent = $('.acu-panel-content');
+        if ($oldContent.length) {
+            lastScrollX = $oldContent.scrollLeft();
+            lastScrollY = $oldContent.scrollTop();
+        }
+
+        $('.acu-wrapper').remove();
+
+        // --- 优先使用缓存 ---
+        let rawData;
+        if (hasUnsavedChanges && cachedRawData) {
+            rawData = cachedRawData;
+        } else {
+            rawData = getTableData();
+            if (rawData) cachedRawData = JSON.parse(JSON.stringify(rawData));
+        }
+
+        if (!rawData) return;
+        const tables = processJsonData(rawData);
+        if (!tables) return;
+
+        currentDiffMap = generateDiffMap(rawData);
+
+        const savedOrder = getSavedTableOrder();
+        let orderedNames = Object.keys(tables);
+        if (savedOrder) orderedNames = savedOrder.filter(n => tables[n]).concat(orderedNames.filter(n => !savedOrder.includes(n)));
+        const activeTab = getActiveTabState();
+        let currentTabName = activeTab && tables[activeTab] ? activeTab : null;
+        const config = getConfig();
+        const isCollapsed = getCollapsedState();
+
+        const layoutClass = config.layout === 'vertical' ? 'acu-layout-vertical' : '';
+
+        let html = `<div class="acu-wrapper acu-theme-${config.theme} ${layoutClass}" style="--acu-card-width:${config.cardWidth}px; --acu-font-size:${config.fontSize}px">`;
+
+        if (isCollapsed) {
+            const colStyleClass = `acu-col-${config.collapseStyle || 'bar'}`;
+            const alignClass = `acu-align-${config.collapseAlign || 'right'}`;
+            html += `
+                <div class="acu-expand-trigger ${colStyleClass} ${alignClass}" id="acu-btn-expand">
+                    <i class="fa-solid fa-table"></i> <span>数据库助手 (${Object.keys(tables).length})</span>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="acu-data-display ${currentTabName ? 'visible' : ''}" id="acu-data-area">
+                    ${currentTabName ? renderTableContent(tables[currentTabName], currentTabName) : ''}
+                </div>
+                <div class="acu-nav-container" id="acu-nav-bar">
+                    <div class="acu-order-controls" id="acu-order-hint"><i class="fa-solid fa-arrows-alt"></i> 拖动调整顺序，完成后点击保存退出</div>
+            `;
+            orderedNames.forEach(name => {
+                const iconClass = getIconForTableName(name);
+                const isActive = currentTabName === name ? 'active' : '';
+                html += `<button class="acu-nav-btn ${isActive}" data-table="${name}"><i class="fa-solid ${iconClass}"></i><span>${name}</span></button>`;
+            });
+            html += `
+                    <div class="acu-spacer" style="flex-grow:1"></div>
+                    <div class="acu-actions-group">
+                        <div class="acu-divider"></div>
+                        <button class="acu-action-btn" id="acu-btn-save-global" title="保存所有修改"><i class="fa-solid fa-save"></i></button>
+                        <button class="acu-action-btn" id="acu-btn-settings" title="全能设置"><i class="fa-solid fa-cog"></i></button>
+                        <button class="acu-action-btn" id="acu-btn-refresh" title="重新加载"><i class="fa-solid fa-sync-alt"></i></button>
+                        <button class="acu-action-btn" id="acu-btn-collapse" title="收起面板" style="margin-left: 2px;"><i class="fa-solid fa-chevron-down"></i></button>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        insertHtmlToPage(html);
+        bindEvents(tables);
+        updateSaveButtonState();
+
+        setTimeout(() => {
+            const $newContent = $('.acu-panel-content');
+            if ($newContent.length) {
+                $newContent.scrollLeft(lastScrollX);
+                $newContent.scrollTop(lastScrollY);
+            }
+        }, 0);
+    };
+
+    const insertHtmlToPage = (html) => {
+        const { $ } = getCore();
+        const $chat = $('#chat');
+        $('.acu-wrapper').remove();
+        if ($chat.length) {
+            $chat.append(html);
+        } else {
+            $('body').append(html);
+        }
+        if (observer) observer.disconnect();
+        observer = new MutationObserver((mutations) => {
+            const $c = $('#chat');
+            if ($c.length) {
+                const lastChild = $c.children().last()[0];
+                const $wrapper = $('.acu-wrapper');
+                if ($wrapper.length && lastChild !== $wrapper[0]) {
+                    $c.append($wrapper);
+                }
+            }
+        });
+        if ($chat.length) {
+            observer.observe($chat[0], { childList: true });
+        }
+    };
+
+    const renderTableContent = (tableData, tableName) => {
+        if (!tableData || !tableData.rows.length) return `
+            <div class="acu-panel-header">
+                <div class="acu-panel-title"><i class="fa-solid ${getIconForTableName(tableName)}"></i> ${tableName}</div>
+                <button class="acu-close-btn" title="关闭"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="acu-panel-content"><div style="text-align:center;color:var(--acu-text-sub);padding:20px;">暂无数据</div></div>`;
+
+        const config = getConfig();
+        const pendingDeletions = getPendingDeletions()[tableData.key] || [];
+        const headers = tableData.headers.slice(1);
+        let titleColIndex = 1;
+        if (tableName.includes('总结') || tableName.includes('大纲')) {
+            const idx = tableData.headers.findIndex(h => h && (h.includes('索引') || h.includes('编号') || h.includes('代码')));
+            if (idx > 0) titleColIndex = idx;
+        }
+
+        // --- 分页逻辑 ---
+        const itemsPerPage = config.itemsPerPage || 50;
+        const totalItems = tableData.rows.length;
+        const totalPages = Math.ceil(totalItems / itemsPerPage);
+        let currentPage = tablePageStates[tableName] || 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+        tablePageStates[tableName] = currentPage;
+        const startIdx = (currentPage - 1) * itemsPerPage;
+        const endIdx = startIdx + itemsPerPage;
+        const rowsToRender = tableData.rows.slice(startIdx, endIdx);
+
+        let html = `
+            <div class="acu-panel-header">
+                <div class="acu-panel-title">
+                    <i class="fa-solid ${getIconForTableName(tableName)}"></i> 
+                    ${tableName} <span style="font-size:12px;color:var(--acu-text-sub);font-weight:normal;margin-left:5px">(${startIdx + 1}-${Math.min(endIdx, totalItems)} / 共${totalItems}项)</span>
+                </div>
+                <div class="acu-header-actions">
+                    <div class="acu-search-wrapper">
+                        <i class="fa-solid fa-search acu-search-icon"></i>
+                        <input type="text" class="acu-search-input" placeholder="搜索..." />
+                    </div>
+                    <button class="acu-close-btn" title="关闭"><i class="fa-solid fa-times"></i></button>
+                </div>
+            </div>
+            <div class="acu-panel-content">
+                <div class="acu-card-grid">`;
+
+        rowsToRender.forEach((row, i) => {
+            const realRowIdx = startIdx + i;
+            const isPending = pendingDeletions.includes(realRowIdx);
+            const cardTitle = row[titleColIndex] || '未命名';
+            const showDefaultIndex = (titleColIndex === 1);
+
+            const isRowNew = currentDiffMap.has(`${tableName}-row-${realRowIdx}`);
+            const rowClass = isRowNew && config.highlightNew ? 'acu-highlight-changed' : '';
+
+            html += `<div class="acu-data-card ${isPending ? 'pending-deletion' : ''}">
+                        <div class="acu-card-header">
+                            <span class="acu-card-index">${showDefaultIndex ? '#' + (realRowIdx + 1) : ''}</span>
+                            <span class="acu-cell acu-editable-title ${rowClass}" data-key="${tableData.key}" data-row="${realRowIdx}" data-col="${titleColIndex}" data-val="${encodeURIComponent(cardTitle)}" title="点击编辑标题">${cardTitle}</span>
+                        </div>
+                        <div class="acu-card-body">`;
+
+            row.forEach((cell, cIdx) => {
+                if (cIdx > 0 && cIdx !== titleColIndex) {
+                    const headerName = headers[cIdx - 1] || `属性${cIdx}`;
+                    const badgeStyle = getBadgeStyle(cell);
+                    const isCellChanged = currentDiffMap.has(`${tableName}-${realRowIdx}-${cIdx}`);
+                    const cellHighlight = isCellChanged && config.highlightNew ? 'acu-highlight-changed' : '';
+                    let contentHtml = badgeStyle ? `<span class="acu-badge ${badgeStyle}">${cell}</span>` : cell;
+                    html += `<div class="acu-card-row acu-cell" data-key="${tableData.key}" data-row="${realRowIdx}" data-col="${cIdx}" data-val="${encodeURIComponent(cell)}">
+                            <div class="acu-card-label">${headerName}</div>
+                            <div class="acu-card-value ${cellHighlight}">${contentHtml}</div>
+                        </div>`;
+                }
+            });
+            html += `   </div></div>`;
+        });
+        html += `</div></div>`;
+
+        // --- 分页控件 ---
+        if (totalPages > 1) {
+            html += `<div class="acu-panel-footer">`;
+            html += `<button class="acu-page-btn ${currentPage === 1 ? 'disabled' : ''}" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}><i class="fa-solid fa-chevron-left"></i></button>`;
+            const range = [];
+            if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) range.push(i);
+            } else {
+                if (currentPage <= 4) {
+                    range.push(1, 2, 3, 4, 5, '...', totalPages);
+                } else if (currentPage >= totalPages - 3) {
+                    range.push(1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+                } else {
+                    range.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+                }
+            }
+            range.forEach(p => {
+                if (p === '...') {
+                    html += `<span class="acu-page-info">...</span>`;
+                } else {
+                    html += `<button class="acu-page-btn ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`;
+                }
+            });
+            html += `<button class="acu-page-btn ${currentPage === totalPages ? 'disabled' : ''}" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}><i class="fa-solid fa-chevron-right"></i></button>`;
+            html += `</div>`;
+        }
+        return html;
+    };
+
+    const closePanel = () => {
+        const { $ } = getCore();
+        $('#acu-data-area').removeClass('visible');
+        $('.acu-nav-btn').removeClass('active');
+        saveActiveTabState(null);
+    };
+
+    const bindEvents = (tables) => {
+        const { $ } = getCore();
+
+        $('#acu-data-area, .acu-nav-container').off('click.prevent mousedown.prevent')
+            .on('click.prevent mousedown.prevent', function (e) { e.stopPropagation(); });
+
+        $(document).off('click.acu_autoclose').on('click.acu_autoclose', function (e) {
+            if ($('#acu-data-area').hasClass('visible')) {
+                if (!$(e.target).closest('.acu-cell-menu').length &&
+                    !$(e.target).closest('.acu-edit-overlay').length &&
+                    !$(e.target).closest('.acu-wrapper').length) {
+                    closePanel();
+                }
+            }
+        });
+
+        $('.acu-nav-btn').off('click').on('click', function (e) {
+            e.stopPropagation(); if (isEditingOrder) return;
+            const tableName = $(this).data('table');
+            if ($(this).hasClass('active')) { closePanel(); } else {
+                $('.acu-nav-btn').removeClass('active'); $(this).addClass('active');
+                $('#acu-data-area').html(renderTableContent(tables[tableName], tableName)).addClass('visible');
+                saveActiveTabState(tableName); bindDataAreaEvents();
+            }
+        });
+
+        $('#acu-btn-expand').off('click').on('click', (e) => { e.stopPropagation(); saveCollapsedState(false); renderInterface(); });
+        $('#acu-btn-collapse').off('click').on('click', (e) => { e.stopPropagation(); saveCollapsedState(true); renderInterface(); });
+        $('#acu-btn-refresh').off('click').on('click', (e) => { e.stopPropagation(); renderInterface(); if (window.toastr) window.toastr.info('已刷新'); });
+
+        $('#acu-btn-settings').off('click').on('click', (e) => {
+            e.stopPropagation();
+            if (isEditingOrder) { toggleOrderEditMode(); } else { showSettingsModal(); }
+        });
+
+        // 保存后强制刷新
+        $('#acu-btn-save-global').off('click').on('click', async function (e) {
+            e.stopPropagation();
+            const dataToSave = hasUnsavedChanges ? cachedRawData : getTableData();
+            if (dataToSave) {
+                const success = await saveDataToDatabase(dataToSave);
+                if (success) {
+                    hasUnsavedChanges = false;
+                    cachedRawData = null;
+                    renderInterface();
+                }
+            }
+        });
+        bindDataAreaEvents();
+    };
+
+    const bindDataAreaEvents = () => {
+        const { $ } = getCore();
+        $('.acu-cell').off('click').on('click', function (e) { e.stopPropagation(); showCellMenu(e, this); });
+        $('.acu-close-btn').off('click').on('click', function (e) { e.stopPropagation(); closePanel(); });
+        $('.acu-search-input').on('input', function () {
+            const val = $(this).val().toLowerCase();
+            $('.acu-data-card').each(function () {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.includes(val));
+            });
+        });
+        // 分页按钮事件
+        $('.acu-page-btn').off('click').on('click', function (e) {
+            e.stopPropagation();
+            if ($(this).hasClass('disabled') || $(this).hasClass('active')) return;
+            const newPage = parseInt($(this).data('page'));
+            const activeTab = getActiveTabState();
+            if (activeTab) {
+                tablePageStates[activeTab] = newPage;
+                renderInterface();
+                setTimeout(() => { $('.acu-panel-content').scrollTop(0); }, 10);
+            }
+        });
+    };
+
+    const toggleOrderEditMode = () => {
+        const { $ } = getCore();
+        isEditingOrder = !isEditingOrder;
+        const $container = $('#acu-nav-bar'); const $hint = $('#acu-order-hint'); const $btn = $('#acu-btn-settings');
+        if (isEditingOrder) {
+            $container.addClass('editing-order'); $hint.show(); $btn.html('<i class="fa-solid fa-check"></i>').css('color', 'green');
+            $('#acu-data-area').removeClass('visible'); initSortable();
+        } else {
+            $container.removeClass('editing-order'); $hint.hide(); $btn.html('<i class="fa-solid fa-cog"></i>').css('color', '');
+            const newOrder = []; $('.acu-nav-btn').each(function () { newOrder.push($(this).data('table')); });
+            saveTableOrder(newOrder); renderInterface();
+        }
+    };
+
+    const initSortable = () => {
+        const { $ } = getCore();
+        const $btns = $('.acu-nav-btn');
+        $btns.attr('draggable', true);
+        $btns.on('dragstart', function (e) { e.originalEvent.dataTransfer.setData('text/plain', $(this).index()); $(this).css('opacity', '0.5'); });
+        $btns.on('dragend', function () { $(this).css('opacity', '1'); });
+        $btns.on('dragover', function (e) { e.preventDefault(); });
+        $btns.on('drop', function (e) {
+            e.preventDefault();
+            const fromIndex = parseInt(e.originalEvent.dataTransfer.getData('text/plain'));
+            const toIndex = $(this).index();
+            if (fromIndex !== toIndex) {
+                const $container = $('#acu-nav-bar');
+                const $allBtns = $container.children('.acu-nav-btn');
+                const $src = $allBtns.eq(fromIndex - $allBtns.first().index());
+                if (fromIndex < toIndex) $(this).after($src); else $(this).before($src);
+            }
+        });
+    };
+
+    const showCellMenu = (e, cell) => {
+        const { $ } = getCore();
+        $('.acu-cell-menu, .acu-menu-backdrop').remove();
+        const backdrop = $('<div class="acu-menu-backdrop"></div>');
+        $('body').append(backdrop);
+
+        const rowIdx = parseInt($(cell).data('row'));
+        const colIdx = parseInt($(cell).data('col'));
+        const tableKey = $(cell).data('key');
+        const content = decodeURIComponent($(cell).data('val'));
+
+        const pendingDeletions = getPendingDeletions()[tableKey] || [];
+        const isDeleted = pendingDeletions.includes(rowIdx);
+
+        let isModifiedLocal = false;
+        let originalValue = null;
+        if (hasUnsavedChanges && cachedRawData) {
+            const cleanData = getTableData();
+            if (cleanData && cleanData[tableKey]?.content[rowIdx + 1]) {
+                originalValue = cleanData[tableKey].content[rowIdx + 1][colIdx];
+                const currentValue = cachedRawData[tableKey].content[rowIdx + 1][colIdx];
+                if (String(originalValue) !== String(currentValue)) {
+                    isModifiedLocal = true;
+                }
+            }
+        }
+
+        const menu = $(`
+            <div class="acu-cell-menu">
+                <div class="acu-cell-menu-item" id="act-edit"><i class="fa-solid fa-pen"></i> 编辑内容</div>
+                <div class="acu-cell-menu-item" id="act-send"><i class="fa-solid fa-comment-dots"></i> 填入输入框</div>
+                ${isModifiedLocal
+                ? `<div class="acu-cell-menu-item" id="act-undo" style="color:#e67e22; border-top:1px solid #eee;"><i class="fa-solid fa-undo"></i> 撤销本次修改</div>`
+                : ''}
+                ${isDeleted
+                ? `<div class="acu-cell-menu-item" id="act-restore" style="color:#27ae60"><i class="fa-solid fa-undo"></i> 恢复整行</div>`
+                : `<div class="acu-cell-menu-item" id="act-delete" style="color:#e74c3c"><i class="fa-solid fa-trash"></i> 删除整行</div>`
+            }
+                <div class="acu-cell-menu-item" id="act-close"><i class="fa-solid fa-times"></i> 关闭菜单</div>
+            </div>
+        `);
+        $('body').append(menu);
+
+        const winWidth = $(window).width();
+        const winHeight = $(window).height();
+        const mWidth = menu.outerWidth();
+        const mHeight = menu.outerHeight();
+        let left = e.clientX + 10;
+        let top = e.clientY + 10;
+        if (left + mWidth > winWidth) left = e.clientX - mWidth - 10;
+        if (left < 5) left = 5;
+        if (top + mHeight > winHeight) top = e.clientY - mHeight - 10;
+        if (top < 5) top = 5;
+        menu.css({ top: top + 'px', left: left + 'px' });
+
+        const closeAll = () => { menu.remove(); backdrop.remove(); };
+        backdrop.on('click', closeAll);
+        menu.find('#act-close').click(closeAll);
+
+        menu.find('#act-send').click(() => {
+            sendToChatBox(content);
+            closeAll();
+        });
+
+        menu.find('#act-undo').click(() => {
+            if (cachedRawData && originalValue !== null) {
+                cachedRawData[tableKey].content[rowIdx + 1][colIdx] = originalValue;
+                const badgeStyle = getBadgeStyle(originalValue);
+                const newHtml = badgeStyle ? `<span class="acu-badge ${badgeStyle}">${originalValue}</span>` : originalValue;
+                if ($(cell).hasClass('acu-editable-title')) $(cell).html(originalValue);
+                else $(cell).find('.acu-card-value').html(newHtml);
+                $(cell).data('val', encodeURIComponent(originalValue));
+                $(cell).removeClass('acu-highlight-changed');
+                if ($('.acu-highlight-changed').length === 0) {
+                    hasUnsavedChanges = false;
+                    updateSaveButtonState();
+                }
+                if (window.toastr) window.toastr.info('已恢复原始值');
+            }
+            closeAll();
+        });
+
+        menu.find('#act-delete').click(() => {
+            const dels = getPendingDeletions();
+            if (!dels[tableKey]) dels[tableKey] = []; dels[tableKey].push(rowIdx); savePendingDeletions(dels);
+            $(cell).closest('.acu-data-card').addClass('pending-deletion'); closeAll();
+        });
+
+        menu.find('#act-restore').click(() => {
+            const dels = getPendingDeletions();
+            if (dels[tableKey]) { dels[tableKey] = dels[tableKey].filter(i => i !== rowIdx); savePendingDeletions(dels); }
+            $(cell).closest('.acu-data-card').removeClass('pending-deletion'); closeAll();
+        });
+
+        menu.find('#act-edit').click(() => {
+            closeAll();
+            showEditDialog(content, (newVal) => {
+                if (!cachedRawData) cachedRawData = getTableData();
+                if (cachedRawData && cachedRawData[tableKey]?.content[rowIdx + 1]) {
+                    cachedRawData[tableKey].content[rowIdx + 1][colIdx] = newVal;
+                }
+                const badgeStyle = getBadgeStyle(newVal);
+                const newHtml = badgeStyle ? `<span class="acu-badge ${badgeStyle}">${newVal}</span>` : newVal;
+                if ($(cell).hasClass('acu-editable-title')) $(cell).html(newVal);
+                else $(cell).find('.acu-card-value').html(newHtml);
+                $(cell).data('val', encodeURIComponent(newVal));
+                $(cell).addClass('acu-highlight-changed');
+                hasUnsavedChanges = true;
+                updateSaveButtonState();
+            });
+        });
+    };
+
+    const showEditDialog = (content, onSave) => {
+        const { $ } = getCore();
+        const dialog = $(`
+            <div class="acu-edit-overlay">
+                <div class="acu-edit-dialog">
+                    <div class="acu-edit-title">编辑单元格内容</div>
+                    <textarea class="acu-edit-textarea">${content}</textarea>
+                    <div class="acu-dialog-btns">
+                        <button class="acu-dialog-btn" id="dlg-cancel">
+                            <i class="fa-solid fa-times"></i> 取消
+                        </button>
+                        <button class="acu-dialog-btn acu-btn-confirm" id="dlg-save">
+                            <i class="fa-solid fa-check"></i> 保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `);
+        $('body').append(dialog);
+        const closeDialog = () => dialog.remove();
+        dialog.find('#dlg-cancel').click(closeDialog);
+        dialog.find('#dlg-save').click(() => { onSave(dialog.find('textarea').val()); closeDialog(); });
+        dialog.on('click', function (e) {
+            if ($(e.target).hasClass('acu-edit-overlay')) closeDialog();
+        });
+    };
+
+    const init = () => {
+        if (isInitialized) return;
+        addStyles();
+        const loop = () => {
+            if (getCore().getDB()?.exportTableAsJson) {
+                renderInterface();
+                const api = getCore().getDB();
+
+                if (api.registerTableUpdateCallback) {
+                    api.registerTableUpdateCallback(() => {
+                        if (!hasUnsavedChanges) renderInterface();
+                    });
+
+                    if (api.registerTableFillStartCallback) {
+                        api.registerTableFillStartCallback(() => {
+                            const current = api.exportTableAsJson();
+                            if (current) saveSnapshot(current);
+                        });
+                    }
+                }
+                isInitialized = true;
+            } else setTimeout(loop, 1000);
+        };
+        loop();
+    };
+    const { $ } = getCore();
+    if ($) $(document).ready(init); else window.addEventListener('load', init);
+})();
