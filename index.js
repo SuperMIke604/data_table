@@ -4846,7 +4846,7 @@ function _dpRenderFull() {
     _dpBindEvents(wrapper);
 
     // 应用字体大小
-    wrapper.style.fontSize = _dpState.fontSize + 'px';
+    wrapper.style.setProperty('--dp-font-size', _dpState.fontSize + 'px');
 
     // 恢复滚动位置
     setTimeout(() => {
@@ -5137,7 +5137,7 @@ function _dpShowFontSizeDialog() {
         numInput.value = size;
         preview.style.fontSize = size + 'px';
         // 实时应用到窗口
-        if (wrapper) wrapper.style.fontSize = size + 'px';
+        if (wrapper) wrapper.style.setProperty('--dp-font-size', size + 'px');
     };
 
     slider.addEventListener('input', () => applySize(slider.value));
