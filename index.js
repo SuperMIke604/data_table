@@ -4579,6 +4579,7 @@ const _dpState = {
     collapsed: false,          // 收起/展开
     activeTabName: null,       // 当前激活的表名
     windowId: 'dp-preview-window', // 浮动窗口 ID
+    fontSize: 14,                  // 全局字体大小 (px)
 };
 
 /**
@@ -4680,6 +4681,10 @@ async function showDataPreview() {
         _dpState.collapsed = false;
         _dpState.activeTabName = null;
 
+        // 加载字体大小设置
+        const savedFontSize = settings.dpFontSize || 14;
+        _dpState.fontSize = savedFontSize;
+
         // 使用独立浮动窗口渲染
         createDataManageWindow({
             id: _dpState.windowId,
@@ -4743,6 +4748,7 @@ function _dpRenderFull() {
                     <input type="checkbox" data-dp-action="diff-toggle" ${_dpState.diffMode ? 'checked' : ''} />
                     仅显示变化
                 </label>
+                <button class="dp-action-btn" data-dp-action="font-size" title="字体大小"><i class="fa-solid fa-text-height"></i></button>
                 <button class="dp-action-btn" data-dp-action="undo" title="撤销" ${_dpState.undoStack.length ? '' : 'disabled'}><i class="fa-solid fa-rotate-left"></i></button>
             </div>
         </div>`;
@@ -4838,6 +4844,9 @@ function _dpRenderFull() {
 
     // 绑定事件
     _dpBindEvents(wrapper);
+
+    // 应用字体大小
+    wrapper.style.fontSize = _dpState.fontSize + 'px';
 
     // 恢复滚动位置
     setTimeout(() => {
@@ -5017,6 +5026,9 @@ function _dpHandleAction(action, target, e) {
         case 'undo':
             _dpUndo();
             break;
+        case 'font-size':
+            _dpShowFontSizeDialog();
+            break;
         case 'edit-cell':
             _dpShowEditDialog(target);
             break;
@@ -5076,6 +5088,82 @@ function _dpShowEditDialog(target) {
         overlay.remove();
         _dpRenderFull();
         showToast('单元格已更新', 'success');
+    });
+}
+
+/* ---------- 字体大小设置 ---------- */
+
+function _dpShowFontSizeDialog() {
+    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
+
+    // 清除已有的字体弹窗
+    parentDoc.querySelectorAll('.dp-fontsize-overlay').forEach(el => el.remove());
+
+    const currentSize = _dpState.fontSize || 14;
+
+    const overlay = parentDoc.createElement('div');
+    overlay.className = 'dp-fontsize-overlay';
+    overlay.innerHTML = `
+        <div class="dp-fontsize-dialog">
+            <h4><i class="fa-solid fa-text-height"></i> 字体大小</h4>
+            <div class="dp-fontsize-body">
+                <div class="dp-fontsize-row">
+                    <span class="dp-fontsize-label">大小</span>
+                    <input type="range" class="dp-fontsize-slider" min="8" max="24" step="1" value="${currentSize}" />
+                    <input type="number" class="dp-fontsize-input" min="8" max="24" value="${currentSize}" />
+                    <span class="dp-fontsize-unit">px</span>
+                </div>
+                <div class="dp-fontsize-preview" style="font-size:${currentSize}px">
+                    预览文字 Preview Text
+                </div>
+            </div>
+            <div class="dp-fontsize-actions">
+                <button class="dp-dialog-btn" id="dp-fontsize-reset">重置</button>
+                <button class="dp-dialog-btn dp-btn-primary" id="dp-fontsize-confirm">确定</button>
+            </div>
+        </div>
+    `;
+
+    parentDoc.body.appendChild(overlay);
+
+    const slider = overlay.querySelector('.dp-fontsize-slider');
+    const numInput = overlay.querySelector('.dp-fontsize-input');
+    const preview = overlay.querySelector('.dp-fontsize-preview');
+    const wrapper = parentDoc.querySelector('.dp-wrapper');
+
+    const applySize = (val) => {
+        const size = Math.max(8, Math.min(24, parseInt(val) || 14));
+        slider.value = size;
+        numInput.value = size;
+        preview.style.fontSize = size + 'px';
+        // 实时应用到窗口
+        if (wrapper) wrapper.style.fontSize = size + 'px';
+    };
+
+    slider.addEventListener('input', () => applySize(slider.value));
+    numInput.addEventListener('input', () => applySize(numInput.value));
+
+    // 点击背景关闭
+    overlay.addEventListener('click', (ev) => {
+        if (ev.target === overlay) overlay.remove();
+    });
+
+    // 重置
+    overlay.querySelector('#dp-fontsize-reset').addEventListener('click', () => {
+        applySize(14);
+    });
+
+    // 确定
+    overlay.querySelector('#dp-fontsize-confirm').addEventListener('click', () => {
+        const size = parseInt(numInput.value) || 14;
+        _dpState.fontSize = size;
+        // 持久化
+        const s = loadSettings();
+        s.dpFontSize = size;
+        currentSettings.dpFontSize = size;
+        saveSettings();
+        overlay.remove();
+        showToast(`字体大小已设为 ${size}px`, 'success');
     });
 }
 
