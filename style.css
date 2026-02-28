@@ -2294,3 +2294,218 @@
         padding: 8px 6px;
     }
 }
+
+/* ============================================================
+   世界书AI更新 — 审核队列 & 编辑区
+   ============================================================ */
+
+.wb-pending-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--ios-text-secondary);
+    font-size: 14px;
+}
+
+.wb-pending-batch {
+    border: 1px solid var(--ios-border);
+    border-radius: 14px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    background: var(--ios-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.wb-pending-batch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(0, 122, 255, 0.08) 0%, rgba(0, 122, 255, 0.03) 100%);
+    border-bottom: 1px solid var(--ios-border);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wb-pending-batch-header span {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ios-text);
+}
+
+.wb-pending-batch-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.wb-pending-cmd {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(60, 60, 67, 0.1);
+}
+
+.wb-pending-cmd:last-child {
+    border-bottom: none;
+}
+
+.wb-pending-cmd-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.wb-pending-cmd-header>span {
+    font-size: 14px;
+    color: var(--ios-text);
+}
+
+.wb-pending-cmd-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.wb-pending-cmd-detail {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: var(--ios-gray);
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.wb-field-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+    align-items: flex-start;
+}
+
+.wb-field-label {
+    font-weight: 600;
+    color: var(--ios-text-secondary);
+    flex-shrink: 0;
+    min-width: 50px;
+}
+
+.wb-field-value {
+    color: var(--ios-text);
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+.wb-edited-tag {
+    background: #ff9500;
+    color: white;
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+/* 按钮 */
+.wb-btn {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--ios-gray);
+    color: var(--ios-text);
+    border: 1px solid var(--ios-border);
+}
+
+.wb-btn:hover {
+    background: var(--ios-gray-dark);
+    transform: translateY(-1px);
+}
+
+.wb-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.wb-btn-sm {
+    padding: 4px 8px;
+    font-size: 14px;
+    border-radius: 6px;
+    line-height: 1;
+}
+
+.wb-btn-approve-all {
+    background: linear-gradient(135deg, #34C759, #2DB84D);
+    color: white;
+    border: none;
+}
+
+.wb-btn-reject-all {
+    background: linear-gradient(135deg, #FF3B30, #E0342B);
+    color: white;
+    border: none;
+}
+
+/* 编辑区 */
+.wb-edit-area {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid rgba(0, 122, 255, 0.3);
+    border-radius: 10px;
+    background: rgba(0, 122, 255, 0.04);
+}
+
+.wb-edit-area label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ios-text);
+}
+
+.wb-edit-area input[type="text"],
+.wb-edit-area textarea,
+.wb-edit-area select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--ios-border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: monospace;
+    background: var(--ios-gray);
+    color: var(--ios-text);
+    box-sizing: border-box;
+    margin-top: 2px;
+}
+
+.wb-edit-area textarea:focus,
+.wb-edit-area input:focus {
+    outline: none;
+    border-color: var(--ios-blue);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.wb-edit-op {
+    padding: 8px;
+    margin-bottom: 8px;
+    border: 1px solid var(--ios-border);
+    border-radius: 8px;
+    background: var(--ios-surface);
+}
+
+.wb-btn-save-edit {
+    margin-top: 8px;
+    background: linear-gradient(135deg, var(--ios-blue), var(--ios-blue-active));
+    color: white;
+    border: none !important;
+}
+
+/* 世界书预设段 */
+.wb-prompt-segment {
+    transition: all 0.2s ease;
+}
+
+.wb-prompt-segment:hover {
+    border-color: rgba(0, 122, 255, 0.3);
+}
