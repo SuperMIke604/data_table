@@ -1,0 +1,1557 @@
+﻿diff --git a/index.js b/index.js
+index eae4e95..d779e6a 100644
+--- a/index.js
++++ b/index.js
+@@ -185,6 +185,26 @@ const DEFAULT_CHAR_CARD_PROMPT = [
+     }
+ ];
+ 
++// 涓栫晫涔I鏇存柊榛樿鎻愮ず璇?+const WB_UPDATE_DEFAULT_PROMPT = [
++    {
++        role: 'SYSTEM',
++        content: '浣犳槸涓€涓笓涓氱殑涓栫晫璁惧畾绠＄悊鍔╂墜銆備綘鐨勫敮涓€鑱岃矗鏄鏌ヨ鑹插璇濆巻鍙蹭笌褰撳墠涓栫晫涔﹀唴瀹癸紝璇嗗埆闇€瑕佽褰曟垨鏇存柊鐨勪笘鐣岃瀹氬彉鍖栵紝鐒跺悗杈撳嚭缁撴瀯鍖栫殑鏇存柊鎸囦护銆備綘涓嶅弬涓庤鑹叉壆婕旓紝涓嶈緭鍑轰换浣曞璇濆唴瀹广€?
++    },
++    {
++        role: 'SYSTEM',
++        content: '$5'
++    },
++    {
++        role: 'SYSTEM',
++        content: '浠ヤ笅鏄綋鍓嶄笘鐣屼功涓墍鏈夋潯鐩殑瀹屾暣淇℃伅锛堝寘鍚唴瀹规鏂囷級銆備綘鍙互鐩存帴鏌ョ湅姣忎釜鏉＄洰鐨勫唴瀹规潵鍒ゆ柇鏄惁闇€瑕佹洿鏂般€俓n\n$6'
++    },
++    {
++        role: 'USER',
++        content: '璇峰鏌ヤ互涓婂璇濆唴瀹瑰拰褰撳墠涓栫晫涔︾殑鍏ㄩ儴鏉＄洰鍐呭銆傚鏈夐渶瑕佹洿鏂般€佹柊澧炴垨鍒犻櫎鐨勬潯鐩紝璇锋寜鏍煎紡杈撳嚭鏇存柊鎸囦护锛堜紭鍏堜娇鐢?patch 杩涜澧為噺鏇存柊锛夈€傚鏃犻渶鏇存柊锛屽彧鍥炲"鏃犻渶鏇存柊"銆俓n\n$1'
++    }
++];
++
+ const DEFAULT_SETTINGS = {
+     // 鏇存柊閰嶇疆
+     autoUpdateFrequency: 0,        // 鏈€鏂癗灞備笉鏇存柊
+@@ -232,6 +252,26 @@ const DEFAULT_SETTINGS = {
+     // 涓栫晫涔︽帓搴忥紙缁熶竴涓€涓帓搴忓€硷紝鏁板€艰秺灏忚秺闈犲墠锛?     worldbookOrder: 100,
+     previewOnlyShowChanges: false,
++
++    // 涓栫晫涔I鏇存柊閰嶇疆
++    wbUpdateConfig: {
++        enabled: false,                // 鎬诲紑鍏?+        triggerMode: 'manual',         // 'manual' | 'withDbUpdate' | 'interval'
++        intervalFloors: 5,             // 闂撮殧妤煎眰鏁帮紙interval妯″紡锛?+        startAfterFloors: 3,           // 璧峰妤煎眰锛坕nterval妯″紡锛?+        confirmDelete: true,           // 鍒犻櫎鎿嶄綔闇€纭
++        maxCreatePerRound: 10,         // 鍗曟鏈€澶氬垱寤烘潯鐩暟
++        patchDuplicateGuard: true,     // patch杩藉姞鍘婚噸
++        contextMode: 'full',           // 'full' | 'summary'
++        maxContentChars: 0,            // 鍐呭鎴柇锛?=涓嶉檺锛?+        reviewDepth: 10,               // 瀹℃煡鏈€杩慛鏉℃秷鎭?+        excludeConstantFromPrompt: false,
++    },
++    // 涓栫晫涔︽洿鏂伴璁撅紙鐙珛浜庢暟鎹〃棰勮锛?+    wbUpdatePrompts: [
++        { name: '榛樿涓栫晫涔︽洿鏂伴璁?, prompt: WB_UPDATE_DEFAULT_PROMPT }
++    ],
++    wbUpdateCurrentPromptIndex: 0,
+ };
+ 
+ // 褰撳墠閰嶇疆
+@@ -1333,6 +1373,7 @@ function openDataManagePopup() {
+                 <button class="data-manage-tab-button" data-tab="api">API璁剧疆</button>
+                 <button class="data-manage-tab-button" data-tab="worldbook">涓栫晫涔?/button>
+                 <button class="data-manage-tab-button" data-tab="data">鏁版嵁绠＄悊</button>
++                <button class="data-manage-tab-button" data-tab="wbupdate">涓栫晫涔︽洿鏂?/button>
+             </div>
+             
+             <!-- Tab鍐呭 -->
+@@ -1602,6 +1643,106 @@ function openDataManagePopup() {
+                     </div>
+                 </div>
+             </div>
++
++            <div id="data-manage-tab-wbupdate" class="data-manage-tab-content">
++                <div class="data-manage-card">
++                    <h3>涓栫晫涔I鏇存柊</h3>
++                    <div class="data-manage-checkbox-group">
++                        <input type="checkbox" id="wb-update-enabled">
++                        <label for="wb-update-enabled">鍚敤涓栫晫涔I鏇存柊</label>
++                    </div>
++                    <div style="margin-top:10px;">
++                        <label>瑙﹀彂妯″紡:</label>
++                        <select id="wb-update-trigger-mode" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid var(--ios-border);">
++                            <option value="manual">鎵嬪姩瑙﹀彂</option>
++                            <option value="withDbUpdate">璺熼殢鏁版嵁琛ㄦ洿鏂?/option>
++                            <option value="interval">鐙珛闂撮殧瑙﹀彂锛堟瘡N妤硷級</option>
++                        </select>
++                    </div>
++                    <div id="wb-update-interval-settings" style="margin-top:10px;display:none;">
++                        <div class="data-manage-grid">
++                            <div>
++                                <label>璧峰妤煎眰:</label>
++                                <input type="number" id="wb-update-start-after" min="0" value="3" style="width:100%;">
++                            </div>
++                            <div>
++                                <label>闂撮殧妤煎眰鏁?</label>
++                                <input type="number" id="wb-update-interval-floors" min="1" value="5" style="width:100%;">
++                            </div>
++                        </div>
++                    </div>
++                </div>
++                <div class="data-manage-card">
++                    <h3>鏇存柊瑙勫垯</h3>
++                    <div class="data-manage-grid">
++                        <div>
++                            <label>瀹℃煡娑堟伅娣卞害:</label>
++                            <input type="number" id="wb-update-review-depth" min="1" value="10" style="width:100%;">
++                        </div>
++                        <div>
++                            <label>鍗曟鏈€澶у垱寤烘暟:</label>
++                            <input type="number" id="wb-update-max-create" min="1" value="10" style="width:100%;">
++                        </div>
++                    </div>
++                    <div style="margin-top:10px;">
++                        <label>涓婁笅鏂囨ā寮?</label>
++                        <select id="wb-update-context-mode" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid var(--ios-border);">
++                            <option value="full">鍏ㄩ噺锛堝寘鍚畬鏁存潯鐩唴瀹癸級</option>
++                            <option value="summary">鎽樿锛堜粎鍒楀嚭鏉＄洰鍚嶅拰灞炴€э級</option>
++                        </select>
++                    </div>
++                    <div style="margin-top:10px;">
++                        <label>鍐呭鎴柇瀛楃鏁帮紙0=涓嶉檺锛?</label>
++                        <input type="number" id="wb-update-max-chars" min="0" value="0" style="width:100%;">
++                    </div>
++                    <div class="data-manage-checkbox-group" style="margin-top:10px;">
++                        <input type="checkbox" id="wb-update-patch-dedup" checked>
++                        <label for="wb-update-patch-dedup">Patch杩藉姞鍘婚噸</label>
++                    </div>
++                    <div class="data-manage-checkbox-group">
++                        <input type="checkbox" id="wb-update-confirm-delete" checked>
++                        <label for="wb-update-confirm-delete">鍒犻櫎鎿嶄綔闇€纭</label>
++                    </div>
++                    <div class="data-manage-checkbox-group">
++                        <input type="checkbox" id="wb-update-exclude-constant">
++                        <label for="wb-update-exclude-constant">鎺掗櫎姘镐箙鏉＄洰</label>
++                    </div>
++                    <button id="wb-update-save-rules" class="secondary" style="margin-top:10px;width:100%;">淇濆瓨鏇存柊瑙勫垯</button>
++                </div>
++                <div class="data-manage-card">
++                    <h3>涓栫晫涔︽洿鏂伴璁?/h3>
++                    <div class="data-manage-button-group" style="margin-bottom:10px;">
++                        <select id="wb-update-prompt-selector" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--ios-border);"></select>
++                        <button id="wb-update-add-preset" class="secondary">+鏂板</button>
++                        <button id="wb-update-delete-preset" class="secondary">鍒犻櫎</button>
++                        <button id="wb-update-duplicate-preset" class="secondary">澶嶅埗</button>
++                    </div>
++                    <div id="wb-update-prompt-segments" style="border:1px solid var(--ios-border);border-radius:8px;padding:12px;max-height:400px;overflow-y:auto;"></div>
++                    <div class="data-manage-button-group" style="margin-top:10px;">
++                        <button id="wb-update-add-segment" class="secondary">+娣诲姞娑堟伅娈?/button>
++                        <button id="wb-update-save-preset" class="primary">淇濆瓨棰勮</button>
++                    </div>
++                    <p class="data-manage-notes">鍗犱綅绗? $0=鏁版嵁琛?$1=瀵硅瘽鍘嗗彶 $4=涓栫晫涔?宸叉湁鏍煎紡) $5=鏍煎紡鎸囦护 $6=涓栫晫涔︽潯鐩笂涓嬫枃</p>
++                </div>
++                <div class="data-manage-card">
++                    <h3>鎿嶄綔</h3>
++                    <div class="data-manage-button-group">
++                        <button id="wb-update-trigger-now" class="primary" style="flex:1;">馃實 绔嬪嵆瑙﹀彂涓栫晫涔︽洿鏂?/button>
++                    </div>
++                    <div id="wb-update-pending-badge" style="margin-top:8px;display:none;">
++                        <span style="background:#ff9500;color:white;padding:3px 10px;border-radius:12px;font-size:13px;">寰呭鏍? <span id="wb-update-pending-count">0</span> 鏉?/span>
++                    </div>
++                </div>
++                <div class="data-manage-card">
++                    <h3>瀹℃牳闃熷垪</h3>
++                    <div id="wb-update-pending-container"></div>
++                </div>
++                <div class="data-manage-card">
++                    <h3>鏇存柊鏃ュ織</h3>
++                    <div id="wb-update-log-container" style="max-height:200px;overflow-y:auto;font-size:12px;"></div>
++                    <button id="wb-update-clear-log" class="secondary" style="margin-top:8px;">娓呯┖鏃ュ織</button>
++                </div>
++            </div>
+         </div>
+     `;
+ 
+@@ -1673,6 +1814,8 @@ function setupPopupEventListeners() {
+     // 鏁版嵁绠＄悊 Tab 鐨勬寜閽?     setupDataTabListeners(parentDoc);
+ 
++    // 涓栫晫涔︽洿鏂?Tab
++    setupWbUpdateTabListeners(parentDoc);
+ }
+ 
+ /**
+@@ -1712,6 +1855,10 @@ function switchTab(tabName) {
+         updateWorldbookSourceView();
+     }
+ 
++    // 濡傛灉鍒囨崲鍒颁笘鐣屼功鏇存柊Tab
++    if (tabName === 'wbupdate') {
++        loadWbUpdateTabUI(parentDoc);
++    }
+ }
+ 
+ /**
+@@ -6714,6 +6861,18 @@ async function proceedWithCardUpdate(messagesToUse, batchToastMessage = '姝ｅ湪
+             }
+ 
+             console.log('鏁版嵁搴撳閲忔洿鏂版垚鍔燂紒');
++
++            // 涓栫晫涔I鏇存柊锛氳窡闅忔暟鎹〃鏇存柊瑙﹀彂
++            if (currentSettings.wbUpdateConfig?.enabled &&
++                currentSettings.wbUpdateConfig?.triggerMode === 'withDbUpdate') {
++                try {
++                    console.log('[涓栫晫涔︽洿鏂癩 璺熼殢鏁版嵁琛ㄦ洿鏂拌Е鍙?);
++                    await callWbUpdateAI();
++                } catch (e) {
++                    console.error('[涓栫晫涔︽洿鏂癩 璺熼殢鏇存柊澶辫触:', e);
++                    showToast('涓栫晫涔︽洿鏂板け璐? ' + e.message, 'error');
++                }
++            }
+         }
+ 
+         return success;
+@@ -6818,6 +6977,1358 @@ async function updateReadableLorebookEntry(createIfNeeded = false) {
+     }
+ }
+ 
++// HTML杞箟宸ュ叿鍑芥暟
++function escapeHtml(str) {
++    if (!str) return '';
++    return String(str)
++        .replace(/&/g, '&amp;')
++        .replace(/</g, '&lt;')
++        .replace(/>/g, '&gt;')
++        .replace(/"/g, '&quot;')
++        .replace(/'/g, '&#39;');
++}
++
++// ==================== 涓栫晫涔I鏇存柊寮曟搸 ====================
++
++const WB_PENDING_STORAGE_KEY = 'dataManage_wbUpdatePending';
++const WB_UPDATE_LOG_KEY = 'dataManage_wbUpdateLog';
++let wbUpdatePendingQueue = []; // [{ id, timestamp, floor, commands: [...] }]
++let wbUpdateLastAiFloor = 0;
++let wbUpdateProcessing = false;
++
++// --- 鏍煎紡鎸囦护 ---
++function getWbUpdateFormatGuide() {
++    return `褰撲綘鍒ゆ柇闇€瑕佹洿鏂颁笘鐣岃瀹氭椂锛岃涓ユ牸鎸変互涓婮SON鏍煎紡杈撳嚭锛屼笉瑕侀檮鍔犱换浣曢澶栨枃瀛楋細
++
++<world_update>
++[
++  {
++    "action": "update 鎴?create 鎴?delete 鎴?patch",
++    "entry_name": "鏉＄洰鍚嶇О",
++    "fields": { ... },
++    "ops": [ ... ]
++  }
++]
++</world_update>
++
++=== action 璇存槑 ===
++
++1. create 鈥?鍒涘缓鏂版潯鐩?+   fields 涓啓瀹屾暣鐨勫瓧娈靛€硷細
++   { "content": "瀹屾暣鍐呭", "keys": "鍏抽敭璇?, "depth": 4, "order": 200, "constant": false }
++
++2. update 鈥?鍏ㄩ噺鏇挎崲鏉＄洰
++   fields 涓殑 content 浼氬畬鍏ㄨ鐩栧師鏈夊唴瀹广€?+   浠呭湪闇€瑕佸ぇ骞呴噸鍐欐椂浣跨敤銆?+
++3. delete 鈥?鍒犻櫎鏉＄洰
++   鍙渶 entry_name銆?+
++4. patch 鈥?澧為噺鏇存柊锛堟帹鑽愶紒鐪乼oken锛?+   瀵规潯鐩唴瀹瑰仛灞€閮ㄤ慨鏀癸紝涓嶉渶瑕侀噸鍐欏叏閮ㄣ€?+   鍦?ops 鏁扮粍涓啓鎿嶄綔锛?+
++   鍐呭鎿嶄綔锛堜慨鏀?content 瀛楁锛夛細
++   { "op": "append", "value": "杩藉姞鍒版湯灏剧殑鏂囨湰" }
++   { "op": "prepend", "value": "娣诲姞鍒板紑澶寸殑鏂囨湰" }
++   { "op": "insert_after", "anchor": "閿氱偣鏂囨湰", "value": "鍦ㄩ敋鐐逛箣鍚庢彃鍏? }
++   { "op": "insert_before", "anchor": "閿氱偣鏂囨湰", "value": "鍦ㄩ敋鐐逛箣鍓嶆彃鍏? }
++   { "op": "replace_text", "find": "鍘熸枃鏈?, "value": "鏂版枃鏈? }
++   { "op": "remove_text", "find": "瑕佸垹闄ょ殑鏂囨湰" }
++
++   瀛楁鎿嶄綔锛堜慨鏀规潯鐩厓鏁版嵁锛夛細
++   { "op": "set_field", "field": "depth", "value": 3 }
++   { "op": "set_field", "field": "order", "value": 150 }
++   { "op": "set_field", "field": "enabled", "value": false }
++   { "op": "set_field", "field": "constant", "value": true }
++
++   鍏抽敭璇嶆搷浣滐細
++   { "op": "add_key", "value": "鏂板叧閿瘝" }
++   { "op": "remove_key", "value": "鏃у叧閿瘝" }
++   { "op": "add_secondary_key", "value": "鏂板壇鍏抽敭璇? }
++   { "op": "remove_secondary_key", "value": "鏃у壇鍏抽敭璇? }
++
++=== 閲嶈瑙勫垯 ===
++- 浼樺厛浣跨敤 patch 鑰岄潪 update锛岄櫎闈為渶瑕佸ぇ骞呴噸鍐?+- patch 鐨?append 鍙渶鍐欐柊澧炵殑閮ㄥ垎锛屼笉瑕侀噸澶嶅凡鏈夊唴瀹?+- replace_text 鐨?find 蹇呴』涓庡師鏂囧畬鍏ㄤ竴鑷达紙鍖哄垎澶у皬鍐欙級
++- 涓嶉渶瑕佹洿鏂版椂鍙洖澶?鏃犻渶鏇存柊"鍥涗釜瀛?+- 涓嶈淇敼 constant/selective 闄ら潪鏄庣‘闇€瑕乣;
++}
++
++// --- 瑙ｆ瀽鍣細鎻愬彇 <world_update> ---
++function parseWorldUpdateCommands(text) {
++    if (!text) return [];
++    // 鍏堣В鐮?HTML 瀹炰綋
++    const tmp = document.createElement('textarea');
++    tmp.innerHTML = text;
++    const raw = tmp.value;
++    const m = raw.match(/<world_update>([\s\S]*?)<\/world_update>/i);
++    if (!m) return [];
++    try {
++        let jsonText = m[1].trim();
++        // 鍋ュ．鐨?JSON 瑙ｆ瀽锛氫慨澶嶅父瑙侀棶棰?+        jsonText = jsonText.replace(/,\s*([}\]])/g, '$1'); // 绉婚櫎灏鹃儴閫楀彿
++        let arr;
++        try {
++            arr = JSON.parse(jsonText);
++        } catch (e1) {
++            // 灏濊瘯鎻愬彇 JSON 鏁扮粍
++            const arrMatch = jsonText.match(/\[[\s\S]*\]/);
++            if (arrMatch) {
++                arr = JSON.parse(arrMatch[0]);
++            } else {
++                throw e1;
++            }
++        }
++        if (!Array.isArray(arr)) return [];
++        return arr.filter(c =>
++            c && typeof c.action === 'string' && typeof c.entry_name === 'string' &&
++            ['create', 'update', 'delete', 'patch'].includes(c.action.toLowerCase())
++        ).map(c => ({
++            action: c.action.toLowerCase(),
++            entry_name: c.entry_name.trim(),
++            fields: c.fields || {},
++            ops: Array.isArray(c.ops) ? c.ops : []
++        }));
++    } catch (e) {
++        console.warn('[涓栫晫涔︽洿鏂癩 瑙ｆ瀽JSON澶辫触:', e.message);
++        return [];
++    }
++}
++
++function stripWorldUpdateTags(html) {
++    if (!html) return '';
++    return html.replace(/<world_update>[\s\S]*?<\/world_update>/gi, '')
++        .replace(/&lt;world_update&gt;[\s\S]*?&lt;\/world_update&gt;/gi, '').trim();
++}
++
++// --- Patch 澶勭悊鍣?---
++function wbApplyPatchOps(entry, ops) {
++    const result = { applied: 0, skipped: 0, errors: [] };
++    if (!entry || !Array.isArray(ops)) return result;
++    const cfg = currentSettings.wbUpdateConfig || {};
++
++    for (const op of ops) {
++        if (!op || !op.op) { result.skipped++; continue; }
++        try {
++            const opType = op.op.toLowerCase();
++            switch (opType) {
++                case 'append': {
++                    const val = op.value || '';
++                    if (!val) { result.skipped++; break; }
++                    const content = entry.content || '';
++                    if (cfg.patchDuplicateGuard && content.includes(val)) { result.skipped++; break; }
++                    entry.content = content + val;
++                    result.applied++;
++                    break;
++                }
++                case 'prepend': {
++                    const val = op.value || '';
++                    if (!val) { result.skipped++; break; }
++                    const content = entry.content || '';
++                    if (cfg.patchDuplicateGuard && content.includes(val)) { result.skipped++; break; }
++                    entry.content = val + content;
++                    result.applied++;
++                    break;
++                }
++                case 'insert_after': {
++                    const anchor = op.anchor, val = op.value;
++                    if (!anchor || !val) { result.skipped++; break; }
++                    const content = entry.content || '';
++                    const idx = content.indexOf(anchor);
++                    if (idx === -1) { result.skipped++; result.errors.push(`insert_after: 鏈壘鍒伴敋鐐?"${anchor}"`); break; }
++                    entry.content = content.slice(0, idx + anchor.length) + val + content.slice(idx + anchor.length);
++                    result.applied++;
++                    break;
++                }
++                case 'insert_before': {
++                    const anchor = op.anchor, val = op.value;
++                    if (!anchor || !val) { result.skipped++; break; }
++                    const content = entry.content || '';
++                    const idx = content.indexOf(anchor);
++                    if (idx === -1) { result.skipped++; result.errors.push(`insert_before: 鏈壘鍒伴敋鐐?"${anchor}"`); break; }
++                    entry.content = content.slice(0, idx) + val + content.slice(idx);
++                    result.applied++;
++                    break;
++                }
++                case 'replace_text': {
++                    const find = op.find, val = op.value;
++                    if (!find) { result.skipped++; break; }
++                    const content = entry.content || '';
++                    if (!content.includes(find)) { result.skipped++; result.errors.push(`replace_text: 鏈壘鍒?"${find}"`); break; }
++                    entry.content = content.split(find).join(val || '');
++                    result.applied++;
++                    break;
++                }
++                case 'remove_text': {
++                    const find = op.find;
++                    if (!find) { result.skipped++; break; }
++                    const content = entry.content || '';
++                    if (!content.includes(find)) { result.skipped++; result.errors.push(`remove_text: 鏈壘鍒?"${find}"`); break; }
++                    entry.content = content.split(find).join('');
++                    result.applied++;
++                    break;
++                }
++                case 'set_field': {
++                    const field = op.field, val = op.value;
++                    if (!field) { result.skipped++; break; }
++                    const allowed = ['depth', 'order', 'position', 'role', 'enabled', 'constant', 'selective',
++                        'selectiveLogic', 'probability', 'useProbability', 'sticky', 'cooldown',
++                        'delay', 'prevent_recursion', 'excludeRecursion', 'vectorized',
++                        'scanDepth', 'caseSensitive', 'matchWholeWords', 'group', 'groupWeight',
++                        'groupOverride', 'useGroupScoring', 'automationId'];
++                    if (!allowed.includes(field)) { result.skipped++; result.errors.push(`set_field: 涓嶅厑璁镐慨鏀?"${field}"`); break; }
++                    entry[field] = val;
++                    if (field === 'depth') entry.context = val;
++                    if (field === 'enabled') { entry.disable = !val; entry.disabled = !val; }
++                    if (field === 'constant') {
++                        if (val) { entry.constant = true; entry.selective = false; }
++                        else { entry.constant = false; entry.selective = true; }
++                    }
++                    result.applied++;
++                    break;
++                }
++                case 'add_key': {
++                    const val = (op.value || '').trim();
++                    if (!val) { result.skipped++; break; }
++                    const keys = (entry.key || entry.keys || []);
++                    const arr = Array.isArray(keys) ? keys.map(k => String(k).trim()) : String(keys).split(',').map(k => k.trim()).filter(Boolean);
++                    if (!arr.includes(val)) arr.push(val);
++                    if (Array.isArray(entry.key)) entry.key = arr;
++                    else entry.key = arr;
++                    entry.keys = arr;
++                    result.applied++;
++                    break;
++                }
++                case 'remove_key': {
++                    const val = (op.value || '').trim();
++                    if (!val) { result.skipped++; break; }
++                    const keys = (entry.key || entry.keys || []);
++                    const arr = Array.isArray(keys) ? keys.map(k => String(k).trim()) : String(keys).split(',').map(k => k.trim()).filter(Boolean);
++                    const filtered = arr.filter(k => k !== val);
++                    if (Array.isArray(entry.key)) entry.key = filtered;
++                    else entry.key = filtered;
++                    entry.keys = filtered;
++                    result.applied++;
++                    break;
++                }
++                case 'add_secondary_key': {
++                    const val = (op.value || '').trim();
++                    if (!val) { result.skipped++; break; }
++                    const skeys = entry.keysecondary || entry.secondary_keys || [];
++                    const arr = Array.isArray(skeys) ? skeys.map(k => String(k).trim()) : String(skeys).split(',').map(k => k.trim()).filter(Boolean);
++                    if (!arr.includes(val)) arr.push(val);
++                    entry.keysecondary = arr;
++                    entry.secondary_keys = arr;
++                    result.applied++;
++                    break;
++                }
++                case 'remove_secondary_key': {
++                    const val = (op.value || '').trim();
++                    if (!val) { result.skipped++; break; }
++                    const skeys = entry.keysecondary || entry.secondary_keys || [];
++                    const arr = Array.isArray(skeys) ? skeys.map(k => String(k).trim()) : String(skeys).split(',').map(k => k.trim()).filter(Boolean);
++                    const filtered = arr.filter(k => k !== val);
++                    entry.keysecondary = filtered;
++                    entry.secondary_keys = filtered;
++                    result.applied++;
++                    break;
++                }
++                default:
++                    result.skipped++;
++                    result.errors.push(`鏈煡鎿嶄綔: ${opType}`);
++            }
++        } catch (e) {
++            result.skipped++;
++            result.errors.push(`${op.op} 鎵ц澶辫触: ${e.message}`);
++        }
++    }
++    return result;
++}
++
++// --- 鏉＄洰鎼滅储 ---
++function wbSearchExact(entries, name) {
++    if (!name || !entries) return null;
++    const trimmed = name.trim();
++    const lower = trimmed.toLowerCase();
++    // 澶氳疆鍖归厤
++    for (const e of entries) {
++        const eName = (e.comment || e.name || '').trim();
++        if (eName === trimmed) return e;
++    }
++    for (const e of entries) {
++        const eName = (e.name || '').trim();
++        if (eName === trimmed) return e;
++    }
++    for (const e of entries) {
++        const dn = e.comment || e.name || '';
++        if (dn.trim().toLowerCase() === lower) return e;
++    }
++    return null;
++}
++
++function wbGetEntryDisplayName(entry) {
++    return entry.comment || entry.name || `UID:${entry.uid}`;
++}
++
++function wbGetEntryKeys(entry) {
++    const k = entry.key || entry.keys || [];
++    if (Array.isArray(k)) return k.join(', ');
++    return String(k);
++}
++
++// --- 涓婁笅鏂囨瀯寤?---
++async function buildWbUpdateContext(bookName) {
++    const TH = getTavernHelperAPI();
++    if (!TH) return '锛堟棤娉曡幏鍙朤avernHelper API锛屼笘鐣屼功涓虹┖锛?;
++    try {
++        const entries = await TH.getLorebookEntries(bookName);
++        if (!entries || entries.length === 0) return '锛堜笘鐣屼功涓虹┖锛屽皻鏃犱换浣曟潯鐩級';
++        const cfg = currentSettings.wbUpdateConfig || {};
++
++        let vis = entries.filter(e => {
++            // 杩囨护鎺夋彃浠剁敓鎴愮殑鏉＄洰
++            const comment = e.comment || '';
++            if (comment.startsWith('TavernDB-ACU-')) return false;
++            return true;
++        });
++
++        if (cfg.excludeConstantFromPrompt) {
++            vis = vis.filter(e => !e.constant);
++        }
++
++        if (cfg.contextMode === 'summary') {
++            // 鎽樿妯″紡
++            const lines = [`鍏?${vis.length} 涓潯鐩細`];
++            vis.forEach((e, i) => {
++                const mode = e.constant ? '馃數姘镐箙' : '馃煝鍏抽敭璇?;
++                const st = (e.enabled !== false && !e.disable && !e.disabled) ? '鍚敤' : '绂佺敤';
++                const dep = e.depth != null ? e.depth : (e.context || '?');
++                lines.push(`${i + 1}. ${wbGetEntryDisplayName(e)} [${mode} ${st} d:${dep} o:${e.order || 200}] keys:${wbGetEntryKeys(e) || '鏃?}`);
++            });
++            return lines.join('\n');
++        }
++
++        // 鍏ㄩ噺妯″紡
++        const maxChars = cfg.maxContentChars || 0;
++        let blueC = 0, greenC = 0, enC = 0, disC = 0;
++        vis.forEach(e => {
++            if (e.constant) blueC++; else greenC++;
++            if (e.enabled !== false && !e.disable && !e.disabled) enC++; else disC++;
++        });
++
++        const lines = [];
++        lines.push(`鍏?${vis.length} 涓潯鐩紙馃數姘镐箙:${blueC} 馃煝鍏抽敭璇?${greenC} 鍚敤:${enC} 绂佺敤:${disC}锛塦);
++        lines.push('鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲');
++
++        vis.forEach((e, i) => {
++            const mode = e.constant ? '馃數姘镐箙' : '馃煝鍏抽敭璇?;
++            const isEnabled = e.enabled !== false && !e.disable && !e.disabled;
++            const st = isEnabled ? '鉁呭惎鐢? : '鉂岀鐢?;
++            const dep = e.depth != null ? e.depth : (e.context || '?');
++            const uid = e.uid || '?';
++
++            lines.push('');
++            lines.push(`鈹€鈹€ 鏉＄洰 #${i + 1} 鈹€鈹€`);
++            lines.push(`鍚嶇О: ${wbGetEntryDisplayName(e)}`);
++            lines.push(`鐘舵€? ${mode} ${st} | 娣卞害:${dep} 鎺掑簭:${e.order || 200} UID:${uid}`);
++            lines.push(`涓诲叧閿瘝: ${wbGetEntryKeys(e) || '锛堟棤锛?}`);
++
++            const skeys = e.keysecondary || e.secondary_keys;
++            if (skeys) {
++                const skStr = Array.isArray(skeys) ? skeys.join(', ') : String(skeys);
++                if (skStr) lines.push(`鍓叧閿瘝: ${skStr}`);
++            }
++
++            let content = e.content || '锛堢┖锛?;
++            if (maxChars > 0 && content.length > maxChars) {
++                content = content.substring(0, maxChars) + `\n鈥︼紙宸叉埅鏂嚦${maxChars}瀛楃锛塦;
++            }
++            lines.push('鍐呭:');
++            lines.push(content);
++        });
++
++        lines.push('');
++        lines.push('鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲');
++        return lines.join('\n');
++    } catch (error) {
++        console.error('[涓栫晫涔︽洿鏂癩 鏋勫缓涓婁笅鏂囧け璐?', error);
++        return '锛堟瀯寤轰笂涓嬫枃澶辫触: ' + error.message + '锛?;
++    }
++}
++
++// --- 瀹℃牳闃熷垪 ---
++function wbPendingAdd(floor, commands) {
++    const batch = {
++        id: `wb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
++        timestamp: Date.now(),
++        floor: floor,
++        commands: commands.map(cmd => ({ ...cmd, _approved: false, _edited: false }))
++    };
++    wbUpdatePendingQueue.push(batch);
++    wbPendingSave();
++    console.log(`[涓栫晫涔︽洿鏂癩 娣诲姞瀹℃牳鎵规: ${batch.id}, ${commands.length}鏉℃寚浠);
++    return batch;
++}
++
++function wbPendingSave() {
++    try {
++        const topWin = (window.parent && window.parent !== window) ? window.parent : window;
++        topWin.localStorage.setItem(WB_PENDING_STORAGE_KEY, JSON.stringify(wbUpdatePendingQueue));
++    } catch (e) {
++        console.warn('[涓栫晫涔︽洿鏂癩 淇濆瓨瀹℃牳闃熷垪澶辫触:', e);
++    }
++}
++
++function wbPendingRestore() {
++    try {
++        const topWin = (window.parent && window.parent !== window) ? window.parent : window;
++        const raw = topWin.localStorage.getItem(WB_PENDING_STORAGE_KEY);
++        if (raw) {
++            const parsed = JSON.parse(raw);
++            if (Array.isArray(parsed)) {
++                wbUpdatePendingQueue = parsed;
++                console.log(`[涓栫晫涔︽洿鏂癩 鎭㈠ ${parsed.length} 涓鏍告壒娆);
++            }
++        }
++    } catch (e) {
++        console.warn('[涓栫晫涔︽洿鏂癩 鎭㈠瀹℃牳闃熷垪澶辫触:', e);
++    }
++}
++
++function wbPendingClear() {
++    wbUpdatePendingQueue = [];
++    wbPendingSave();
++}
++
++function wbPendingGetAll() {
++    return wbUpdatePendingQueue;
++}
++
++function wbPendingCount() {
++    let count = 0;
++    wbUpdatePendingQueue.forEach(b => { count += b.commands.length; });
++    return count;
++}
++
++function wbPendingEditCmd(batchId, cmdIndex, newCmd) {
++    const batch = wbUpdatePendingQueue.find(b => b.id === batchId);
++    if (!batch || cmdIndex < 0 || cmdIndex >= batch.commands.length) return false;
++    batch.commands[cmdIndex] = { ...newCmd, _edited: true, _approved: false };
++    wbPendingSave();
++    return true;
++}
++
++async function wbPendingApproveAll(batchId) {
++    const batchIndex = wbUpdatePendingQueue.findIndex(b => b.id === batchId);
++    if (batchIndex === -1) return { ok: 0, err: 0 };
++
++    const batch = wbUpdatePendingQueue[batchIndex];
++    const bookName = await wbGetTargetBookName();
++    if (!bookName) {
++        showToast('鏃犵洰鏍囦笘鐣屼功锛屾棤娉曟墽琛?, 'error');
++        return { ok: 0, err: 0 };
++    }
++
++    const results = await executeWbUpdateCommands(batch.commands, bookName);
++    wbUpdatePendingQueue.splice(batchIndex, 1);
++    wbPendingSave();
++
++    // 璁板綍鏃ュ織
++    wbAppendLog({ floor: batch.floor, commands: batch.commands.length, results });
++    return results;
++}
++
++async function wbPendingApproveOne(batchId, cmdIndex) {
++    const batch = wbUpdatePendingQueue.find(b => b.id === batchId);
++    if (!batch || cmdIndex < 0 || cmdIndex >= batch.commands.length) return null;
++
++    const bookName = await wbGetTargetBookName();
++    if (!bookName) {
++        showToast('鏃犵洰鏍囦笘鐣屼功锛屾棤娉曟墽琛?, 'error');
++        return null;
++    }
++
++    const cmd = batch.commands[cmdIndex];
++    const results = await executeWbUpdateCommands([cmd], bookName);
++    // 绉婚櫎宸叉墽琛岀殑鎸囦护
++    batch.commands.splice(cmdIndex, 1);
++    if (batch.commands.length === 0) {
++        const idx = wbUpdatePendingQueue.indexOf(batch);
++        if (idx !== -1) wbUpdatePendingQueue.splice(idx, 1);
++    }
++    wbPendingSave();
++    wbAppendLog({ floor: batch.floor, commands: 1, results });
++    return results;
++}
++
++function wbPendingRejectAll(batchId) {
++    const idx = wbUpdatePendingQueue.findIndex(b => b.id === batchId);
++    if (idx === -1) return;
++    wbUpdatePendingQueue.splice(idx, 1);
++    wbPendingSave();
++}
++
++function wbPendingRejectOne(batchId, cmdIndex) {
++    const batch = wbUpdatePendingQueue.find(b => b.id === batchId);
++    if (!batch || cmdIndex < 0 || cmdIndex >= batch.commands.length) return;
++    batch.commands.splice(cmdIndex, 1);
++    if (batch.commands.length === 0) {
++        const idx = wbUpdatePendingQueue.indexOf(batch);
++        if (idx !== -1) wbUpdatePendingQueue.splice(idx, 1);
++    }
++    wbPendingSave();
++}
++
++// --- 鏃ュ織 ---
++function wbAppendLog(entry) {
++    try {
++        const topWin = (window.parent && window.parent !== window) ? window.parent : window;
++        let logs = [];
++        try {
++            const raw = topWin.localStorage.getItem(WB_UPDATE_LOG_KEY);
++            if (raw) logs = JSON.parse(raw);
++        } catch (e) { }
++        logs.unshift({ time: new Date().toISOString(), ...entry });
++        if (logs.length > 100) logs.length = 100;
++        topWin.localStorage.setItem(WB_UPDATE_LOG_KEY, JSON.stringify(logs));
++    } catch (e) { }
++}
++
++function wbGetLogs() {
++    try {
++        const topWin = (window.parent && window.parent !== window) ? window.parent : window;
++        const raw = topWin.localStorage.getItem(WB_UPDATE_LOG_KEY);
++        return raw ? JSON.parse(raw) : [];
++    } catch (e) { return []; }
++}
++
++// --- 鐩爣涓栫晫涔?---
++async function wbGetTargetBookName() {
++    return await getInjectionTargetLorebook();
++}
++
++// --- 鎸囦护鎵ц鍣?---
++async function executeWbUpdateCommands(commands, bookName) {
++    const TH = getTavernHelperAPI();
++    if (!TH) {
++        showToast('TavernHelper API涓嶅彲鐢紝鏃犳硶鍐欏叆涓栫晫涔?, 'error');
++        return { ok: 0, err: commands.length, errors: ['TavernHelper涓嶅彲鐢?] };
++    }
++    const cfg = currentSettings.wbUpdateConfig || {};
++    let ok = 0, err = 0, skip = 0;
++    const errors = [];
++    let createCount = 0;
++
++    let entries = [];
++    try {
++        entries = await TH.getLorebookEntries(bookName);
++    } catch (e) {
++        return { ok: 0, err: commands.length, errors: [`鍔犺浇鏉＄洰澶辫触: ${e.message}`] };
++    }
++
++    for (const cmd of commands) {
++        try {
++            switch (cmd.action) {
++                case 'create': {
++                    if (createCount >= (cfg.maxCreatePerRound || 10)) {
++                        skip++;
++                        errors.push(`${cmd.entry_name}: 瓒呰繃鍗曟鍒涘缓涓婇檺`);
++                        break;
++                    }
++                    // 妫€鏌ユ槸鍚﹀凡瀛樺湪
++                    const existing = wbSearchExact(entries, cmd.entry_name);
++                    if (existing) {
++                        // 鍚堝苟鍒板凡鏈夋潯鐩?+                        if (cmd.fields.content) {
++                            existing.content = (existing.content || '') + '\n' + cmd.fields.content;
++                        }
++                        await TH.setLorebookEntries(bookName, [existing]);
++                        ok++;
++                        break;
++                    }
++                    const newEntry = {
++                        comment: cmd.entry_name,
++                        content: cmd.fields.content || '',
++                        enabled: cmd.fields.enabled !== false,
++                        constant: cmd.fields.constant || false,
++                        selective: cmd.fields.constant ? false : true,
++                        depth: cmd.fields.depth || 4,
++                        order: cmd.fields.order || getWorldbookOrderValue(),
++                        prevent_recursion: true,
++                    };
++                    // 璁剧疆鍏抽敭璇?+                    if (cmd.fields.keys) {
++                        const keysArr = typeof cmd.fields.keys === 'string' ? cmd.fields.keys.split(',').map(k => k.trim()) : cmd.fields.keys;
++                        newEntry.key = keysArr;
++                    } else {
++                        newEntry.key = [cmd.entry_name];
++                    }
++                    await TH.createLorebookEntries(bookName, [newEntry]);
++                    createCount++;
++                    ok++;
++                    // 鍒锋柊鏉＄洰鍒楄〃
++                    entries = await TH.getLorebookEntries(bookName);
++                    break;
++                }
++                case 'update': {
++                    const target = wbSearchExact(entries, cmd.entry_name);
++                    if (!target) {
++                        err++;
++                        errors.push(`${cmd.entry_name}: 鏉＄洰涓嶅瓨鍦╜);
++                        break;
++                    }
++                    if (cmd.fields.content !== undefined) target.content = cmd.fields.content;
++                    if (cmd.fields.keys !== undefined) {
++                        const keysArr = typeof cmd.fields.keys === 'string' ? cmd.fields.keys.split(',').map(k => k.trim()) : cmd.fields.keys;
++                        target.key = keysArr;
++                    }
++                    if (cmd.fields.enabled !== undefined) { target.enabled = cmd.fields.enabled; target.disable = !cmd.fields.enabled; }
++                    if (cmd.fields.constant !== undefined) { target.constant = cmd.fields.constant; if (cmd.fields.constant) target.selective = false; }
++                    if (cmd.fields.depth !== undefined) { target.depth = cmd.fields.depth; target.context = cmd.fields.depth; }
++                    if (cmd.fields.order !== undefined) target.order = cmd.fields.order;
++                    await TH.setLorebookEntries(bookName, [target]);
++                    ok++;
++                    break;
++                }
++                case 'delete': {
++                    const target = wbSearchExact(entries, cmd.entry_name);
++                    if (!target) {
++                        skip++;
++                        break;
++                    }
++                    await TH.deleteLorebookEntries(bookName, [target.uid]);
++                    ok++;
++                    entries = entries.filter(e => e.uid !== target.uid);
++                    break;
++                }
++                case 'patch': {
++                    const target = wbSearchExact(entries, cmd.entry_name);
++                    if (!target) {
++                        err++;
++                        errors.push(`${cmd.entry_name}: 鏉＄洰涓嶅瓨鍦紙patch锛塦);
++                        break;
++                    }
++                    const patchResult = wbApplyPatchOps(target, cmd.ops);
++                    if (patchResult.applied > 0) {
++                        await TH.setLorebookEntries(bookName, [target]);
++                        ok++;
++                    } else {
++                        skip++;
++                        if (patchResult.errors.length > 0) {
++                            errors.push(`${cmd.entry_name}: ${patchResult.errors.join('; ')}`);
++                        }
++                    }
++                    break;
++                }
++                default:
++                    skip++;
++            }
++        } catch (e) {
++            err++;
++            errors.push(`${cmd.entry_name}: ${e.message}`);
++        }
++    }
++
++    return { ok, err, skip, errors };
++}
++
++// --- 棰勮绠＄悊 ---
++function getWbUpdateCurrentPrompt() {
++    const prompts = currentSettings.wbUpdatePrompts;
++    if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
++        return WB_UPDATE_DEFAULT_PROMPT;
++    }
++    const idx = currentSettings.wbUpdateCurrentPromptIndex || 0;
++    if (idx >= 0 && idx < prompts.length) {
++        return prompts[idx].prompt || WB_UPDATE_DEFAULT_PROMPT;
++    }
++    return prompts[0].prompt || WB_UPDATE_DEFAULT_PROMPT;
++}
++
++// --- AI璋冪敤涓诲叆鍙?---
++async function callWbUpdateAI() {
++    if (wbUpdateProcessing) {
++        showToast('涓栫晫涔︽洿鏂版鍦ㄥ鐞嗕腑锛岃绋嶅€?, 'warning');
++        return;
++    }
++
++    const bookName = await wbGetTargetBookName();
++    if (!bookName) {
++        showToast('鏃犵洰鏍囦笘鐣屼功', 'error');
++        return;
++    }
++
++    wbUpdateProcessing = true;
++    showToast('馃實 涓栫晫涔︽洿鏂帮細姝ｅ湪鍒嗘瀽...', 'info');
++
++    try {
++        // 鏋勫缓涓婁笅鏂?+        const wbContext = await buildWbUpdateContext(bookName);
++        const formatGuide = getWbUpdateFormatGuide();
++
++        // 鑾峰彇娑堟伅鍘嗗彶
++        const cfg = currentSettings.wbUpdateConfig || {};
++        const context = SillyTavern.getContext();
++        const chat = context?.chat || [];
++        const reviewDepth = cfg.reviewDepth || 10;
++        let messagesText = '';
++        if (chat.length > 0) {
++            const start = Math.max(0, chat.length - reviewDepth);
++            const name1 = context?.name1 || '鐢ㄦ埛';
++            const msgParts = [];
++            for (let i = start; i < chat.length; i++) {
++                const m = chat[i];
++                if (m.is_system) continue;
++                const prefix = m.is_user ? name1 : (m.name || '瑙掕壊');
++                const content = m.mes || m.message || '';
++                if (content) msgParts.push(`${prefix}: ${content}`);
++            }
++            messagesText = msgParts.join('\n') || '(鏃犲璇濆唴瀹?';
++        } else {
++            messagesText = '(鏃犲璇濆唴瀹?';
++        }
++
++        // 鑾峰彇褰撳墠鏁版嵁琛ㄥ唴瀹癸紙澶嶇敤$0锛?+        let tableDataText = '';
++        if (currentJsonTableData) {
++            const result = buildTableDataTextForDollar0(currentJsonTableData, currentSettings);
++            tableDataText = result.text || '';
++        }
++
++        // 鑾峰彇涓栫晫涔﹀唴瀹癸紙澶嶇敤$4锛?+        let worldbookContent = '';
++        try { worldbookContent = await getCombinedWorldbookContent(); } catch (e) { }
++
++        // 缁勮娑堟伅
++        const promptSegments = getWbUpdateCurrentPrompt();
++        const messages = [];
++        const segments = Array.isArray(promptSegments) ? promptSegments : [{ role: 'USER', content: String(promptSegments) }];
++
++        segments.forEach(segment => {
++            let finalContent = segment.content || '';
++            finalContent = finalContent.replace(/\$0/g, tableDataText);
++            finalContent = finalContent.replace(/\$1/g, messagesText);
++            finalContent = finalContent.replace(/\$4/g, worldbookContent);
++            finalContent = finalContent.replace(/\$5/g, formatGuide);
++            finalContent = finalContent.replace(/\$6/g, wbContext);
++            if (!finalContent.trim()) return;
++            messages.push({
++                role: (segment.role || 'user').toLowerCase(),
++                content: finalContent
++            });
++        });
++
++        showToast('馃實 涓栫晫涔︽洿鏂帮細绛夊緟AI鍝嶅簲...', 'info');
++        console.log('[涓栫晫涔︽洿鏂癩 鍙戦€佹秷鎭?', messages.length, '娈?);
++
++        // 璋冪敤API锛堢洿鎺ュ彂閫佷笘鐣屼功鏇存柊娑堟伅锛屼笉缁忚繃鏁版嵁琛ㄩ璁撅級
++        const aiReply = await _callWbUpdateAPI(messages);
++
++        // 瑙ｆ瀽
++        const cmds = parseWorldUpdateCommands(aiReply);
++        console.log(`[涓栫晫涔︽洿鏂癩 瑙ｆ瀽鍒?${cmds.length} 鏉℃寚浠);
++
++        if (cmds.length === 0) {
++            showToast('馃實 涓栫晫涔︽洿鏂帮細鏃犻渶鏇存柊', 'info');
++            wbAppendLog({ floor: wbGetCurrentFloor(), action: 'review', detail: '鏃犻渶鏇存柊' });
++            return;
++        }
++
++        // 鍔犲叆瀹℃牳闃熷垪
++        const batch = wbPendingAdd(wbGetCurrentFloor(), cmds);
++        showToast(`馃搵 涓栫晫涔︽洿鏂帮細${cmds.length}鏉℃寚浠ゅ凡鍔犲叆瀹℃牳闃熷垪`, 'info');
++
++        // 灏濊瘯鍒锋柊UI
++        wbRefreshPendingUI();
++
++    } catch (e) {
++        console.error('[涓栫晫涔︽洿鏂癩 澶辫触:', e);
++        showToast(`鉂?涓栫晫涔︽洿鏂板け璐? ${e.message}`, 'error');
++        wbAppendLog({ floor: wbGetCurrentFloor(), action: 'error', detail: e.message });
++    } finally {
++        wbUpdateProcessing = false;
++    }
++}
++
++// 搴曞眰API璋冪敤锛堢洿鎺ュ彂閫佹秷鎭紝涓嶇粡杩囨暟鎹〃棰勮锛?+async function _callWbUpdateAPI(messages) {
++    const apiConfig = currentSettings.apiConfig || {};
++
++    if (currentSettings.apiMode === 'tavern') {
++        const profileId = currentSettings.tavernProfile;
++        if (!profileId) throw new Error('鏈€夋嫨閰掗杩炴帴棰勮');
++        const context = SillyTavern.getContext();
++        if (!context?.ConnectionManagerRequestService?.sendRequest) throw new Error('ConnectionManagerRequestService涓嶅彲鐢?);
++        const response = await context.ConnectionManagerRequestService.sendRequest(profileId, messages, apiConfig.max_tokens || 4096);
++        if (response?.ok && response?.result?.choices?.[0]?.message?.content) {
++            return response.result.choices[0].message.content.trim();
++        } else if (response && typeof response.content === 'string') {
++            return response.content.trim();
++        }
++        throw new Error(`閰掗棰勮API璋冪敤杩斿洖鏃犳晥鍝嶅簲: ${response?.error || JSON.stringify(response)}`);
++    } else {
++        if (apiConfig.useMainApi) {
++            const parentWin = (window.parent && window.parent !== window) ? window.parent : window;
++            const TH = parentWin.TavernHelper || window.TavernHelper;
++            if (!TH || typeof TH.generateRaw !== 'function') throw new Error('TavernHelper.generateRaw 涓嶅彲鐢?);
++            const response = await TH.generateRaw({ ordered_prompts: messages, should_stream: false });
++            if (typeof response !== 'string') throw new Error('涓籄PI鏈繑鍥炴枃鏈?);
++            return response.trim();
++        } else {
++            if (!apiConfig.url || !apiConfig.model) throw new Error('API URL鎴栨ā鍨嬫湭閰嶇疆');
++            const context = SillyTavern.getContext();
++            const headers = { ...(context.getRequestHeaders ? context.getRequestHeaders() : {}), 'Content-Type': 'application/json' };
++            const body = JSON.stringify({
++                messages, model: apiConfig.model,
++                temperature: apiConfig.temperature || 0.7,
++                max_tokens: apiConfig.max_tokens || 4096,
++                chat_completion_source: 'custom',
++                custom_url: apiConfig.url,
++                custom_include_headers: apiConfig.apiKey ? `Authorization: Bearer ${apiConfig.apiKey}` : '',
++            });
++            const resp = await fetch('/api/backends/chat-completions/generate', { method: 'POST', headers, body });
++            if (!resp.ok) throw new Error(`API璇锋眰澶辫触: ${resp.status} ${resp.statusText}`);
++            const data = await resp.json();
++            if (data?.choices?.[0]?.message?.content) return data.choices[0].message.content.trim();
++            if (typeof data === 'string') return data.trim();
++            throw new Error('API杩斿洖鏍煎紡寮傚父');
++        }
++    }
++}
++
++// --- 闂撮殧瑙﹀彂 ---
++function wbGetCurrentFloor() {
++    try {
++        const context = SillyTavern.getContext();
++        const chat = context?.chat || [];
++        let floor = 0;
++        for (let i = chat.length - 1; i >= 0; i--) {
++            if (!chat[i].is_user && !chat[i].is_system) { floor = i; break; }
++        }
++        return floor;
++    } catch (e) { return 0; }
++}
++
++function wbIsUpdateDue(floor) {
++    const cfg = currentSettings.wbUpdateConfig || {};
++    const s = cfg.startAfterFloors || 3;
++    const interval = cfg.intervalFloors || 5;
++    if (floor <= s) return false;
++    if (interval <= 0) return false;
++    return (floor - s) % interval === 0;
++}
++
++function wbCheckIntervalTrigger() {
++    if (!currentSettings.wbUpdateConfig?.enabled) return;
++    if (currentSettings.wbUpdateConfig?.triggerMode !== 'interval') return;
++    if (wbUpdateProcessing) return;
++
++    const currentFloor = wbGetCurrentFloor();
++    if (currentFloor <= wbUpdateLastAiFloor) return;
++
++    wbUpdateLastAiFloor = currentFloor;
++    if (wbIsUpdateDue(currentFloor)) {
++        console.log(`[涓栫晫涔︽洿鏂癩 闂撮殧瑙﹀彂: 绗?{currentFloor}妤糮);
++        callWbUpdateAI();
++    }
++}
++
++// --- UI鍒锋柊 ---
++function wbRefreshPendingUI() {
++    const parentDoc = (window.parent && window.parent !== window) ? window.parent.document : document;
++    const container = parentDoc.getElementById('wb-update-pending-container');
++    if (!container) return;
++    renderWbPendingQueue(container, parentDoc);
++}
++
++function renderWbPendingQueue(container, parentDoc) {
++    const batches = wbPendingGetAll();
++    if (batches.length === 0) {
++        container.innerHTML = '<div class="wb-pending-empty">鏆傛棤寰呭鏍哥殑鏇存柊鎸囦护</div>';
++        return;
++    }
++
++    let html = '';
++    batches.forEach(batch => {
++        const time = new Date(batch.timestamp).toLocaleString();
++        html += `<div class="wb-pending-batch" data-batch-id="${batch.id}">
++            <div class="wb-pending-batch-header">
++                <span>馃搵 AI绗?{batch.floor}妤?路 ${batch.commands.length}鏉℃寚浠?路 ${time}</span>
++                <div class="wb-pending-batch-actions">
++                    <button class="wb-btn wb-btn-approve-all" data-batch="${batch.id}">鉁?鍏ㄩ儴鎵瑰噯</button>
++                    <button class="wb-btn wb-btn-reject-all" data-batch="${batch.id}">鉂?鍏ㄩ儴鎷掔粷</button>
++                </div>
++            </div>`;
++
++        batch.commands.forEach((cmd, cmdIdx) => {
++            const icon = { create: '鉁忥笍', update: '馃攧', delete: '馃棏锔?, patch: '馃敡' }[cmd.action] || '鉂?;
++            const edited = cmd._edited ? ' <span class="wb-edited-tag">宸茬紪杈?/span>' : '';
++
++            html += `<div class="wb-pending-cmd" data-batch="${batch.id}" data-cmd-idx="${cmdIdx}">
++                <div class="wb-pending-cmd-header">
++                    <span>${icon} <strong>${cmd.action.toUpperCase()}</strong>: ${escapeHtml(cmd.entry_name)}${edited}</span>
++                    <div class="wb-pending-cmd-actions">
++                        <button class="wb-btn wb-btn-sm wb-btn-approve-one" data-batch="${batch.id}" data-idx="${cmdIdx}">鉁?/button>
++                        <button class="wb-btn wb-btn-sm wb-btn-reject-one" data-batch="${batch.id}" data-idx="${cmdIdx}">鉂?/button>
++                        ${cmd.action !== 'delete' ? `<button class="wb-btn wb-btn-sm wb-btn-edit" data-batch="${batch.id}" data-idx="${cmdIdx}">鉁忥笍</button>` : ''}
++                    </div>
++                </div>`;
++
++            // 鏄剧ず鎸囦护璇︽儏
++            if (cmd.action === 'create' || cmd.action === 'update') {
++                html += `<div class="wb-pending-cmd-detail">
++                    <div class="wb-field-row"><span class="wb-field-label">鍐呭:</span><div class="wb-field-value">${escapeHtml((cmd.fields.content || '').substring(0, 300))}</div></div>
++                    ${cmd.fields.keys ? `<div class="wb-field-row"><span class="wb-field-label">鍏抽敭璇?</span><span class="wb-field-value">${escapeHtml(typeof cmd.fields.keys === 'string' ? cmd.fields.keys : JSON.stringify(cmd.fields.keys))}</span></div>` : ''}
++                </div>`;
++            } else if (cmd.action === 'patch') {
++                html += '<div class="wb-pending-cmd-detail">';
++                cmd.ops.forEach((op, oi) => {
++                    html += `<div class="wb-field-row"><span class="wb-field-label">${op.op}:</span><span class="wb-field-value">${escapeHtml(op.value || op.find || op.anchor || '').substring(0, 200)}</span></div>`;
++                });
++                html += '</div>';
++            }
++
++            // 缂栬緫鍖猴紙榛樿闅愯棌锛?+            html += `<div class="wb-edit-area" id="wb-edit-${batch.id}-${cmdIdx}" style="display:none;">`;
++            if (cmd.action === 'create' || cmd.action === 'update') {
++                html += `
++                    <label>鏉＄洰鍚嶇О: <input type="text" class="wb-edit-name" value="${escapeHtml(cmd.entry_name)}" /></label>
++                    <label>鍐呭: <textarea class="wb-edit-content" rows="6">${escapeHtml(cmd.fields.content || '')}</textarea></label>
++                    <label>鍏抽敭璇? <input type="text" class="wb-edit-keys" value="${escapeHtml(typeof cmd.fields.keys === 'string' ? cmd.fields.keys : (Array.isArray(cmd.fields.keys) ? cmd.fields.keys.join(', ') : ''))}" /></label>
++                    <button class="wb-btn wb-btn-save-edit" data-batch="${batch.id}" data-idx="${cmdIdx}">馃捑 淇濆瓨缂栬緫</button>`;
++            } else if (cmd.action === 'patch') {
++                cmd.ops.forEach((op, oi) => {
++                    html += `<div class="wb-edit-op" data-op-idx="${oi}">
++                        <label>鎿嶄綔: <select class="wb-edit-op-type">
++                            ${['append', 'prepend', 'insert_after', 'insert_before', 'replace_text', 'remove_text', 'set_field', 'add_key', 'remove_key'].map(t => `<option value="${t}" ${t === op.op ? 'selected' : ''}>${t}</option>`).join('')}
++                        </select></label>
++                        ${op.anchor !== undefined ? `<label>閿氱偣: <input type="text" class="wb-edit-op-anchor" value="${escapeHtml(op.anchor || '')}" /></label>` : ''}
++                        ${op.find !== undefined ? `<label>鏌ユ壘: <input type="text" class="wb-edit-op-find" value="${escapeHtml(op.find || '')}" /></label>` : ''}
++                        ${op.field !== undefined ? `<label>瀛楁: <input type="text" class="wb-edit-op-field" value="${escapeHtml(op.field || '')}" /></label>` : ''}
++                        <label>鍊? <textarea class="wb-edit-op-value" rows="2">${escapeHtml(op.value !== undefined ? String(op.value) : '')}</textarea></label>
++                    </div>`;
++                });
++                html += `<button class="wb-btn wb-btn-save-edit" data-batch="${batch.id}" data-idx="${cmdIdx}">馃捑 淇濆瓨缂栬緫</button>`;
++            }
++            html += '</div>'; // wb-edit-area
++            html += '</div>'; // wb-pending-cmd
++        });
++        html += '</div>'; // wb-pending-batch
++    });
++
++    container.innerHTML = html;
++
++    // 缁戝畾浜嬩欢
++    container.querySelectorAll('.wb-btn-approve-all').forEach(btn => {
++        btn.addEventListener('click', async () => {
++            const batchId = btn.dataset.batch;
++            btn.disabled = true;
++            btn.textContent = '鎵ц涓?..';
++            const results = await wbPendingApproveAll(batchId);
++            showToast(`鉁?宸叉墽琛? ${results.ok}鎴愬姛, ${results.err}澶辫触, ${results.skip || 0}璺宠繃`, results.err > 0 ? 'warning' : 'success');
++            wbRefreshPendingUI();
++        });
++    });
++
++    container.querySelectorAll('.wb-btn-reject-all').forEach(btn => {
++        btn.addEventListener('click', () => {
++            wbPendingRejectAll(btn.dataset.batch);
++            showToast('宸叉嫆缁濇暣鎵规寚浠?, 'info');
++            wbRefreshPendingUI();
++        });
++    });
++
++    container.querySelectorAll('.wb-btn-approve-one').forEach(btn => {
++        btn.addEventListener('click', async () => {
++            btn.disabled = true;
++            const results = await wbPendingApproveOne(btn.dataset.batch, parseInt(btn.dataset.idx));
++            if (results) showToast(`鉁?${results.ok}鎴愬姛`, results.err > 0 ? 'warning' : 'success');
++            wbRefreshPendingUI();
++        });
++    });
++
++    container.querySelectorAll('.wb-btn-reject-one').forEach(btn => {
++        btn.addEventListener('click', () => {
++            wbPendingRejectOne(btn.dataset.batch, parseInt(btn.dataset.idx));
++            wbRefreshPendingUI();
++        });
++    });
++
++    container.querySelectorAll('.wb-btn-edit').forEach(btn => {
++        btn.addEventListener('click', () => {
++            const editArea = parentDoc.getElementById(`wb-edit-${btn.dataset.batch}-${btn.dataset.idx}`);
++            if (editArea) editArea.style.display = editArea.style.display === 'none' ? 'block' : 'none';
++        });
++    });
++
++    container.querySelectorAll('.wb-btn-save-edit').forEach(btn => {
++        btn.addEventListener('click', () => {
++            const batchId = btn.dataset.batch;
++            const cmdIdx = parseInt(btn.dataset.idx);
++            const batch = wbUpdatePendingQueue.find(b => b.id === batchId);
++            if (!batch) return;
++            const cmd = batch.commands[cmdIdx];
++            if (!cmd) return;
++
++            const editArea = parentDoc.getElementById(`wb-edit-${batchId}-${cmdIdx}`);
++            if (!editArea) return;
++
++            if (cmd.action === 'create' || cmd.action === 'update') {
++                const newName = editArea.querySelector('.wb-edit-name')?.value?.trim();
++                const newContent = editArea.querySelector('.wb-edit-content')?.value || '';
++                const newKeys = editArea.querySelector('.wb-edit-keys')?.value || '';
++                if (newName) cmd.entry_name = newName;
++                cmd.fields.content = newContent;
++                cmd.fields.keys = newKeys;
++            } else if (cmd.action === 'patch') {
++                const opDivs = editArea.querySelectorAll('.wb-edit-op');
++                const newOps = [];
++                opDivs.forEach(div => {
++                    const opType = div.querySelector('.wb-edit-op-type')?.value;
++                    const anchor = div.querySelector('.wb-edit-op-anchor')?.value;
++                    const find = div.querySelector('.wb-edit-op-find')?.value;
++                    const field = div.querySelector('.wb-edit-op-field')?.value;
++                    const value = div.querySelector('.wb-edit-op-value')?.value;
++                    const op = { op: opType };
++                    if (anchor !== undefined && anchor !== null) op.anchor = anchor;
++                    if (find !== undefined && find !== null) op.find = find;
++                    if (field !== undefined && field !== null) op.field = field;
++                    if (value !== undefined) {
++                        // 灏濊瘯瑙ｆ瀽涓烘暟瀛?甯冨皵
++                        if (value === 'true') op.value = true;
++                        else if (value === 'false') op.value = false;
++                        else if (/^\d+$/.test(value)) op.value = parseInt(value);
++                        else op.value = value;
++                    }
++                    newOps.push(op);
++                });
++                cmd.ops = newOps;
++            }
++
++            cmd._edited = true;
++            wbPendingSave();
++            showToast('缂栬緫宸蹭繚瀛?, 'success');
++            wbRefreshPendingUI();
++        });
++    });
++}
++
++// --- UI Tab 浜嬩欢缁戝畾涓庡姞杞?---
++function setupWbUpdateTabListeners(parentDoc) {
++    // 鍚敤寮€鍏?+    const enabledCb = parentDoc.getElementById('wb-update-enabled');
++    if (enabledCb) {
++        enabledCb.addEventListener('change', function () {
++            if (!currentSettings.wbUpdateConfig) currentSettings.wbUpdateConfig = {};
++            currentSettings.wbUpdateConfig.enabled = this.checked;
++            saveSettings();
++            showToast(this.checked ? '宸插惎鐢ㄤ笘鐣屼功AI鏇存柊' : '宸茬鐢ㄤ笘鐣屼功AI鏇存柊', 'info');
++        });
++    }
++
++    // 瑙﹀彂妯″紡
++    const triggerMode = parentDoc.getElementById('wb-update-trigger-mode');
++    if (triggerMode) {
++        triggerMode.addEventListener('change', function () {
++            if (!currentSettings.wbUpdateConfig) currentSettings.wbUpdateConfig = {};
++            currentSettings.wbUpdateConfig.triggerMode = this.value;
++            saveSettings();
++            // 鏄剧ず/闅愯棌闂撮殧璁剧疆
++            const intervalSettings = parentDoc.getElementById('wb-update-interval-settings');
++            if (intervalSettings) intervalSettings.style.display = this.value === 'interval' ? 'block' : 'none';
++        });
++    }
++
++    // 淇濆瓨鏇存柊瑙勫垯
++    const saveRulesBtn = parentDoc.getElementById('wb-update-save-rules');
++    if (saveRulesBtn) {
++        saveRulesBtn.addEventListener('click', function () {
++            if (!currentSettings.wbUpdateConfig) currentSettings.wbUpdateConfig = {};
++            const cfg = currentSettings.wbUpdateConfig;
++            cfg.reviewDepth = parseInt(parentDoc.getElementById('wb-update-review-depth')?.value) || 10;
++            cfg.maxCreatePerRound = parseInt(parentDoc.getElementById('wb-update-max-create')?.value) || 10;
++            cfg.contextMode = parentDoc.getElementById('wb-update-context-mode')?.value || 'full';
++            cfg.maxContentChars = parseInt(parentDoc.getElementById('wb-update-max-chars')?.value) || 0;
++            cfg.patchDuplicateGuard = parentDoc.getElementById('wb-update-patch-dedup')?.checked ?? true;
++            cfg.confirmDelete = parentDoc.getElementById('wb-update-confirm-delete')?.checked ?? true;
++            cfg.excludeConstantFromPrompt = parentDoc.getElementById('wb-update-exclude-constant')?.checked ?? false;
++            cfg.startAfterFloors = parseInt(parentDoc.getElementById('wb-update-start-after')?.value) || 3;
++            cfg.intervalFloors = parseInt(parentDoc.getElementById('wb-update-interval-floors')?.value) || 5;
++            saveSettings();
++            showToast('鏇存柊瑙勫垯宸蹭繚瀛?, 'success');
++        });
++    }
++
++    // 鎵嬪姩瑙﹀彂
++    const triggerBtn = parentDoc.getElementById('wb-update-trigger-now');
++    if (triggerBtn) {
++        triggerBtn.addEventListener('click', async function () {
++            this.disabled = true;
++            this.textContent = '澶勭悊涓?..';
++            try {
++                await callWbUpdateAI();
++            } finally {
++                this.disabled = false;
++                this.textContent = '馃實 绔嬪嵆瑙﹀彂涓栫晫涔︽洿鏂?;
++            }
++        });
++    }
++
++    // 娓呯┖鏃ュ織
++    const clearLogBtn = parentDoc.getElementById('wb-update-clear-log');
++    if (clearLogBtn) {
++        clearLogBtn.addEventListener('click', function () {
++            const topWin = (window.parent && window.parent !== window) ? window.parent : window;
++            topWin.localStorage.removeItem(WB_UPDATE_LOG_KEY);
++            const logContainer = parentDoc.getElementById('wb-update-log-container');
++            if (logContainer) logContainer.innerHTML = '<em>鏃犳棩蹇?/em>';
++            showToast('鏃ュ織宸叉竻绌?, 'info');
++        });
++    }
++
++    // --- 涓栫晫涔︽洿鏂伴璁剧鐞?---
++    const presetSelector = parentDoc.getElementById('wb-update-prompt-selector');
++    if (presetSelector) {
++        presetSelector.addEventListener('change', function () {
++            const newIdx = parseInt(this.value);
++            if (isNaN(newIdx)) return;
++            // 淇濆瓨褰撳墠鍒版棫棰勮
++            const segs = getWbUpdatePromptSegmentsFromUI(parentDoc);
++            if (segs && segs.length > 0) {
++                const oldIdx = currentSettings.wbUpdateCurrentPromptIndex || 0;
++                if (currentSettings.wbUpdatePrompts[oldIdx]) {
++                    currentSettings.wbUpdatePrompts[oldIdx].prompt = segs;
++                }
++            }
++            currentSettings.wbUpdateCurrentPromptIndex = newIdx;
++            if (currentSettings.wbUpdatePrompts[newIdx]) {
++                renderWbUpdatePromptSegments(currentSettings.wbUpdatePrompts[newIdx].prompt, parentDoc);
++            }
++            saveSettings();
++        });
++    }
++
++    // 鏂板棰勮
++    const addPresetBtn = parentDoc.getElementById('wb-update-add-preset');
++    if (addPresetBtn) {
++        addPresetBtn.addEventListener('click', function () {
++            const name = prompt('璇疯緭鍏ユ柊棰勮鐨勫悕绉?', `涓栫晫涔﹂璁?${(currentSettings.wbUpdatePrompts || []).length + 1}`);
++            if (!name || !name.trim()) return;
++            if (!currentSettings.wbUpdatePrompts) currentSettings.wbUpdatePrompts = [];
++            currentSettings.wbUpdatePrompts.push({ name: name.trim(), prompt: [...WB_UPDATE_DEFAULT_PROMPT] });
++            currentSettings.wbUpdateCurrentPromptIndex = currentSettings.wbUpdatePrompts.length - 1;
++            _updateWbPresetSelector(parentDoc);
++            renderWbUpdatePromptSegments(WB_UPDATE_DEFAULT_PROMPT, parentDoc);
++            saveSettings();
++            showToast('鏂伴璁惧凡鍒涘缓', 'success');
++        });
++    }
++
++    // 鍒犻櫎棰勮
++    const deletePresetBtn = parentDoc.getElementById('wb-update-delete-preset');
++    if (deletePresetBtn) {
++        deletePresetBtn.addEventListener('click', function () {
++            if ((currentSettings.wbUpdatePrompts || []).length <= 1) {
++                showToast('鑷冲皯闇€瑕佷繚鐣欎竴涓璁?, 'warning');
++                return;
++            }
++            const idx = currentSettings.wbUpdateCurrentPromptIndex || 0;
++            if (confirm(`纭畾瑕佸垹闄ら璁?${currentSettings.wbUpdatePrompts[idx]?.name}"鍚楋紵`)) {
++                currentSettings.wbUpdatePrompts.splice(idx, 1);
++                if (currentSettings.wbUpdateCurrentPromptIndex >= currentSettings.wbUpdatePrompts.length) {
++                    currentSettings.wbUpdateCurrentPromptIndex = currentSettings.wbUpdatePrompts.length - 1;
++                }
++                _updateWbPresetSelector(parentDoc);
++                renderWbUpdatePromptSegments(currentSettings.wbUpdatePrompts[currentSettings.wbUpdateCurrentPromptIndex].prompt, parentDoc);
++                saveSettings();
++                showToast('棰勮宸插垹闄?, 'success');
++            }
++        });
++    }
++
++    // 澶嶅埗棰勮
++    const duplicatePresetBtn = parentDoc.getElementById('wb-update-duplicate-preset');
++    if (duplicatePresetBtn) {
++        duplicatePresetBtn.addEventListener('click', function () {
++            const idx = currentSettings.wbUpdateCurrentPromptIndex || 0;
++            const src = currentSettings.wbUpdatePrompts?.[idx];
++            if (!src) return;
++            const name = prompt('璇疯緭鍏ュ鍒堕璁剧殑鍚嶇О:', `${src.name} 鍓湰`);
++            if (!name || !name.trim()) return;
++            const copy = { name: name.trim(), prompt: Array.isArray(src.prompt) ? src.prompt.map(s => ({ ...s })) : src.prompt };
++            currentSettings.wbUpdatePrompts.push(copy);
++            currentSettings.wbUpdateCurrentPromptIndex = currentSettings.wbUpdatePrompts.length - 1;
++            _updateWbPresetSelector(parentDoc);
++            renderWbUpdatePromptSegments(copy.prompt, parentDoc);
++            saveSettings();
++            showToast('棰勮宸插鍒?, 'success');
++        });
++    }
++
++    // 娣诲姞娑堟伅娈?+    const addSegBtn = parentDoc.getElementById('wb-update-add-segment');
++    if (addSegBtn) {
++        addSegBtn.addEventListener('click', function () {
++            const container = parentDoc.getElementById('wb-update-prompt-segments');
++            if (!container) return;
++            const idx = container.querySelectorAll('.wb-prompt-segment').length;
++            const segHtml = _createWbSegmentHtml(idx, { role: 'USER', content: '' });
++            container.insertAdjacentHTML('beforeend', segHtml);
++            _bindWbSegmentDeleteButtons(container, parentDoc);
++        });
++    }
++
++    // 淇濆瓨棰勮
++    const savePresetBtn = parentDoc.getElementById('wb-update-save-preset');
++    if (savePresetBtn) {
++        savePresetBtn.addEventListener('click', function () {
++            const segs = getWbUpdatePromptSegmentsFromUI(parentDoc);
++            if (!segs || segs.length === 0) {
++                showToast('棰勮涓嶈兘涓虹┖', 'warning');
++                return;
++            }
++            const idx = currentSettings.wbUpdateCurrentPromptIndex || 0;
++            if (currentSettings.wbUpdatePrompts[idx]) {
++                currentSettings.wbUpdatePrompts[idx].prompt = segs;
++            }
++            saveSettings();
++            showToast('棰勮宸蹭繚瀛?, 'success');
++        });
++    }
++}
++
++function loadWbUpdateTabUI(parentDoc) {
++    const cfg = currentSettings.wbUpdateConfig || {};
++
++    // 寮€鍏?+    const enabledCb = parentDoc.getElementById('wb-update-enabled');
++    if (enabledCb) enabledCb.checked = cfg.enabled || false;
++
++    // 瑙﹀彂妯″紡
++    const triggerMode = parentDoc.getElementById('wb-update-trigger-mode');
++    if (triggerMode) triggerMode.value = cfg.triggerMode || 'manual';
++
++    // 闂撮殧璁剧疆鍙鎬?+    const intervalSettings = parentDoc.getElementById('wb-update-interval-settings');
++    if (intervalSettings) intervalSettings.style.display = (cfg.triggerMode === 'interval') ? 'block' : 'none';
++
++    // 鏇存柊瑙勫垯
++    const rd = parentDoc.getElementById('wb-update-review-depth');
++    if (rd) rd.value = cfg.reviewDepth || 10;
++    const mc = parentDoc.getElementById('wb-update-max-create');
++    if (mc) mc.value = cfg.maxCreatePerRound || 10;
++    const cm = parentDoc.getElementById('wb-update-context-mode');
++    if (cm) cm.value = cfg.contextMode || 'full';
++    const mch = parentDoc.getElementById('wb-update-max-chars');
++    if (mch) mch.value = cfg.maxContentChars || 0;
++    const pd = parentDoc.getElementById('wb-update-patch-dedup');
++    if (pd) pd.checked = cfg.patchDuplicateGuard !== false;
++    const cd = parentDoc.getElementById('wb-update-confirm-delete');
++    if (cd) cd.checked = cfg.confirmDelete !== false;
++    const ec = parentDoc.getElementById('wb-update-exclude-constant');
++    if (ec) ec.checked = cfg.excludeConstantFromPrompt || false;
++    const sa = parentDoc.getElementById('wb-update-start-after');
++    if (sa) sa.value = cfg.startAfterFloors || 3;
++    const ifl = parentDoc.getElementById('wb-update-interval-floors');
++    if (ifl) ifl.value = cfg.intervalFloors || 5;
++
++    // 棰勮
++    _updateWbPresetSelector(parentDoc);
++    const idx = currentSettings.wbUpdateCurrentPromptIndex || 0;
++    const prompts = currentSettings.wbUpdatePrompts || [];
++    if (prompts[idx]) {
++        renderWbUpdatePromptSegments(prompts[idx].prompt, parentDoc);
++    }
++
++    // 瀹℃牳闃熷垪
++    const pendingContainer = parentDoc.getElementById('wb-update-pending-container');
++    if (pendingContainer) renderWbPendingQueue(pendingContainer, parentDoc);
++
++    // 寰呭鏍稿窘鏍?+    const count = wbPendingCount();
++    const badge = parentDoc.getElementById('wb-update-pending-badge');
++    const countEl = parentDoc.getElementById('wb-update-pending-count');
++    if (badge) badge.style.display = count > 0 ? 'block' : 'none';
++    if (countEl) countEl.textContent = count;
++
++    // 鏃ュ織
++    const logContainer = parentDoc.getElementById('wb-update-log-container');
++    if (logContainer) {
++        const logs = wbGetLogs();
++        if (logs.length === 0) {
++            logContainer.innerHTML = '<em>鏃犳棩蹇?/em>';
++        } else {
++            logContainer.innerHTML = logs.slice(0, 50).map(l => {
++                const t = new Date(l.time).toLocaleString();
++                const detail = l.detail || (l.results ? `鎴愬姛:${l.results.ok} 澶辫触:${l.results.err}` : '');
++                return `<div style="padding:3px 0;border-bottom:1px solid var(--ios-border);">[${t}] 绗?{l.floor || '?'}妤?${l.action || ''} ${detail}</div>`;
++            }).join('');
++        }
++    }
++}
++
++function _updateWbPresetSelector(parentDoc) {
++    const selector = parentDoc.getElementById('wb-update-prompt-selector');
++    if (!selector) return;
++    const prompts = currentSettings.wbUpdatePrompts || [];
++    const idx = currentSettings.wbUpdateCurrentPromptIndex || 0;
++    selector.innerHTML = prompts.map((p, i) =>
++        `<option value="${i}" ${i === idx ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
++    ).join('');
++}
++
++function renderWbUpdatePromptSegments(segments, parentDoc) {
++    const container = parentDoc.getElementById('wb-update-prompt-segments');
++    if (!container) return;
++    const segs = Array.isArray(segments) ? segments : [{ role: 'SYSTEM', content: String(segments) }];
++    container.innerHTML = segs.map((seg, i) => _createWbSegmentHtml(i, seg)).join('');
++    _bindWbSegmentDeleteButtons(container, parentDoc);
++}
++
++function _createWbSegmentHtml(index, segment) {
++    const roleSel = ['SYSTEM', 'USER', 'ASSISTANT'].map(r =>
++        `<option value="${r}" ${(segment.role || 'USER').toUpperCase() === r ? 'selected' : ''}>${r}</option>`
++    ).join('');
++    return `<div class="wb-prompt-segment" data-seg-idx="${index}" style="margin-bottom:10px;padding:10px;border:1px solid var(--ios-border);border-radius:6px;background:var(--ios-gray);">
++        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
++            <span style="font-weight:600;font-size:12px;">娈?#${index + 1}</span>
++            <select class="wb-seg-role" style="padding:4px 8px;border-radius:4px;border:1px solid var(--ios-border);">${roleSel}</select>
++            <button class="wb-seg-delete secondary" style="margin-left:auto;font-size:12px;padding:2px 8px;">鍒犻櫎</button>
++        </div>
++        <textarea class="wb-seg-content" rows="4" style="width:100%;font-family:monospace;font-size:13px;padding:8px;border:1px solid var(--ios-border);border-radius:6px;resize:vertical;">${escapeHtml(segment.content || '')}</textarea>
++    </div>`;
++}
++
++function _bindWbSegmentDeleteButtons(container, parentDoc) {
++    container.querySelectorAll('.wb-seg-delete').forEach(btn => {
++        btn.onclick = function () {
++            const seg = this.closest('.wb-prompt-segment');
++            if (seg) seg.remove();
++            // 閲嶆柊缂栧彿
++            container.querySelectorAll('.wb-prompt-segment').forEach((s, i) => {
++                s.dataset.segIdx = i;
++                s.querySelector('span').textContent = `娈?#${i + 1}`;
++            });
++        };
++    });
++}
++
++function getWbUpdatePromptSegmentsFromUI(parentDoc) {
++    const container = parentDoc.getElementById('wb-update-prompt-segments');
++    if (!container) return [];
++    const segs = [];
++    container.querySelectorAll('.wb-prompt-segment').forEach(div => {
++        const role = div.querySelector('.wb-seg-role')?.value || 'USER';
++        const content = div.querySelector('.wb-seg-content')?.value || '';
++        segs.push({ role, content });
++    });
++    return segs;
++}
++
++// ==================== 涓栫晫涔I鏇存柊寮曟搸 缁撴潫 ====================
++
+ async function persistInitialDatabaseSnapshot(context) {
+     try {
+         if (!currentJsonTableData) {
+@@ -7535,6 +9046,9 @@ async function handleNewMessageDebounced(eventType = 'unknown') {
+         }
+ 
+         await triggerAutomaticUpdateIfNeeded();
++
++        // 涓栫晫涔I鏇存柊锛氶棿闅旇Е鍙戞鏌?+        wbCheckIntervalTrigger();
+     }, NEW_MESSAGE_DEBOUNCE_DELAY);
+ }
+ 
+@@ -7936,6 +9450,9 @@ function initializeExtension() {
+ 
+     // 灏濊瘯娉ㄥ唽浜嬩欢鐩戝惉鍣紙甯﹂噸璇曟満鍒讹級
+     tryRegisterEventListeners();
++
++    // 鎭㈠涓栫晫涔︽洿鏂板鏍搁槦鍒?+    wbPendingRestore();
+ }
+ 
+ // 浣跨敤 jQuery 鍒濆鍖栵紙鍙傝€冪ず渚嬩唬鐮侊級
