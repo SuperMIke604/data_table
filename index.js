@@ -185,6 +185,26 @@ const DEFAULT_CHAR_CARD_PROMPT = [
     }
 ];
 
+// 世界书AI更新默认提示词
+const WB_UPDATE_DEFAULT_PROMPT = [
+    {
+        role: 'SYSTEM',
+        content: '你是一个专业的世界设定管理助手。你的唯一职责是审查角色对话历史与当前世界书内容，识别需要记录或更新的世界设定变化，然后输出结构化的更新指令。你不参与角色扮演，不输出任何对话内容。'
+    },
+    {
+        role: 'SYSTEM',
+        content: '$5'
+    },
+    {
+        role: 'SYSTEM',
+        content: '以下是当前世界书中所有条目的完整信息（包含内容正文）。你可以直接查看每个条目的内容来判断是否需要更新。\n\n$6'
+    },
+    {
+        role: 'USER',
+        content: '请审查以上对话内容和当前世界书的全部条目内容。如有需要更新、新增或删除的条目，请按格式输出更新指令（优先使用 patch 进行增量更新）。如无需更新，只回复"无需更新"。\n\n$1'
+    }
+];
+
 const DEFAULT_SETTINGS = {
     // 更新配置
     autoUpdateFrequency: 0,        // 最新N层不更新
@@ -232,6 +252,25 @@ const DEFAULT_SETTINGS = {
     // 世界书排序（统一一个排序值，数值越小越靠前）
     worldbookOrder: 100,
     previewOnlyShowChanges: false,
+
+    // 世界书AI更新配置
+    wbUpdateConfig: {
+        enabled: false,
+        triggerMode: 'manual',
+        intervalFloors: 5,
+        startAfterFloors: 3,
+        confirmDelete: true,
+        maxCreatePerRound: 10,
+        patchDuplicateGuard: true,
+        contextMode: 'full',
+        maxContentChars: 0,
+        reviewDepth: 10,
+        excludeConstantFromPrompt: false,
+    },
+    wbUpdatePrompts: [
+        { name: '默认世界书更新预设', prompt: WB_UPDATE_DEFAULT_PROMPT }
+    ],
+    wbUpdateCurrentPromptIndex: 0,
 };
 
 // 当前配置
