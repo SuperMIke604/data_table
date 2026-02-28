@@ -1,10 +1,10 @@
-﻿/* ============================================================
-   iOS 26 姣涚幓鐠冮鏍?鈥?Data Manage & Data Preview
+/* ============================================================
+   iOS 26 毛玻璃风格 — Data Manage & Data Preview
    ============================================================ */
 
-/* --- 寮圭獥涓诲鍣?--- */
+/* --- 弹窗主容器 --- */
 .data-manage-popup {
-    /* 璁捐浠ょ墝 */
+    /* 设计令牌 */
     --ios-blue: #007AFF;
     --ios-blue-hover: #0051D5;
     --ios-blue-active: #0041B5;
@@ -37,7 +37,7 @@
     box-sizing: border-box;
 }
 
-/* --- 鏍囬 --- */
+/* --- 标题 --- */
 .data-manage-popup h2 {
     font-size: 22px;
     font-weight: 700;
@@ -53,7 +53,7 @@
     justify-content: center;
 }
 
-/* 鏍囬宸﹀彸娓愬彉瑁呴グ绾?*/
+/* 标题左右渐变装饰线 */
 .data-manage-popup h2::before,
 .data-manage-popup h2::after {
     content: "";
@@ -72,7 +72,7 @@
     --dir: left;
 }
 
-/* --- Tab 瀵艰埅 --- */
+/* --- Tab 导航 --- */
 .data-manage-tabs-nav {
     display: flex;
     gap: 0;
@@ -116,7 +116,7 @@
     box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
 }
 
-/* --- Tab 鍐呭 --- */
+/* --- Tab 内容 --- */
 .data-manage-tab-content {
     display: none;
     animation: dmFadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
@@ -141,7 +141,7 @@
     }
 }
 
-/* --- 鍗＄墖锛氭瘺鐜荤拑鏁堟灉 --- */
+/* --- 卡片：毛玻璃效果 --- */
 .data-manage-card {
     background: var(--ios-surface);
     backdrop-filter: blur(18px) saturate(180%);
@@ -164,14 +164,14 @@
     letter-spacing: 0.5px;
 }
 
-/* --- 缃戞牸甯冨眬 --- */
+/* --- 网格布局 --- */
 .data-manage-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
     gap: 16px;
 }
 
-/* --- 琛ㄥ崟鍏冪礌 --- */
+/* --- 表单元素 --- */
 .data-manage-popup label {
     display: block;
     margin-bottom: 8px;
@@ -220,7 +220,7 @@
     resize: vertical;
 }
 
-/* --- 鎸夐挳 鈥?iOS 26 椋庢牸 --- */
+/* --- 按钮 — iOS 26 风格 --- */
 .data-manage-popup button,
 .data-manage-popup .button {
     padding: 12px 24px;
@@ -280,7 +280,7 @@
     box-shadow: none !important;
 }
 
-/* --- 鎸夐挳缁?--- */
+/* --- 按钮组 --- */
 .data-manage-button-group {
     display: flex;
     flex-wrap: wrap;
@@ -289,7 +289,7 @@
     margin-top: 20px;
 }
 
-/* --- 杈撳叆缁?--- */
+/* --- 输入组 --- */
 .data-manage-input-group {
     display: flex;
     align-items: center;
@@ -310,7 +310,7 @@
     min-width: 0;
 }
 
-/* --- 澶嶉€夋缁?--- */
+/* --- 复选框组 --- */
 .data-manage-checkbox-group {
     display: flex;
     align-items: center;
@@ -342,7 +342,7 @@
     flex: 1;
 }
 
-/* --- 鍗曢€夋寜閽?--- */
+/* --- 单选按钮 --- */
 .data-manage-radio-group {
     display: flex;
     justify-content: center;
@@ -419,7 +419,7 @@
     gap: 8px;
 }
 
-/* --- 鐘舵€佹樉绀?--- */
+/* --- 状态显示 --- */
 .data-manage-status-display {
     text-align: center;
     padding: 16px;
@@ -432,7 +432,7 @@
     color: var(--ios-text-secondary);
 }
 
-/* --- 璇存槑鏂囧瓧 --- */
+/* --- 说明文字 --- */
 .data-manage-notes {
     font-size: 13px;
     color: var(--ios-text-secondary);
@@ -440,7 +440,7 @@
     line-height: 1.5;
 }
 
-/* --- 鎻愮ず璇嶇墖娈?--- */
+/* --- 提示词片段 --- */
 .data-manage-prompt-segment {
     margin-bottom: 16px;
     border: 1px solid var(--ios-border);
@@ -534,7 +534,7 @@
 }
 
 /* ============================================================
-   鏁版嵁姒傝 鈥?娑堟伅鍗＄墖 & 璇︽儏闈㈡澘
+   数据概览 — 消息卡片 & 详情面板
    ============================================================ */
 
 .overview-content {
@@ -548,7 +548,7 @@
     letter-spacing: 0.5px;
 }
 
-/* 娑堟伅鍗＄墖 */
+/* 消息卡片 */
 .message-data-card {
     background: var(--ios-surface);
     backdrop-filter: blur(18px) saturate(180%);
@@ -570,7 +570,7 @@
     transform: translateY(-1px);
 }
 
-/* 鍗＄墖澶撮儴 */
+/* 卡片头部 */
 .message-card-header {
     display: flex;
     justify-content: space-between;
@@ -590,7 +590,7 @@
     color: var(--ios-text-secondary);
 }
 
-/* 鏁版嵁缁熻 */
+/* 数据统计 */
 .message-stats {
     margin-bottom: 12px;
 }
@@ -612,7 +612,7 @@
     border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* 璇︽儏鍖哄煙 */
+/* 详情区域 */
 .message-details {
     margin-top: 15px;
     padding-top: 15px;
@@ -624,7 +624,7 @@
     background: transparent;
 }
 
-/* 鎿嶄綔鎸夐挳鍖哄煙 */
+/* 操作按钮区域 */
 .message-card-actions {
     text-align: right;
     margin-top: 12px;
@@ -632,7 +632,7 @@
     border-top: 1px solid var(--ios-separator);
 }
 
-/* 灞曞紑/鏀惰捣鎸夐挳 */
+/* 展开/收起按钮 */
 .toggle-details-btn {
     background: linear-gradient(135deg, var(--ios-blue) 0%, var(--ios-blue-active) 100%);
     color: white;
@@ -658,7 +658,7 @@
     transform: translateY(0);
 }
 
-/* 鍒犻櫎璁板綍鎸夐挳 */
+/* 删除记录按钮 */
 .delete-message-btn {
     background: linear-gradient(135deg, var(--ios-red) 0%, #E0342B 100%);
     color: white;
@@ -683,7 +683,7 @@
     transform: translateY(0);
 }
 
-/* 姒傝搴曢儴缁熻 */
+/* 概览底部统计 */
 .overview-summary {
     margin-top: 20px;
     padding: 12px;
@@ -701,9 +701,10 @@
 }
 
 /* ============================================================
-   璇︽儏闈㈡澘 鈥?琛ㄦ牸鍖哄煙 & 缂栬緫鍖?   ============================================================ */
+   详情面板 — 表格区域 & 编辑区
+   ============================================================ */
 
-/* 琛ㄦ牸鍖烘鍗＄墖 */
+/* 表格区段卡片 */
 .table-section {
     margin-bottom: 20px;
     border: 1px solid rgba(255, 255, 255, 0.5);
@@ -733,7 +734,7 @@
     letter-spacing: 0.3px;
 }
 
-/* 鍒犻櫎琛ㄦ牸鎸夐挳 */
+/* 删除表格按钮 */
 .delete-table-btn {
     background: linear-gradient(135deg, var(--ios-red) 0%, #E0342B 100%);
     color: white;
@@ -757,7 +758,7 @@
     transform: translateY(0);
 }
 
-/* 琛ㄦ牸鍏冩暟鎹彁绀?*/
+/* 表格元数据提示 */
 .table-metadata {
     background: var(--ios-gray);
     backdrop-filter: blur(6px);
@@ -775,7 +776,7 @@
     margin: 0;
 }
 
-/* 鏉＄洰鍒楄〃 */
+/* 条目列表 */
 .entries-list-container {
     display: flex;
     flex-direction: column;
@@ -783,7 +784,7 @@
     margin-top: 12px;
 }
 
-/* 缂栬緫 textarea 鈥?瑕嗙洊瀹夸富鏍峰紡 */
+/* 编辑 textarea — 覆盖宿主样式 */
 .cell-input {
     background: var(--ios-gray) !important;
     color: var(--ios-text) !important;
@@ -820,7 +821,7 @@
     border-color: rgba(0, 122, 255, 0.4) !important;
 }
 
-/* 鏉＄洰鎿嶄綔鎸夐挳 */
+/* 条目操作按钮 */
 .entry-actions {
     display: flex;
     gap: 8px;
@@ -877,10 +878,10 @@
 }
 
 /* ============================================================
-   鏁版嵁棰勮 & 琛ㄦ牸閫氱敤
+   数据预览 & 表格通用
    ============================================================ */
 
-/* 鏁版嵁琛ㄦ牸 */
+/* 数据表格 */
 .dm-table-wrap {
     overflow-x: auto;
 }
@@ -945,7 +946,7 @@
     border-bottom: none;
 }
 
-/* Diff 楂樹寒 */
+/* Diff 高亮 */
 .dm-row-deleted {
     background-color: rgba(255, 59, 48, 0.1) !important;
 }
@@ -966,7 +967,7 @@
     background-color: rgba(52, 199, 89, 0.18) !important;
 }
 
-/* 浠ｇ爜鍧?fallback */
+/* 代码块 fallback */
 .dm-code-block {
     background: var(--ios-gray);
     backdrop-filter: blur(8px);
@@ -981,10 +982,10 @@
 }
 
 /* ============================================================
-   鏁版嵁棰勮 鈥?鑱婂ぉ鍖哄祵鍏ュ紡鍗＄墖甯冨眬 (iOS 椋庢牸)
+   数据预览 — 聊天区嵌入式卡片布局 (iOS 风格)
    ============================================================ */
 
-/* --- 涓诲鍣?--- */
+/* --- 主容器 --- */
 .dp-wrapper {
     --ios-blue: #007AFF;
     --ios-blue-hover: #0051D5;
@@ -1011,7 +1012,7 @@
     height: 100%;
 }
 
-/* --- 搴曢儴瀵艰埅鏍?--- */
+/* --- 底部导航栏 --- */
 .dp-nav-container {
     display: flex;
     flex-wrap: wrap;
@@ -1117,7 +1118,7 @@
     color: rgba(255, 255, 255, 0.7);
 }
 
-/* --- 鏁版嵁闈㈡澘 --- */
+/* --- 数据面板 --- */
 .dp-data-display {
     flex: 1;
     display: flex;
@@ -1125,7 +1126,7 @@
     overflow: hidden;
 }
 
-/* --- 闈㈡澘澶撮儴 --- */
+/* --- 面板头部 --- */
 .dp-panel-header {
     flex: 0 0 auto;
     display: flex;
@@ -1163,7 +1164,7 @@
     flex-wrap: wrap;
 }
 
-/* --- 鎼滅储 --- */
+/* --- 搜索 --- */
 .dp-search-wrapper {
     position: relative;
     display: flex;
@@ -1200,7 +1201,7 @@
     pointer-events: none;
 }
 
-/* --- Diff 妯″紡 & 宸ュ叿鏍?--- */
+/* --- Diff 模式 & 工具栏 --- */
 .dp-toolbar-info {
     font-size: 12px;
     color: var(--ios-text-secondary);
@@ -1239,7 +1240,7 @@
     background: rgba(255, 59, 48, 0.1);
 }
 
-/* --- 鍗＄墖鍖哄煙 --- */
+/* --- 卡片区域 --- */
 .dp-panel-content {
     flex: 1;
     overflow-x: auto;
@@ -1277,7 +1278,7 @@
     min-height: min-content;
 }
 
-/* --- 鍗曞紶鏁版嵁鍗＄墖 --- */
+/* --- 单张数据卡片 --- */
 .dp-data-card {
     flex: 0 0 260px;
     width: 260px;
@@ -1316,7 +1317,7 @@
     border-radius: 2px;
 }
 
-/* 鍗＄墖鏍囬 */
+/* 卡片标题 */
 .dp-card-head {
     flex: 0 0 auto;
     padding: 10px 12px;
@@ -1357,7 +1358,7 @@
     font-size: var(--dp-font-size);
 }
 
-/* Diff 寰界珷 */
+/* Diff 徽章 */
 .dp-diff-badge {
     font-size: 10px;
     font-weight: 700;
@@ -1382,7 +1383,7 @@
     color: var(--ios-blue);
 }
 
-/* 鍗＄墖 diff 鐘舵€?*/
+/* 卡片 diff 状态 */
 .dp-card-added {
     border-color: rgba(52, 199, 89, 0.35) !important;
     box-shadow: 0 0 0 1px rgba(52, 199, 89, 0.15), 0 4px 16px -4px var(--ios-shadow) !important;
@@ -1399,7 +1400,7 @@
     box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.15), 0 4px 16px -4px var(--ios-shadow) !important;
 }
 
-/* 鍗＄墖鍐呭 */
+/* 卡片内容 */
 .dp-card-body {
     padding: 6px 12px;
     display: flex;
@@ -1466,7 +1467,7 @@
     font-size: 14px;
 }
 
-/* --- 鍒嗛〉 --- */
+/* --- 分页 --- */
 .dp-pagination {
     flex: 0 0 auto;
     padding: 10px;
@@ -1521,7 +1522,7 @@
     margin: 0 4px;
 }
 
-/* --- 鏀惰捣瑙﹀彂鏉?--- */
+/* --- 收起触发条 --- */
 .dp-expand-trigger {
     background: linear-gradient(145deg, rgba(245, 245, 250, 0.88) 0%, rgba(235, 238, 245, 0.88) 100%);
     backdrop-filter: blur(30px) saturate(180%);
@@ -1549,7 +1550,7 @@
     box-shadow: 0 6px 20px -6px rgba(0, 0, 0, 0.12);
 }
 
-/* --- 鍙抽敭鑿滃崟 --- */
+/* --- 右键菜单 --- */
 .dp-menu-backdrop {
     position: fixed;
     top: 0;
@@ -1632,7 +1633,7 @@
     color: var(--ios-text-secondary);
 }
 
-/* --- 缂栬緫寮圭獥 --- */
+/* --- 编辑弹窗 --- */
 .dp-edit-overlay {
     position: fixed !important;
     inset: 0;
@@ -1736,7 +1737,7 @@
     box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
 }
 
-/* --- 瀛椾綋澶у皬寮圭獥 --- */
+/* --- 字体大小弹窗 --- */
 .dp-fontsize-overlay {
     position: fixed !important;
     inset: 0;
@@ -1877,7 +1878,7 @@
     gap: 10px;
 }
 
-/* --- 鏁版嵁棰勮鍝嶅簲寮?--- */
+/* --- 数据预览响应式 --- */
 @media (max-width: 768px) {
     .dp-data-card {
         flex: 0 0 220px;
@@ -1909,9 +1910,10 @@
 }
 
 /* ============================================================
-   鐙珛绐楀彛绯荤粺 鈥?iOS 26 姣涚幓鐠冮鏍?   ============================================================ */
+   独立窗口系统 — iOS 26 毛玻璃风格
+   ============================================================ */
 
-/* 绐楀彛閬僵 */
+/* 窗口遮罩 */
 .dm-window-overlay {
     position: fixed;
     inset: 0;
@@ -1932,7 +1934,7 @@
     }
 }
 
-/* 绐楀彛瀹瑰櫒 */
+/* 窗口容器 */
 .dm-window {
     position: fixed;
     display: flex;
@@ -1980,7 +1982,7 @@
     }
 }
 
-/* 绐楀彛鏍囬鏍?*/
+/* 窗口标题栏 */
 .dm-window-header {
     display: flex;
     align-items: center;
@@ -2009,7 +2011,7 @@
     pointer-events: none;
 }
 
-/* 绐楀彛鎺у埗鎸夐挳缁?*/
+/* 窗口控制按钮组 */
 .dm-window-controls {
     display: flex;
     gap: 8px;
@@ -2053,7 +2055,7 @@
     color: #E0342B;
 }
 
-/* 绐楀彛鍐呭鍖?*/
+/* 窗口内容区 */
 .dm-window-body {
     flex: 1;
     overflow-y: auto;
@@ -2080,7 +2082,7 @@
     background: rgba(60, 60, 67, 0.35);
 }
 
-/* 璋冩暣澶у皬鎵嬫焺 */
+/* 调整大小手柄 */
 .dm-window-resize {
     position: absolute;
     z-index: 10;
@@ -2150,7 +2152,7 @@
     cursor: sw-resize;
 }
 
-/* 鏈€澶у寲鐘舵€?*/
+/* 最大化状态 */
 .dm-window.dm-window-maximized {
     top: 0 !important;
     left: 0 !important;
@@ -2164,7 +2166,7 @@
     display: none;
 }
 
-/* 绐楀彛鍐?data-manage-popup 鏍峰紡瑕嗗啓 鈥?鍥犱负涓嶅啀鍦ㄩ厭棣?popup 鍐?*/
+/* 窗口内 data-manage-popup 样式覆写 — 因为不再在酒馆 popup 内 */
 .dm-window .data-manage-popup {
     background: transparent;
     box-shadow: none;
@@ -2173,9 +2175,10 @@
 }
 
 /* ============================================================
-   鍝嶅簲寮?   ============================================================ */
+   响应式
+   ============================================================ */
 
-/* 绉诲姩绔獥鍙ｉ粯璁ゅ叏灞?*/
+/* 移动端窗口默认全屏 */
 @media (max-width: 768px) {
     .dm-window {
         top: 0 !important;
@@ -2243,7 +2246,7 @@
         color: white;
     }
 
-    /* 姒傝鎿嶄綔鎸夐挳绉诲姩绔缉灏?*/
+    /* 概览操作按钮移动端缩小 */
     .toggle-details-btn,
     .delete-message-btn {
         padding: 5px 10px;
@@ -2276,7 +2279,7 @@
         padding: 14px;
     }
 
-    /* 绉诲姩绔〃鏍?*/
+    /* 移动端表格 */
     .dm-table-wrap {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -2290,218 +2293,4 @@
     .dm-table td {
         padding: 8px 6px;
     }
-}
-
-/* ============================================================
-   涓栫晫涔I鏇存柊 鈥?瀹℃牳闃熷垪 & 缂栬緫鍖?   ============================================================ */
-
-.wb-pending-empty {
-    text-align: center;
-    padding: 24px;
-    color: var(--ios-text-secondary);
-    font-size: 14px;
-}
-
-.wb-pending-batch {
-    border: 1px solid var(--ios-border);
-    border-radius: 14px;
-    margin-bottom: 12px;
-    overflow: hidden;
-    background: var(--ios-surface);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-}
-
-.wb-pending-batch-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: linear-gradient(135deg, rgba(0, 122, 255, 0.08) 0%, rgba(0, 122, 255, 0.03) 100%);
-    border-bottom: 1px solid var(--ios-border);
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.wb-pending-batch-header span {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ios-text);
-}
-
-.wb-pending-batch-actions {
-    display: flex;
-    gap: 6px;
-}
-
-.wb-pending-cmd {
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(60, 60, 67, 0.1);
-}
-
-.wb-pending-cmd:last-child {
-    border-bottom: none;
-}
-
-.wb-pending-cmd-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-}
-
-.wb-pending-cmd-header>span {
-    font-size: 14px;
-    color: var(--ios-text);
-}
-
-.wb-pending-cmd-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-}
-
-.wb-pending-cmd-detail {
-    margin-top: 8px;
-    padding: 8px 12px;
-    background: var(--ios-gray);
-    border-radius: 8px;
-    font-size: 13px;
-}
-
-.wb-field-row {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 4px;
-    align-items: flex-start;
-}
-
-.wb-field-label {
-    font-weight: 600;
-    color: var(--ios-text-secondary);
-    flex-shrink: 0;
-    min-width: 50px;
-}
-
-.wb-field-value {
-    color: var(--ios-text);
-    word-break: break-all;
-    white-space: pre-wrap;
-}
-
-.wb-edited-tag {
-    background: #ff9500;
-    color: white;
-    padding: 1px 6px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    vertical-align: middle;
-}
-
-/* 鎸夐挳 */
-.wb-btn {
-    padding: 8px 14px;
-    border: none;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    background: var(--ios-gray);
-    color: var(--ios-text);
-    border: 1px solid var(--ios-border);
-}
-
-.wb-btn:hover {
-    background: var(--ios-gray-dark);
-    transform: translateY(-1px);
-}
-
-.wb-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.wb-btn-sm {
-    padding: 4px 8px;
-    font-size: 14px;
-    border-radius: 6px;
-    line-height: 1;
-}
-
-.wb-btn-approve-all {
-    background: linear-gradient(135deg, #34C759, #2DB84D);
-    color: white;
-    border: none;
-}
-
-.wb-btn-reject-all {
-    background: linear-gradient(135deg, #FF3B30, #E0342B);
-    color: white;
-    border: none;
-}
-
-/* 缂栬緫鍖?*/
-.wb-edit-area {
-    margin-top: 10px;
-    padding: 12px;
-    border: 1px solid rgba(0, 122, 255, 0.3);
-    border-radius: 10px;
-    background: rgba(0, 122, 255, 0.04);
-}
-
-.wb-edit-area label {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ios-text);
-}
-
-.wb-edit-area input[type="text"],
-.wb-edit-area textarea,
-.wb-edit-area select {
-    width: 100%;
-    padding: 8px 10px;
-    border: 1px solid var(--ios-border);
-    border-radius: 8px;
-    font-size: 13px;
-    font-family: monospace;
-    background: var(--ios-gray);
-    color: var(--ios-text);
-    box-sizing: border-box;
-    margin-top: 2px;
-}
-
-.wb-edit-area textarea:focus,
-.wb-edit-area input:focus {
-    outline: none;
-    border-color: var(--ios-blue);
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
-}
-
-.wb-edit-op {
-    padding: 8px;
-    margin-bottom: 8px;
-    border: 1px solid var(--ios-border);
-    border-radius: 8px;
-    background: var(--ios-surface);
-}
-
-.wb-btn-save-edit {
-    margin-top: 8px;
-    background: linear-gradient(135deg, var(--ios-blue), var(--ios-blue-active));
-    color: white;
-    border: none !important;
-}
-
-/* 涓栫晫涔﹂璁炬 */
-.wb-prompt-segment {
-    transition: all 0.2s ease;
-}
-
-.wb-prompt-segment:hover {
-    border-color: rgba(0, 122, 255, 0.3);
 }
