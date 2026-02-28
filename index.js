@@ -1726,6 +1726,13 @@ function openDataManagePopup() {
                 </div>
                 <div class="data-manage-card">
                     <h3>操作</h3>
+                    <div style="margin-bottom:12px;">
+                        <label>目标世界书:</label>
+                        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+                            <select id="wb-update-target-book" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--ios-border);"></select>
+                        </div>
+                        <p class="data-manage-notes" id="wb-update-target-status">复用「世界书」Tab 的注入目标设置</p>
+                    </div>
                     <div class="data-manage-button-group">
                         <button id="wb-update-trigger-now" class="primary" style="flex:1;">🌍 立即触发世界书更新</button>
                     </div>
@@ -8077,6 +8084,19 @@ function setupWbUpdateTabListeners(parentDoc) {
         });
     }
 
+    // 目标世界书选择器
+    const targetBookSel = parentDoc.getElementById('wb-update-target-book');
+    if (targetBookSel) {
+        targetBookSel.addEventListener('change', function () {
+            if (!currentSettings.worldbookConfig) {
+                currentSettings.worldbookConfig = { ...DEFAULT_SETTINGS.worldbookConfig };
+            }
+            currentSettings.worldbookConfig.injectionTarget = this.value || 'character';
+            saveSettings();
+            showToast('世界书更新目标已切换: ' + (this.value === 'character' ? '角色卡绑定世界书' : this.value), 'success');
+        });
+    }
+
     // --- 世界书更新预设管理 ---
     const presetSelector = parentDoc.getElementById('wb-update-prompt-selector');
     if (presetSelector) {
@@ -8203,6 +8223,9 @@ function loadWbUpdateTabUI(parentDoc) {
     const intervalSettings = parentDoc.getElementById('wb-update-interval-settings');
     if (intervalSettings) intervalSettings.style.display = (cfg.triggerMode === 'interval') ? 'block' : 'none';
 
+    // 目标世界书选择器
+    _populateWbUpdateTargetSelector(parentDoc);
+
     // 更新规则
     const rd = parentDoc.getElementById('wb-update-review-depth');
     if (rd) rd.value = cfg.reviewDepth || 10;
@@ -8255,6 +8278,47 @@ function loadWbUpdateTabUI(parentDoc) {
                 return `<div style="padding:3px 0;border-bottom:1px solid var(--ios-border);">[${t}] 第${l.floor || '?'}楼 ${l.action || ''} ${detail}</div>`;
             }).join('');
         }
+    }
+}
+
+async function _populateWbUpdateTargetSelector(parentDoc) {
+    const select = parentDoc.getElementById('wb-update-target-book');
+    const statusEl = parentDoc.getElementById('wb-update-target-status');
+    if (!select) return;
+
+    try {
+        const books = await getWorldBooks();
+        select.innerHTML = '<option value="character">角色卡绑定世界书</option>';
+        books.forEach(book => {
+            const option = parentDoc.createElement('option');
+            option.value = book.name;
+            option.textContent = book.name;
+            select.appendChild(option);
+        });
+
+        // 设置当前值（复用 worldbookConfig.injectionTarget）
+        const worldbookConfig = currentSettings.worldbookConfig || DEFAULT_SETTINGS.worldbookConfig;
+        select.value = worldbookConfig.injectionTarget || 'character';
+
+        // 显示当前解析的实际世界书名称
+        if (statusEl) {
+            try {
+                const resolved = await getInjectionTargetLorebook();
+                if (resolved) {
+                    statusEl.textContent = '当前目标: ' + resolved;
+                    statusEl.style.color = '';
+                } else {
+                    statusEl.textContent = '⚠️ 无法解析目标世界书，请确认选择正确';
+                    statusEl.style.color = 'var(--ios-red)';
+                }
+            } catch (e) {
+                statusEl.textContent = '⚠️ 解析目标失败: ' + e.message;
+                statusEl.style.color = 'var(--ios-red)';
+            }
+        }
+    } catch (error) {
+        console.error('[世界书更新] 加载世界书列表失败:', error);
+        select.innerHTML = '<option value="character">加载失败</option>';
     }
 }
 
