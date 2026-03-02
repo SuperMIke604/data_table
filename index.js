@@ -1,4 +1,4 @@
-/* global SillyTavern */
+﻿/* global SillyTavern */
 
 // ==================== 扩展配置 ====================
 // 参考: https://github.com/city-unit/st-extension-example/blob/master/index.js
@@ -1594,6 +1594,7 @@ function openDataManagePopup() {
                     </div>
                     <div id="data-manage-overview-area" style="display: none; margin-top: 15px;">
                         <div class="data-manage-button-group" style="margin-bottom: 10px;">
+                            <button id="data-manage-delete-all-records" class="secondary" style="color: #FF3B30;">一键删除所有记录</button>
                             <button id="data-manage-close-overview" class="secondary">关闭</button>
                         </div>
                         <div id="data-manage-overview-container" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);">
@@ -4066,6 +4067,106 @@ async function handleDeleteMessage(e) {
 }
 
 /**
+ * 一键删除所有数据库记录
+ */
+async function handleDeleteAllRecords() {
+    try {
+        const context = SillyTavern.getContext();
+        if (!context || !context.chat || context.chat.length === 0) {
+            showToast('没有聊天记录', 'warning');
+            return;
+        }
+
+        const chat = context.chat;
+
+        // 先统计有多少条含数据的消息
+        let dataCount = 0;
+        for (let i = 0; i < chat.length; i++) {
+            const message = chat[i];
+            if (message.TavernDB_ACU_Data) {
+                dataCount++;
+            } else if (message.mes) {
+                try {
+                    const mesText = message.mes;
+                    const jsonMatch = mesText.match(/```json\s*([\s\S]*?)\s*```/);
+                    if (jsonMatch) {
+                        const jsonData = JSON.parse(jsonMatch[1]);
+                        if (jsonData && typeof jsonData === 'object') dataCount++;
+                    } else {
+                        try {
+                            const jsonData = JSON.parse(mesText);
+                            if (jsonData && typeof jsonData === 'object') dataCount++;
+                        } catch (e) { }
+                    }
+                } catch (e) { }
+            }
+        }
+
+        if (dataCount === 0) {
+            showToast('没有可删除的数据库记录', 'info');
+            return;
+        }
+
+        if (!confirm(`确定要删除所有 ${dataCount} 条数据库记录吗？\n\n此操作不可恢复！`)) {
+            return;
+        }
+
+        // 遍历所有消息，删除数据
+        let deletedCount = 0;
+        for (let i = 0; i < chat.length; i++) {
+            const message = chat[i];
+            let hadData = false;
+
+            if (message.TavernDB_ACU_Data) {
+                delete message.TavernDB_ACU_Data;
+                hadData = true;
+            }
+
+            if (message.mes) {
+                const originalMes = message.mes;
+                message.mes = message.mes.replace(/```json\s*[\s\S]*?\s*```/g, '');
+                if (message.mes !== originalMes) {
+                    hadData = true;
+                }
+            }
+
+            if (hadData) deletedCount++;
+        }
+
+        // 保存聊天记录
+        if (context.saveChat) {
+            await context.saveChat();
+        } else if (context.saveChatDebounced) {
+            context.saveChatDebounced();
+        } else {
+            console.warn('无法保存聊天记录：saveChat方法不可用');
+        }
+
+        // 重置内存中的数据
+        currentJsonTableData = null;
+
+        // 清理世界书中插件生成的条目
+        try {
+            await deleteGeneratedLorebookEntries();
+        } catch (error) {
+            console.error('清理世界书条目失败:', error);
+        }
+
+        // 清除展开状态
+        if (window.dataManageExpandedDetails) {
+            window.dataManageExpandedDetails.clear();
+        }
+
+        // 刷新概览
+        showDataOverview();
+        showToast(`已删除所有 ${deletedCount} 条数据库记录`, 'success');
+    } catch (error) {
+        console.error('一键删除所有记录失败:', error);
+        showToast(`一键删除失败: ${error.message}`, 'error');
+    }
+}
+
+/**
  * 加载消息详情内容
  */
 function loadMessageDetails(messageIndex, messageData) {
@@ -4415,6 +4516,12 @@ function setupDataTabListeners(parentDoc) {
             const overviewArea = parentDoc.getElementById('data-manage-overview-area');
             if (overviewArea) overviewArea.style.display = 'none';
         });
+    }
+
+    // 一键删除所有记录
+    const deleteAllBtn = parentDoc.getElementById('data-manage-delete-all-records');
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', handleDeleteAllRecords);
     }
 
     // 合并导出
