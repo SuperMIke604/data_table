@@ -5781,36 +5781,46 @@ function buildReadableTableDataText(jsonTableData, settings) {
             return;
         }
 
-        const sectionLines = [];
-        sectionLines.push(`### ${table.name}`);
-
-        rowsToProcess.forEach((row, index) => {
+        const text = formatTableToReadable(table.name, headerRow, rowsToProcess, startIndex);
+        if (text) {
             hasAnyRow = true;
-            const rowCells = Array.isArray(row) ? row.slice(1) : [];
-            const titleCell = rowCells[0];
-            const displayTitle = (titleCell && String(titleCell).trim()) ? String(titleCell).trim() : `条目 ${startIndex + index + 1}`;
-
-            sectionLines.push(`- ${displayTitle}`);
-
-            const detailHeaders = headerRow.slice(1);
-            const detailValues = rowCells.slice(1);
-            if (detailHeaders.length > 0 && detailValues.length > 0) {
-                detailHeaders.forEach((header, detailIndex) => {
-                    const fieldName = (header && String(header).trim()) ? String(header).trim() : `字段 ${detailIndex + 2}`;
-                    const fieldValue = detailValues[detailIndex];
-                    const displayValue = (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '') ? String(fieldValue).trim() : '-';
-                    sectionLines.push(`  - ${fieldName}: ${displayValue}`);
-                });
-            }
-
-            sectionLines.push('');
-        });
-
-        sections.push(sectionLines.join('\n').trim());
+            sections.push(text);
+        }
     });
 
     const finalText = sections.join('\n\n').trim();
     return { text: finalText, hasData: hasAnyRow };
+}
+
+/**
+ * 将单个表格格式化为可读 Markdown 文本
+ * @param {string} tableName 表名
+ * @param {Array} headerRow 表头数组（不含首列占位）
+ * @param {Array} rows 数据行数组（每行不含首元素占位由调用方 slice(1)）
+ * @param {number} startIndex 起始行号（用于截断显示时保留原始编号）
+ * @returns {string} 格式化后的文本
+ */
+function formatTableToReadable(tableName, headerRow, rows, startIndex = 0) {
+    if (!rows || rows.length === 0) return '';
+
+    const sectionLines = [];
+    sectionLines.push(`### ${tableName}`);
+
+    rows.forEach((row, index) => {
+        const rowCells = Array.isArray(row) ? row.slice(1) : [];
+
+        // 所有列都使用 "列名: 值" 格式
+        headerRow.forEach((header, colIndex) => {
+            const fieldName = (header && String(header).trim()) ? String(header).trim() : `字段 ${colIndex + 1}`;
+            const fieldValue = rowCells[colIndex];
+            const displayValue = (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '') ? String(fieldValue).trim() : '-';
+            sectionLines.push(`- ${fieldName}: ${displayValue}`);
+        });
+
+        sectionLines.push('');
+    });
+
+    return sectionLines.join('\n').trim();
 }
 
 function buildTableDataTextForDollar0(jsonTableData, settings) {
@@ -6993,7 +7003,7 @@ async function persistInitialDatabaseSnapshot(context) {
 }
 
 /**
- * 格式化JSON数据为可读文本 - 参考参考文档实现
+ * 格式化JSON数据为可读文本
  * 重要角色表、总结表、故事主线表不应该展示在 TavernDB-ACU-ReadableDataTable 中
  * 返回分离后的数据：readableText（普通表格）、importantPersonsTable、summaryTable、outlineTable
  */
@@ -7007,62 +7017,42 @@ function formatJsonToReadable(jsonData) {
         };
     }
 
-    let readableText = '';
     let importantPersonsTable = null;
     let summaryTable = null;
     let outlineTable = null;
+    const sections = [];
 
     const tableKeys = Object.keys(jsonData).filter(k => k.startsWith('sheet_'));
-
-    // 用于跟踪实际处理的表格索引（排除特殊表格后）
-    let actualTableIndex = 0;
 
     tableKeys.forEach((sheetKey) => {
         const table = jsonData[sheetKey];
         if (!table || !table.name || !table.content) return;
 
-        // 参考参考文档：提取特殊表格 - 这些表格不应该包含在 ReadableDataTable 中
+        // 提取特殊表格 - 这些表格不应该包含在 ReadableDataTable 中
         const tableName = table.name.trim();
         switch (tableName) {
             case '重要角色表':
                 importantPersonsTable = table;
-                return; // 跳过，不包含在可读数据表中
+                return;
             case '总结表':
                 summaryTable = table;
-                return; // 跳过，不包含在可读数据表中
+                return;
             case '故事主线':
                 outlineTable = table;
-                return; // 跳过，不包含在可读数据表中
+                return;
             default:
-                // 处理所有其他表格
                 break;
         }
 
-        // 添加表格标题 [索引:表名]
-        readableText += `[${actualTableIndex}:${table.name}]\n`;
-
-        // 添加列信息 Columns: [0:列名1], [1:列名2], ...
-        const headers = table.content[0] ? table.content[0].slice(1) : [];
-        if (headers.length > 0) {
-            const headerInfo = headers.map((h, i) => `[${i}:${h}]`).join('|');
-            readableText += `Columns: ${headerInfo}\n`;
-        }
-
-        // 添加行数据 [行索引] 值1|值2|...
+        // 使用可读 Markdown 格式
+        const headerRow = Array.isArray(table.content[0]) ? table.content[0].slice(1) : [];
         const rows = table.content.slice(1);
-        if (rows.length > 0) {
-            rows.forEach((row, rowIndex) => {
-                const rowData = row.slice(1);
-                readableText += `[${rowIndex}] ${rowData.join('|')}\n`;
-            });
-        }
-
-        readableText += '\n';
-        actualTableIndex++; // 只有处理了表格才增加索引
+        const text = formatTableToReadable(table.name, headerRow, rows);
+        if (text) sections.push(text);
     });
 
     return {
-        readableText: readableText.trim(),
+        readableText: sections.join('\n\n').trim(),
         importantPersonsTable,
         summaryTable,
         outlineTable
@@ -7070,10 +7060,9 @@ function formatJsonToReadable(jsonData) {
 }
 
 /**
- * 更新总结表世界书条目 - 参考参考文档实现
+ * 更新总结表世界书条目
  */
 async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primaryLorebookName) {
-    // 检查是否启用世界书生成
     if (currentSettings.enableWorldbookGeneration !== true) {
         console.log('世界书生成未启用，跳过更新总结表条目');
         return;
@@ -7091,7 +7080,6 @@ async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primary
         const allEntries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
         const existingEntry = allEntries.find(e => e.comment === SUMMARY_COMMENT);
 
-        // 如果没有总结表数据，删除条目（如果存在）
         if (!summaryTable || summaryTable.content.length < 2) {
             if (existingEntry) {
                 await TavernHelper_API.deleteLorebookEntries(primaryLorebookName, [existingEntry.uid]);
@@ -7100,29 +7088,18 @@ async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primary
             return;
         }
 
-        // 获取最新N行（展示最新N条数据，N由用户配置）
+        // 获取最新N行
         const MAX_SHOW_ENTRIES = currentSettings.summaryTableMaxEntries || 10;
         const summaryRows = summaryTable.content.slice(1);
         const totalRows = summaryRows.length;
         const startIndex = Math.max(0, totalRows - MAX_SHOW_ENTRIES);
         const latestRows = summaryRows.slice(startIndex);
 
-        // 格式化最新N行（保持现有展示逻辑）
-        const headers = summaryTable.content[0] ? summaryTable.content[0].slice(1) : [];
-        let content = `[0:事件详情]\n`;
+        // 使用可读 Markdown 格式
+        const headerRow = summaryTable.content[0] ? summaryTable.content[0].slice(1) : [];
+        const content = formatTableToReadable('总结表', headerRow, latestRows, startIndex);
 
-        if (headers.length > 0) {
-            const headerInfo = headers.map((h, i) => `[${i}:${h}]`).join('|');
-            content += `Columns: ${headerInfo}\n`;
-        }
-
-        latestRows.forEach((row, rowIndex) => {
-            const rowData = row.slice(1);
-            const actualIndex = startIndex + rowIndex;
-            content += `[${actualIndex}] ${rowData.join('|')}\n`;
-        });
-
-        const finalContent = `<event_details>\n\n${content.trim()}\n\n</event_details>`;
+        const finalContent = `<event_details>\n\n${content}\n\n</event_details>`;
 
         if (existingEntry) {
             if (existingEntry.content !== finalContent) {
@@ -7154,10 +7131,9 @@ async function updateSummaryTableEntries(summaryTable, TavernHelper_API, primary
 }
 
 /**
- * 更新重要角色表相关世界书条目 - 参考参考文档实现
+ * 更新重要角色表相关世界书条目
  */
 async function updateImportantPersonsRelatedEntries(importantPersonsTable, TavernHelper_API, primaryLorebookName) {
-    // 检查是否启用世界书生成
     if (currentSettings.enableWorldbookGeneration !== true) {
         console.log('世界书生成未启用，跳过更新重要角色表条目');
         return;
@@ -7175,7 +7151,6 @@ async function updateImportantPersonsRelatedEntries(importantPersonsTable, Taver
         const allEntries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
 
         // --- 1. 全量删除 ---
-        // 找出所有由插件管理的旧条目 (人物条目)
         const uidsToDelete = allEntries
             .filter(e => e.comment && e.comment.startsWith(PERSON_ENTRY_PREFIX))
             .map(e => e.uid);
@@ -7189,7 +7164,7 @@ async function updateImportantPersonsRelatedEntries(importantPersonsTable, Taver
         const personRows = (importantPersonsTable?.content?.length > 1) ? importantPersonsTable.content.slice(1) : [];
         if (personRows.length === 0) {
             console.log('没有重要角色需要创建条目');
-            return; // 如果没有人物，删除后直接返回
+            return;
         }
 
         const headers = importantPersonsTable.content[0].slice(1);
@@ -7200,19 +7175,20 @@ async function updateImportantPersonsRelatedEntries(importantPersonsTable, Taver
         }
 
         const personEntriesToCreate = [];
-        const personNames = [];
 
-        // 2.1 准备要创建的人物条目
+        // 每个角色独立一个条目，使用可读 Markdown 格式
         personRows.forEach((row, i) => {
             const rowData = row.slice(1);
             const personName = rowData[nameColumnIndex];
             if (!personName) return;
-            personNames.push(personName);
 
-            const content = `<latest_role_info>\n\n[0:${importantPersonsTable.name}]\n\nColumns: ${headers.map((h, idx) => `[${idx}:${h}]`).join('|')}\n\n[0] ${rowData.join('|')}\n\n</latest_role_info>`;
+            // 使用 formatTableToReadable 格式化单行数据
+            const content = formatTableToReadable(importantPersonsTable.name, headers, [row]);
+            const finalContent = `<latest_role_info>\n\n${content}\n\n</latest_role_info>`;
+
             const newEntryData = {
                 comment: `${PERSON_ENTRY_PREFIX}${i + 1}`,
-                content: content,
+                content: finalContent,
                 keys: [personName],
                 enabled: true,
                 type: 'keyword',
@@ -7222,7 +7198,6 @@ async function updateImportantPersonsRelatedEntries(importantPersonsTable, Taver
             personEntriesToCreate.push(newEntryData);
         });
 
-        // 2.2 执行创建
         if (personEntriesToCreate.length > 0) {
             await TavernHelper_API.createLorebookEntries(primaryLorebookName, personEntriesToCreate);
             console.log(`成功创建 ${personEntriesToCreate.length} 个新的人物相关世界书条目`);
@@ -7234,10 +7209,9 @@ async function updateImportantPersonsRelatedEntries(importantPersonsTable, Taver
 }
 
 /**
- * 更新故事主线表世界书条目 - 参考参考文档实现
+ * 更新故事主线表世界书条目
  */
 async function updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLorebookName) {
-    // 检查是否启用世界书生成
     if (currentSettings.enableWorldbookGeneration !== true) {
         console.log('世界书生成未启用，跳过更新故事主线表条目');
         return;
@@ -7255,7 +7229,6 @@ async function updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLo
         const allEntries = await TavernHelper_API.getLorebookEntries(primaryLorebookName);
         const existingEntry = allEntries.find(e => e.comment === OUTLINE_COMMENT);
 
-        // 如果没有故事主线表数据，删除条目（如果存在）
         if (!outlineTable || outlineTable.content.length < 2) {
             if (existingEntry) {
                 await TavernHelper_API.deleteLorebookEntries(primaryLorebookName, [existingEntry.uid]);
@@ -7264,20 +7237,12 @@ async function updateOutlineTableEntry(outlineTable, TavernHelper_API, primaryLo
             return;
         }
 
-        // 格式化整个表格（使用相同的自定义格式）
-        let content = `[0:${outlineTable.name}]\n`;
-        const headers = outlineTable.content[0] ? outlineTable.content[0].slice(1) : [];
-        if (headers.length > 0) {
-            const headerInfo = headers.map((h, i) => `[${i}:${h}]`).join('|');
-            content += `Columns: ${headerInfo}\n`;
-        }
+        // 使用可读 Markdown 格式
+        const headerRow = outlineTable.content[0] ? outlineTable.content[0].slice(1) : [];
         const rows = outlineTable.content.slice(1);
-        rows.forEach((row, rowIndex) => {
-            const rowData = row.slice(1);
-            content += `[${rowIndex}] ${rowData.join('|')}\n`;
-        });
+        const content = formatTableToReadable(outlineTable.name, headerRow, rows);
 
-        const finalContent = `<main_storyline>\n\n${content.trim()}\n\n</main_storyline>`;
+        const finalContent = `<main_storyline>\n\n${content}\n\n</main_storyline>`;
 
         if (existingEntry) {
             if (existingEntry.content !== finalContent) {
