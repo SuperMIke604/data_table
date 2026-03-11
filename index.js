@@ -5809,12 +5809,16 @@ function formatTableToReadable(tableName, headerRow, rows, startIndex = 0) {
     rows.forEach((row, index) => {
         const rowCells = Array.isArray(row) ? row.slice(1) : [];
 
-        // 所有列都使用 "列名: 值" 格式
+        // 第一列为顶级项，后续列为缩进子项
         headerRow.forEach((header, colIndex) => {
             const fieldName = (header && String(header).trim()) ? String(header).trim() : `字段 ${colIndex + 1}`;
             const fieldValue = rowCells[colIndex];
             const displayValue = (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '') ? String(fieldValue).trim() : '-';
-            sectionLines.push(`- ${fieldName}: ${displayValue}`);
+            if (colIndex === 0) {
+                sectionLines.push(`- ${fieldName}: ${displayValue}`);
+            } else {
+                sectionLines.push(`  - ${fieldName}: ${displayValue}`);
+            }
         });
 
         sectionLines.push('');
