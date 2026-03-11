@@ -440,6 +440,48 @@
     line-height: 1.5;
 }
 
+/* --- 图标按钮工具栏 --- */
+.dm-icon-toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.dm-icon-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    border-radius: 10px !important;
+    border: 1px solid var(--ios-border) !important;
+    background: var(--ios-gray) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-size: 16px !important;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.dm-icon-btn:hover {
+    background: var(--ios-gray-dark) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--ios-shadow);
+}
+
+.dm-icon-btn:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.dm-icon-btn-danger:hover {
+    background: rgba(255, 59, 48, 0.12) !important;
+    border-color: rgba(255, 59, 48, 0.4) !important;
+}
+
 /* --- 提示词片段 --- */
 .data-manage-prompt-segment {
     margin-bottom: 16px;

@@ -1,4 +1,4 @@
-﻿/* global SillyTavern */
+/* global SillyTavern */
 
 // ==================== 扩展配置 ====================
 // 参考: https://github.com/city-unit/st-extension-example/blob/master/index.js
@@ -198,17 +198,15 @@ const DEFAULT_SETTINGS = {
     autoHideMessages: true,        // 数据整理完成后自动隐藏相关楼层
     enableWorldbookGeneration: false, // 启用世界书生成（注入到提示词）
 
-    // AI指令预设（支持多个预设）
+    // AI指令预设（支持多个预设，每个预设包含归属的可视化模板）
     charCardPrompts: [
         {
             name: '默认预设',
-            prompt: DEFAULT_CHAR_CARD_PROMPT
+            prompt: DEFAULT_CHAR_CARD_PROMPT,
+            overviewTemplate: ''  // 归属于此预设的可视化模板
         }
     ],
     currentPromptIndex: 0,  // 当前使用的预设索引
-
-    // 数据概览模板（独立于AI指令预设）
-    overviewTemplate: '',  // 数据概览模板（字符串格式）
 
     // API配置
     apiMode: 'custom',             // API模式: 'custom' 或 'tavern'
@@ -373,7 +371,8 @@ function migrateCharCardPrompt(settings) {
         settings.charCardPrompts = [
             {
                 name: '默认预设',
-                prompt: DEFAULT_CHAR_CARD_PROMPT
+                prompt: DEFAULT_CHAR_CARD_PROMPT,
+                overviewTemplate: ''
             }
         ];
         settings.currentPromptIndex = 0;
@@ -382,6 +381,30 @@ function migrateCharCardPrompt(settings) {
     if (typeof settings.currentPromptIndex !== 'number' || settings.currentPromptIndex < 0 || settings.currentPromptIndex >= settings.charCardPrompts.length) {
         settings.currentPromptIndex = 0;
     }
+    // 迁移旧的全局 overviewTemplate 到第一个预设
+    if (settings.overviewTemplate && settings.charCardPrompts.length > 0) {
+        if (!settings.charCardPrompts[0].overviewTemplate) {
+            settings.charCardPrompts[0].overviewTemplate = settings.overviewTemplate;
+        }
+        delete settings.overviewTemplate;
+        // 同时迁移 localStorage 中的模板
+        try {
+            const topWin = (window.parent && window.parent !== window) ? window.parent : window;
+            const lsTemplate = topWin.localStorage?.getItem(STORAGE_KEY_TEMPLATE);
+            if (lsTemplate && !settings.charCardPrompts[0].overviewTemplate) {
+                settings.charCardPrompts[0].overviewTemplate = lsTemplate;
+            }
+            topWin.localStorage?.removeItem(STORAGE_KEY_TEMPLATE);
+        } catch (e) { console.warn('迁移localStorage模板失败:', e); }
+        saveSettings();
+        console.log('已迁移全局 overviewTemplate 到第一个预设');
+    }
+    // 确保每个预设都有 overviewTemplate 字段
+    settings.charCardPrompts.forEach(preset => {
+        if (typeof preset.overviewTemplate !== 'string') {
+            preset.overviewTemplate = '';
+        }
+    });
 }
 
 /**
@@ -530,6 +553,20 @@ function getCurrentPrompt(settings = currentSettings) {
         return settings.charCardPrompts[index].prompt || DEFAULT_CHAR_CARD_PROMPT;
     }
     return settings.charCardPrompts[0].prompt || DEFAULT_CHAR_CARD_PROMPT;
+}
+
+/**
+ * 获取当前预设的可视化模板
+ */
+function getCurrentPresetTemplate(settings = currentSettings) {
+    if (!settings.charCardPrompts || !Array.isArray(settings.charCardPrompts) || settings.charCardPrompts.length === 0) {
+        return '';
+    }
+    const index = settings.currentPromptIndex || 0;
+    if (index >= 0 && index < settings.charCardPrompts.length) {
+        return settings.charCardPrompts[index].overviewTemplate || '';
+    }
+    return settings.charCardPrompts[0].overviewTemplate || '';
 }
 
 /**
@@ -1434,10 +1471,14 @@ function openDataManagePopup() {
                         <label for="data-manage-prompt-selector">选择预设:</label>
                         <div class="data-manage-input-group" style="margin-top: 8px;">
                             <select id="data-manage-prompt-selector" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--ios-border); background: var(--ios-gray); color: var(--ios-text);"></select>
-                            <button id="data-manage-add-prompt" class="secondary">新增预设</button>
-                            <button id="data-manage-delete-prompt" class="secondary">删除预设</button>
-                            <button id="data-manage-duplicate-prompt" class="secondary">复制预设</button>
-                            <button id="data-manage-rename-prompt" class="secondary">重命名</button>
+                            <div class="dm-icon-toolbar">
+                                <button id="data-manage-add-prompt" class="dm-icon-btn" title="新增预设">➕</button>
+                                <button id="data-manage-delete-prompt" class="dm-icon-btn dm-icon-btn-danger" title="删除预设">🗑️</button>
+                                <button id="data-manage-duplicate-prompt" class="dm-icon-btn" title="复制预设">📋</button>
+                                <button id="data-manage-rename-prompt" class="dm-icon-btn" title="重命名">✏️</button>
+                                <button id="data-manage-export-preset" class="dm-icon-btn" title="导出预设">📤</button>
+                                <button id="data-manage-import-preset" class="dm-icon-btn" title="导入预设">📥</button>
+                            </div>
                         </div>
                     </div>
                     <div id="data-manage-prompt-constructor">
@@ -1453,6 +1494,14 @@ function openDataManagePopup() {
                     </div>
                     <div class="data-manage-button-group">
                         <button id="data-manage-save-prompt" class="primary">保存</button>
+                    </div>
+                    <div style="margin-top: 20px; border-top: 1px solid var(--ios-separator); padding-top: 15px;">
+                        <label>可视化模板 (当前预设):</label>
+                        <div class="data-manage-button-group" style="margin-top: 8px; margin-bottom: 10px;">
+                            <button id="data-manage-save-visualized-template" class="secondary">保存模板</button>
+                            <button id="data-manage-refresh-template-display" class="secondary">刷新显示</button>
+                        </div>
+                        <textarea id="data-manage-template-textarea" style="width: 100%; min-height: 200px; font-family: monospace; background-color: var(--ios-gray); color: var(--ios-text); padding: 12px; border: 1px solid var(--ios-border); border-radius: 8px; resize: vertical;"></textarea>
                     </div>
                 </div>
             </div>
@@ -1568,22 +1617,10 @@ function openDataManagePopup() {
             <div id="data-manage-tab-data" class="data-manage-tab-content">
                 <div class="data-manage-card">
                     <h3>数据管理</h3>
-                    <p class="data-manage-notes">导入/导出当前对话的数据库，或管理全局模板。</p>
-                    <div class="data-manage-button-group">
-                        <button id="data-manage-import-combined" class="primary">合并导入(模板+指令)</button>
-                        <button id="data-manage-export-combined" class="primary">合并导出(模板+指令)</button>
-                    </div>
+                    <p class="data-manage-notes">查看当前对话的数据库概览或报错日志。</p>
                     <div class="data-manage-button-group" style="margin-top: 15px;">
-                        <button id="data-manage-visualize-template" class="secondary">可视化当前模板</button>
                         <button id="data-manage-show-overview" class="secondary">数据概览</button>
                         <button id="data-manage-show-error-log" class="secondary">报错日志</button>
-                    </div>
-                    <div id="data-manage-template-visualization" style="display: none; margin-top: 15px;">
-                        <div class="data-manage-button-group" style="margin-bottom: 10px;">
-                            <button id="data-manage-save-visualized-template" class="primary">保存模板</button>
-                            <button id="data-manage-refresh-template-display" class="secondary">刷新显示</button>
-                        </div>
-                        <textarea id="data-manage-template-textarea" style="width: 100%; min-height: 300px; font-family: monospace; background-color: var(--ios-gray); color: var(--ios-text); padding: 12px; border: 1px solid var(--ios-border); border-radius: 8px; resize: vertical;"></textarea>
                     </div>
                     <div id="data-manage-error-log-area" style="display: none; margin-top: 15px;">
                         <div class="data-manage-button-group" style="margin-bottom: 10px;">
@@ -1869,7 +1906,8 @@ function setupPromptTabListeners(parentDoc) {
         currentSettings.charCardPrompts = [
             {
                 name: '默认预设',
-                prompt: DEFAULT_CHAR_CARD_PROMPT
+                prompt: DEFAULT_CHAR_CARD_PROMPT,
+                overviewTemplate: ''
             }
         ];
         currentSettings.currentPromptIndex = 0;
@@ -1895,6 +1933,8 @@ function setupPromptTabListeners(parentDoc) {
                 currentSettings.currentPromptIndex = newIndex;
                 const newPrompt = currentSettings.charCardPrompts[newIndex].prompt;
                 renderPromptSegments(newPrompt);
+                // 同步切换模板
+                loadPresetTemplateToUI();
                 saveSettings();
             }
         });
@@ -1909,7 +1949,8 @@ function setupPromptTabListeners(parentDoc) {
                 currentSettings.charCardPrompts = [
                     {
                         name: '默认预设',
-                        prompt: DEFAULT_CHAR_CARD_PROMPT
+                        prompt: DEFAULT_CHAR_CARD_PROMPT,
+                        overviewTemplate: ''
                     }
                 ];
                 currentSettings.currentPromptIndex = 0;
@@ -1919,12 +1960,14 @@ function setupPromptTabListeners(parentDoc) {
             if (name && name.trim()) {
                 const newPrompt = {
                     name: name.trim(),
-                    prompt: [...DEFAULT_CHAR_CARD_PROMPT]
+                    prompt: [...DEFAULT_CHAR_CARD_PROMPT],
+                    overviewTemplate: ''
                 };
                 currentSettings.charCardPrompts.push(newPrompt);
                 currentSettings.currentPromptIndex = currentSettings.charCardPrompts.length - 1;
                 updatePromptSelector(currentSettings);
                 renderPromptSegments(newPrompt.prompt);
+                loadPresetTemplateToUI();
                 saveSettings();
                 showToast('新预设已创建', 'success');
             } else if (name !== null) {
@@ -1955,6 +1998,7 @@ function setupPromptTabListeners(parentDoc) {
                 const newPrompt = currentSettings.charCardPrompts[currentSettings.currentPromptIndex].prompt;
                 updatePromptSelector(currentSettings);
                 renderPromptSegments(newPrompt);
+                loadPresetTemplateToUI();
                 saveSettings();
                 showToast('预设已删除', 'success');
             }
@@ -1983,12 +2027,14 @@ function setupPromptTabListeners(parentDoc) {
                 : currentPreset.prompt;
             const newPreset = {
                 name: newName.trim(),
-                prompt: copiedPrompt
+                prompt: copiedPrompt,
+                overviewTemplate: currentPreset.overviewTemplate || ''
             };
             currentSettings.charCardPrompts.push(newPreset);
             currentSettings.currentPromptIndex = currentSettings.charCardPrompts.length - 1;
             updatePromptSelector(currentSettings);
             renderPromptSegments(newPreset.prompt);
+            loadPresetTemplateToUI();
             saveSettings();
             showToast('预设已复制', 'success');
         });
@@ -2081,6 +2127,36 @@ function setupPromptTabListeners(parentDoc) {
             console.log(`添加对话轮次: ${position}`);
         });
     });
+
+    // === 导出/导入预设 ===
+    const exportPresetBtn = parentDoc.getElementById('data-manage-export-preset');
+    if (exportPresetBtn) {
+        exportPresetBtn.addEventListener('click', exportCurrentPreset);
+    }
+
+    const importPresetBtn = parentDoc.getElementById('data-manage-import-preset');
+    if (importPresetBtn) {
+        importPresetBtn.addEventListener('click', importPreset);
+    }
+
+    // === 可视化模板（当前预设） ===
+    // 初始加载当前预设模板到 textarea
+    loadPresetTemplateToUI();
+
+    // 保存可视化模板
+    const saveVisualizedBtn = parentDoc.getElementById('data-manage-save-visualized-template');
+    if (saveVisualizedBtn) {
+        saveVisualizedBtn.addEventListener('click', saveVisualizedTemplate);
+    }
+
+    // 刷新模板显示
+    const refreshTemplateBtn = parentDoc.getElementById('data-manage-refresh-template-display');
+    if (refreshTemplateBtn) {
+        refreshTemplateBtn.addEventListener('click', function () {
+            loadPresetTemplateToUI();
+            showToast('模板显示已刷新', 'success');
+        });
+    }
 }
 
 /**
@@ -4268,57 +4344,57 @@ function exportDataAsJSON() {
 }
 
 /**
- * 合并导出（模板+指令）
+ * 导出当前预设（包含提示词+可视化模板）
  */
-function exportCombinedSettings() {
+function exportCurrentPreset() {
     try {
-        // 获取可视化模板内容
+        const index = currentSettings.currentPromptIndex || 0;
+        const preset = currentSettings.charCardPrompts[index];
+        if (!preset) {
+            showToast('当前没有选中的预设', 'warning');
+            return;
+        }
+
+        // 检查 textarea 中是否有未保存的模板内容
         const parentDoc = (window.parent && window.parent !== window)
             ? window.parent.document
             : document;
         const textarea = parentDoc.getElementById('data-manage-template-textarea');
-        let overviewTemplateContent = '';
-
-        // 如果可视化模板区域是显示的，从textarea获取内容
-        if (textarea && textarea.value) {
-            overviewTemplateContent = textarea.value.trim();
-        } else {
-            // 否则从设置中获取
-            overviewTemplateContent = currentSettings.overviewTemplate || '';
+        let templateContent = preset.overviewTemplate || '';
+        if (textarea && textarea.value && textarea.value.trim()) {
+            templateContent = textarea.value.trim();
         }
 
-        const combinedData = {
-            charCardPrompts: currentSettings.charCardPrompts,
-            currentPromptIndex: currentSettings.currentPromptIndex,
-            // 向后兼容：保留旧的 prompt 字段
-            prompt: getCurrentPrompt(currentSettings),
-            overviewTemplate: overviewTemplateContent,
-            timestamp: new Date().toISOString(),
-            version: '1.1.0'
+        const exportData = {
+            name: preset.name,
+            prompt: preset.prompt,
+            overviewTemplate: templateContent,
+            version: '2.0.0',
+            timestamp: new Date().toISOString()
         };
 
-        const jsonStr = JSON.stringify(combinedData, null, 2);
+        const jsonStr = JSON.stringify(exportData, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `data-manage-combined-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `preset-${(preset.name || 'export').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}-${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        showToast('合并设置已导出', 'success');
+        showToast(`预设"${preset.name}"已导出`, 'success');
     } catch (error) {
-        console.error('导出合并设置失败:', error);
+        console.error('导出预设失败:', error);
         showToast('导出失败', 'error');
     }
 }
 
 /**
- * 合并导入（模板+指令）
+ * 导入预设（追加为新预设）
  */
-function importCombinedSettings() {
+function importPreset() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
@@ -4331,57 +4407,68 @@ function importCombinedSettings() {
             try {
                 const importedData = JSON.parse(readerEvent.target.result);
 
-                // 只导入指令预设内容和可视化模板内容
-                // 优先使用新的多预设格式
-                if (importedData.charCardPrompts && Array.isArray(importedData.charCardPrompts) && importedData.charCardPrompts.length > 0) {
-                    currentSettings.charCardPrompts = importedData.charCardPrompts;
-                    currentSettings.currentPromptIndex = (typeof importedData.currentPromptIndex === 'number' && importedData.currentPromptIndex >= 0 && importedData.currentPromptIndex < importedData.charCardPrompts.length)
-                        ? importedData.currentPromptIndex
-                        : 0;
-                } else if (importedData.prompt) {
-                    // 向后兼容：如果只有旧的 prompt 字段，迁移到新格式
-                    const promptData = Array.isArray(importedData.prompt) ? importedData.prompt : DEFAULT_CHAR_CARD_PROMPT;
-                    currentSettings.charCardPrompts = [
-                        {
-                            name: '导入的预设',
-                            prompt: promptData
-                        }
-                    ];
-                    currentSettings.currentPromptIndex = 0;
+                let newPreset;
+
+                // v2.0.0 格式（单个预设）
+                if (importedData.version && importedData.version.startsWith('2.') && importedData.prompt) {
+                    newPreset = {
+                        name: importedData.name || '导入的预设',
+                        prompt: Array.isArray(importedData.prompt) ? importedData.prompt : DEFAULT_CHAR_CARD_PROMPT,
+                        overviewTemplate: importedData.overviewTemplate || ''
+                    };
                 }
+                // v1.x 兼容（旧的合并导出格式）
+                else if (importedData.charCardPrompts && Array.isArray(importedData.charCardPrompts) && importedData.charCardPrompts.length > 0) {
+                    // 将旧格式中的第一个预设导入
+                    const oldPreset = importedData.charCardPrompts[importedData.currentPromptIndex || 0] || importedData.charCardPrompts[0];
+                    newPreset = {
+                        name: oldPreset.name || '导入的预设',
+                        prompt: Array.isArray(oldPreset.prompt) ? oldPreset.prompt : DEFAULT_CHAR_CARD_PROMPT,
+                        overviewTemplate: oldPreset.overviewTemplate || importedData.overviewTemplate || ''
+                    };
+                }
+                // 更旧的格式兼容
+                else if (importedData.prompt) {
+                    const promptData = Array.isArray(importedData.prompt) ? importedData.prompt : DEFAULT_CHAR_CARD_PROMPT;
+                    newPreset = {
+                        name: '导入的预设',
+                        prompt: promptData,
+                        overviewTemplate: importedData.overviewTemplate || ''
+                    };
+                } else {
+                    showToast('文件格式无法识别', 'error');
+                    return;
+                }
+
+                // 追加到预设列表
+                if (!currentSettings.charCardPrompts || !Array.isArray(currentSettings.charCardPrompts)) {
+                    currentSettings.charCardPrompts = [];
+                }
+                currentSettings.charCardPrompts.push(newPreset);
+                currentSettings.currentPromptIndex = currentSettings.charCardPrompts.length - 1;
+
                 // 保存设置并更新UI
                 saveSettings();
+                updatePromptSelector(currentSettings);
+                renderPromptSegments(newPreset.prompt);
 
-                // 更新UI显示
+                // 更新模板 textarea
                 const parentDoc = (window.parent && window.parent !== window)
                     ? window.parent.document
                     : document;
-
-                // 更新预设选择器
-                updatePromptSelector(currentSettings);
-
-                // 渲染当前预设
-                const currentPrompt = getCurrentPrompt(currentSettings);
-                renderPromptSegments(currentPrompt);
-
-                if (importedData.overviewTemplate) {
-                    currentSettings.overviewTemplate = importedData.overviewTemplate;
-
-                    // 如果可视化模板区域是显示的，更新textarea内容
-                    const textarea = parentDoc.getElementById('data-manage-template-textarea');
-                    if (textarea) {
-                        textarea.value = importedData.overviewTemplate;
+                const textarea = parentDoc.getElementById('data-manage-template-textarea');
+                if (textarea) {
+                    const tmpl = newPreset.overviewTemplate || '';
+                    try {
+                        textarea.value = JSON.stringify(JSON.parse(tmpl), null, 2);
+                    } catch (e) {
+                        textarea.value = tmpl;
                     }
                 }
 
-                if (saveSettings()) {
-                    loadSettingsToUI();
-                    showToast('合并设置已导入', 'success');
-                } else {
-                    showToast('导入失败', 'error');
-                }
+                showToast(`预设"${newPreset.name}"已导入`, 'success');
             } catch (error) {
-                console.error('导入合并设置失败:', error);
+                console.error('导入预设失败:', error);
                 showToast('文件格式错误', 'error');
             }
         };
@@ -4391,54 +4478,31 @@ function importCombinedSettings() {
 }
 
 /**
- * 可视化当前模板
+ * 加载当前预设的模板到 textarea
  */
-function visualizeTemplate() {
+function loadPresetTemplateToUI() {
     const parentDoc = (window.parent && window.parent !== window)
         ? window.parent.document
         : document;
 
-    const visualizationArea = parentDoc.getElementById('data-manage-template-visualization');
     const textarea = parentDoc.getElementById('data-manage-template-textarea');
+    if (!textarea) return;
 
-    if (!visualizationArea || !textarea) return;
-
-    if (visualizationArea.style.display === 'none' || !visualizationArea.style.display) {
-        visualizationArea.style.display = 'block';
-
-        // 从本地存储加载模板
-        const topLevelWindow = (window.parent && window.parent !== window) ? window.parent : window;
-        let templateContent = '';
-
+    const templateContent = getCurrentPresetTemplate();
+    if (templateContent) {
         try {
-            if (topLevelWindow.localStorage) {
-                const savedTemplate = topLevelWindow.localStorage.getItem(STORAGE_KEY_TEMPLATE);
-                if (savedTemplate) {
-                    // 尝试解析并格式化JSON
-                    try {
-                        const parsedTemplate = JSON.parse(savedTemplate);
-                        templateContent = JSON.stringify(parsedTemplate, null, 2);
-                    } catch (e) {
-                        templateContent = savedTemplate;
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('加载模板失败:', error);
+            const parsed = JSON.parse(templateContent);
+            textarea.value = JSON.stringify(parsed, null, 2);
+        } catch (e) {
+            textarea.value = templateContent;
         }
-
-        if (!templateContent) {
-            templateContent = currentSettings.overviewTemplate || DEFAULT_SETTINGS.overviewTemplate || '';
-        }
-
-        textarea.value = templateContent;
     } else {
-        visualizationArea.style.display = 'none';
+        textarea.value = '';
     }
 }
 
 /**
- * 保存可视化模板
+ * 保存可视化模板到当前预设
  */
 function saveVisualizedTemplate() {
     const parentDoc = (window.parent && window.parent !== window)
@@ -4456,19 +4520,17 @@ function saveVisualizedTemplate() {
 
     try {
         // 验证JSON格式
-        const parsedTemplate = JSON.parse(content);
+        JSON.parse(content);
 
-        // 保存到本地存储
-        const topLevelWindow = (window.parent && window.parent !== window) ? window.parent : window;
-        if (topLevelWindow.localStorage) {
-            topLevelWindow.localStorage.setItem(STORAGE_KEY_TEMPLATE, content);
+        // 保存到当前预设的 overviewTemplate
+        const index = currentSettings.currentPromptIndex || 0;
+        if (index >= 0 && index < currentSettings.charCardPrompts.length) {
+            currentSettings.charCardPrompts[index].overviewTemplate = content;
+            saveSettings();
+            showToast('模板已保存到当前预设', 'success');
+        } else {
+            showToast('当前预设无效', 'error');
         }
-
-        // 同时更新设置中的overviewTemplate
-        currentSettings.overviewTemplate = content;
-        saveSettings();
-
-        showToast('模板已保存', 'success');
     } catch (error) {
         console.error('保存可视化模板失败:', error);
         let errorMessage = '模板不是有效的JSON格式。请检查是否存在多余的逗号、缺失的括号或不正确的引号。';
@@ -4480,10 +4542,9 @@ function saveVisualizedTemplate() {
 }
 
 function setupDataTabListeners(parentDoc) {
-    // 辅助函数：隐藏所有三个互斥面板
+    // 辅助函数：隐藏所有互斥面板
     function hideAllDataPanels() {
         const panels = [
-            'data-manage-template-visualization',
             'data-manage-overview-area',
             'data-manage-error-log-area'
         ];
@@ -4522,48 +4583,6 @@ function setupDataTabListeners(parentDoc) {
     const deleteAllBtn = parentDoc.getElementById('data-manage-delete-all-records');
     if (deleteAllBtn) {
         deleteAllBtn.addEventListener('click', handleDeleteAllRecords);
-    }
-
-    // 合并导出
-    const exportCombinedBtn = parentDoc.getElementById('data-manage-export-combined');
-    if (exportCombinedBtn) {
-        exportCombinedBtn.addEventListener('click', exportCombinedSettings);
-    }
-
-    // 合并导入
-    const importCombinedBtn = parentDoc.getElementById('data-manage-import-combined');
-    if (importCombinedBtn) {
-        importCombinedBtn.addEventListener('click', importCombinedSettings);
-    }
-
-    // 可视化模板（切换逻辑）
-    const visualizeTemplateBtn = parentDoc.getElementById('data-manage-visualize-template');
-    if (visualizeTemplateBtn) {
-        visualizeTemplateBtn.addEventListener('click', function () {
-            const area = parentDoc.getElementById('data-manage-template-visualization');
-            if (!area) return;
-            if (area.style.display === 'block') {
-                area.style.display = 'none';
-            } else {
-                hideAllDataPanels();
-                visualizeTemplate();
-            }
-        });
-    }
-
-    // 保存可视化模板
-    const saveVisualizedBtn = parentDoc.getElementById('data-manage-save-visualized-template');
-    if (saveVisualizedBtn) {
-        saveVisualizedBtn.addEventListener('click', saveVisualizedTemplate);
-    }
-
-    // 刷新模板显示
-    const refreshTemplateBtn = parentDoc.getElementById('data-manage-refresh-template-display');
-    if (refreshTemplateBtn) {
-        refreshTemplateBtn.addEventListener('click', function () {
-            visualizeTemplate();
-            showToast('模板显示已刷新', 'success');
-        });
     }
 
     // 报错日志（切换逻辑）
@@ -5583,26 +5602,30 @@ function setupPopupScripts() {
  */
 async function loadDatabaseTemplate() {
     try {
-        const topLevelWindow = (window.parent && window.parent !== window) ? window.parent : window;
-        let templateStr = null;
+        // 从当前预设获取模板
+        let templateStr = getCurrentPresetTemplate();
 
-        // 优先从extensionSettings加载
-        const context = SillyTavern.getContext();
-        if (context && context.extensionSettings && context.extensionSettings.dataManage) {
-            const template = context.extensionSettings.dataManage.overviewTemplate;
-            if (template && typeof template === 'string' && template.trim()) {
-                templateStr = template;
+        // 备用：从 extensionSettings 加载（兼容旧数据）
+        if (!templateStr) {
+            const context = SillyTavern.getContext();
+            if (context && context.extensionSettings && context.extensionSettings.dataManage) {
+                const template = context.extensionSettings.dataManage.overviewTemplate;
+                if (template && typeof template === 'string' && template.trim()) {
+                    templateStr = template;
+                }
             }
         }
 
-        // 备用：从localStorage加载
-        if (!templateStr && topLevelWindow.localStorage) {
-            templateStr = topLevelWindow.localStorage.getItem(STORAGE_KEY_TEMPLATE);
+        // 备用：从localStorage加载（兼容旧数据）
+        if (!templateStr) {
+            const topLevelWindow = (window.parent && window.parent !== window) ? window.parent : window;
+            if (topLevelWindow.localStorage) {
+                templateStr = topLevelWindow.localStorage.getItem(STORAGE_KEY_TEMPLATE);
+            }
         }
 
         if (!templateStr || !templateStr.trim()) {
             console.warn('未找到数据库模板，使用空模板');
-            // 返回一个基本的空模板结构
             return {
                 mate: {
                     type: 'chatSheets'
@@ -5635,7 +5658,6 @@ async function loadDatabaseTemplate() {
         return template;
     } catch (error) {
         console.error('加载数据库模板失败:', error);
-        // 返回一个基本的空模板结构
         return {
             mate: {
                 type: 'chatSheets'
