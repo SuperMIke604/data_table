@@ -7542,34 +7542,21 @@ async function triggerAutomaticUpdateIfNeeded() {
     console.log(`[自动更新] 触发器: 尚未记录层数 (${unrecordedMessages}) 达到触发条件 (${requiredUnrecorded})。开始更新。`);
     showToast(`触发自动更新：未记录层数 ${unrecordedMessages} >= 触发条件 ${requiredUnrecorded}`, 'info');
 
-    const actualMessages = liveChat.filter((_, index) => index > 0);
-    const totalActualMessages = actualMessages.length;
-    let startIndex = Math.max(0, totalActualMessages - skipLatestN - updateBatchSize);
-    let endIndex = startIndex + updateBatchSize;
-
-    if (startIndex === 0) {
-        startIndex = -1;
-        endIndex = endIndex - 1;
-    }
-
     const indicesToActuallyUpdate = [];
-    for (let i = startIndex; i < endIndex; i++) {
-        if (i < totalActualMessages) {
-            const floorIndex = i + 1;
-            if (floorIndex >= 0) {
-                indicesToActuallyUpdate.push(floorIndex);
-            }
-        }
+
+    // 根据需求：首次更新时必须从0层开始囊括（即包含第0层背景数据直到第 updateBatchSize 层），之后严格按顺序叠加处理
+    let floorStart = lastRecordedFloor + 1;
+    let floorEnd = lastRecordedFloor + updateBatchSize;
+
+    if (lastRecordedFloor === 0) {
+        // 如果是全新或者从头开始计算，囊括0层
+        floorStart = 0;
     }
 
-    if (skipLatestN === 0 && indicesToActuallyUpdate.length === 0 && totalActualMessages >= updateBatchSize) {
-        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
-            indicesToActuallyUpdate.push(i + 1);
-        }
-    } else if (skipLatestN === 0 && startIndex === -1 && totalActualMessages >= updateBatchSize) {
-        indicesToActuallyUpdate.length = 0;
-        for (let i = 0; i < updateBatchSize && i < totalActualMessages; i++) {
-            indicesToActuallyUpdate.push(i + 1);
+    // 将规划好的楼层塞入由实际可用楼层限制的数组中
+    for (let i = floorStart; i <= floorEnd; i++) {
+        if (i <= liveChat.length - 1) {
+            indicesToActuallyUpdate.push(i);
         }
     }
 
@@ -7578,8 +7565,10 @@ async function triggerAutomaticUpdateIfNeeded() {
         return;
     }
 
-    const floorStart = indicesToActuallyUpdate[0];
-    const floorEnd = indicesToActuallyUpdate[indicesToActuallyUpdate.length - 1];
+    // floorStart 和 floorEnd 已在上面声明和赋值过了
+    // 覆盖它们真实处理的范围边界，以用于日志和传参
+    floorStart = indicesToActuallyUpdate[0];
+    floorEnd = indicesToActuallyUpdate[indicesToActuallyUpdate.length - 1];
 
     console.log(`[自动更新] 触发器: 将处理楼层 ${floorStart} 到 ${floorEnd}，共 ${indicesToActuallyUpdate.length} 层`);
 
@@ -8007,10 +7996,10 @@ async function onChatCompletionPromptReadyForWorldbook(eventData) {
         // 构建最终提示词（与$0对应的内容相同）
         const finalPrompt = `\n${tableDataText}`;
 
-        // 注入到聊天消息中（默认使用user角色，插入到倒数第0个位置，即最后）
-        eventData.chat.push({ role: 'user', content: finalPrompt });
+        // 原本的逻辑是注入到聊天消息中，已被移除以避免污染聊天记录：
+        // eventData.chat.push({ role: 'user', content: finalPrompt });
 
-        console.log('[世界书注入] 表格数据已注入', eventData.chat);
+        console.log('[世界书注入] 表格数据计算完成，不再强制注入到聊天', finalPrompt.substring(0, 50) + '...');
     } catch (error) {
         console.error('[世界书注入] 表格数据注入失败:', error);
     }
