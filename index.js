@@ -4589,28 +4589,16 @@ function extractDataFromMessage(message, options = {}) {
     // 2a. 提取 <dataUpdate> 标签内容
     const dataUpdateMatch = mesText.match(/<dataUpdate>([\s\S]*?)<\/dataUpdate>/);
     if (dataUpdateMatch && dataUpdateMatch[1]) {
+        let json = null;
         try {
-            const json = JSON.parse(dataUpdateMatch[1].trim());
-            if (json && typeof json === 'object') {
-                if (!requireMate || (json.mate && json.mate.type === 'chatSheets')) {
-                    return json;
-                }
-            }
-        } catch (e) {
-            console.warn('extractDataFromMessage: <dataUpdate> JSON.parse 失败，尝试修复', e);
-            // 尝试简单修复：移除尾随逗号、修复单引号
-            try {
-                let fixed = dataUpdateMatch[1].trim();
-                fixed = fixed.replace(/,\s*([}\]])/g, '$1'); // 移除尾随逗号
-                fixed = fixed.replace(/'/g, '"');             // 单引号→双引号
-                const json = JSON.parse(fixed);
-                if (json && typeof json === 'object') {
-                    if (!requireMate || (json.mate && json.mate.type === 'chatSheets')) {
-                        return json;
-                    }
-                }
-            } catch (e2) {
-                console.warn('extractDataFromMessage: <dataUpdate> 修复后仍解析失败', e2);
+            json = JSON.parse(dataUpdateMatch[1].trim());
+        } catch (_) {
+            // 使用 repairAIJson 修复
+            json = repairAIJson(dataUpdateMatch[1]);
+        }
+        if (json && typeof json === 'object') {
+            if (!requireMate || (json.mate && json.mate.type === 'chatSheets')) {
+                return json;
             }
         }
     }
@@ -4623,8 +4611,229 @@ function extractDataFromMessage(message, options = {}) {
                 return json;
             }
         }
-    } catch (_) { /* 不是纯 JSON，跳过 */ }
+    } catch (_) {
+        // 尝试 repairAIJson 修复
+        const json = repairAIJson(mesText);
+        if (json && typeof json === 'object') {
+            if (!requireMate || (json.mate && json.mate.type === 'chatSheets')) {
+                return json;
+            }
+        }
+    }
 
+    return null;
+}
+
+// ============================================================
+//  repairAIJson — 修复 AI 输出中常见的 JSON 格式问题
+// ============================================================
+
+/**
+ * 修复 AI 输出中常见的 JSON 格式问题，逐步尝试解析。
+ *
+ * 修复策略（按顺序）：
+ *   0. 原文直接 JSON.parse
+ *   1. 转义字符串内的裸换行符（最常见：AI 在值里写多行文本）
+ *   2. 移除尾随逗号 + 单引号转双引号
+ *   3. 为无引号的 key 加双引号
+ *   4. 截断修复：补齐未闭合的括号/花括号
+ *   5. 以上全部组合
+ *
+ * @param {string} raw - AI 输出的原始 JSON 文本
+ * @returns {object|array|null} 解析成功返回对象/数组，全部失败返回 null
+ */
+function repairAIJson(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    let text = raw.trim();
+    if (!text) return null;
+
+    // --- 策略 0：原文直接解析 ---
+    try { const r = JSON.parse(text); if (r && typeof r === 'object') return r; } catch (_) {}
+
+    // ======================================================================
+    //  核心修复：转义 JSON 字符串值内的裸换行符
+    //  这是最常见的 AI 输出问题 — AI 在字符串值里写多行文本导致 JSON.parse 炸掉
+    //  例："6": "黑色山本耀司\n风格"  ← \n 是真实换行符而非 \\n
+    // ======================================================================
+    function escapeNewlinesInStrings(input) {
+        let result = '';
+        let inString = false;
+        let escape = false;
+        for (let i = 0; i < input.length; i++) {
+            const ch = input[i];
+            if (escape) {
+                result += ch;
+                escape = false;
+                continue;
+            }
+            if (ch === '\\' && inString) {
+                result += ch;
+                escape = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = !inString;
+                result += ch;
+                continue;
+            }
+            if (inString) {
+                if (ch === '\n') { result += '\\n'; continue; }
+                if (ch === '\r') { result += '\\r'; continue; }
+                if (ch === '\t') { result += '\\t'; continue; }
+            }
+            result += ch;
+        }
+        return result;
+    }
+
+    const escapedText = escapeNewlinesInStrings(text);
+
+    // --- 策略 1：仅转义裸换行（覆盖 90% 的真实报错场景） ---
+    try { const r = JSON.parse(escapedText); if (r && typeof r === 'object') return r; } catch (_) {}
+
+    // ======================================================================
+    //  辅助修复函数
+    // ======================================================================
+
+    /** 移除 JSON 中的注释 (// 和 /* * /) */
+    function removeComments(s) {
+        let out = '';
+        let inString = false;
+        let escape = false;
+        for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            if (escape) { out += ch; escape = false; continue; }
+            if (ch === '\\' && inString) { out += ch; escape = true; continue; }
+            if (ch === '"') { inString = !inString; out += ch; continue; }
+            if (inString) { out += ch; continue; }
+            // 不在字符串内时，检测注释
+            if (ch === '/' && i + 1 < s.length) {
+                if (s[i + 1] === '/') {
+                    // 单行注释：跳到行尾
+                    while (i < s.length && s[i] !== '\n') i++;
+                    continue;
+                }
+                if (s[i + 1] === '*') {
+                    // 多行注释：跳到 */
+                    i += 2;
+                    while (i + 1 < s.length && !(s[i] === '*' && s[i + 1] === '/')) i++;
+                    i++; // 跳过 /
+                    continue;
+                }
+            }
+            out += ch;
+        }
+        return out;
+    }
+
+    /** 移除尾随逗号（只移除 }, ] 前的逗号） */
+    function removeTrailingCommas(s) {
+        return s.replace(/,\s*([}\]])/g, '$1');
+    }
+
+    /** 智能单引号 → 双引号（只替换 JSON 结构层的单引号，不误伤字符串值中的撇号） */
+    function smartSingleToDoubleQuotes(s) {
+        let out = '';
+        let inSingle = false;
+        let inDouble = false;
+        let escape = false;
+        for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            if (escape) { out += ch; escape = false; continue; }
+            if (ch === '\\' && (inSingle || inDouble)) { out += ch; escape = true; continue; }
+            if (ch === '"' && !inSingle) { inDouble = !inDouble; out += ch; continue; }
+            if (ch === "'" && !inDouble) {
+                // 判断这个单引号是否是 JSON 结构层的（key/value 的定界符）
+                if (!inSingle) {
+                    // 进入单引号字符串 → 替换为双引号
+                    inSingle = true;
+                    out += '"';
+                    continue;
+                } else {
+                    // 离开单引号字符串 → 替换为双引号
+                    inSingle = false;
+                    out += '"';
+                    continue;
+                }
+            }
+            out += ch;
+        }
+        return out;
+    }
+
+    /** 给无引号的 key 加双引号 */
+    function quoteBareKeys(s) {
+        return s.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
+    }
+
+    /** 统计未闭合的括号/花括号，在末尾补齐 */
+    function closeBrackets(s) {
+        let openBraces = 0;
+        let openBrackets = 0;
+        let inString = false;
+        let escape = false;
+        for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\' && inString) { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') openBraces++;
+            if (ch === '}') openBraces--;
+            if (ch === '[') openBrackets++;
+            if (ch === ']') openBrackets--;
+        }
+        let suffix = '';
+        for (let i = 0; i < Math.min(Math.max(0, openBrackets), 10); i++) suffix += ']';
+        for (let i = 0; i < Math.min(Math.max(0, openBraces), 10); i++) suffix += '}';
+        return s + suffix;
+    }
+
+    // ======================================================================
+    //  组合策略：逐步加码
+    // ======================================================================
+
+    // --- 策略 2：换行转义 + 移除注释 ---
+    {
+        let fixed = removeComments(escapedText);
+        try { const r = JSON.parse(fixed); if (r && typeof r === 'object') return r; } catch (_) {}
+    }
+
+    // --- 策略 3：换行转义 + 移除注释 + 尾随逗号 ---
+    {
+        let fixed = removeTrailingCommas(removeComments(escapedText));
+        try { const r = JSON.parse(fixed); if (r && typeof r === 'object') return r; } catch (_) {}
+    }
+
+    // --- 策略 4：换行转义 + 全套修复（注释 + 尾随逗号 + 单引号 + 无引号key + 补括号） ---
+    {
+        let fixed = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(removeTrailingCommas(removeComments(escapedText)))));
+        try { const r = JSON.parse(fixed); if (r && typeof r === 'object') return r; } catch (_) {}
+    }
+
+    // --- 策略 5：不转义换行 + 全套修复（防止换行转义误伤的 fallback） ---
+    {
+        let fixed = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(removeTrailingCommas(removeComments(text)))));
+        try { const r = JSON.parse(fixed); if (r && typeof r === 'object') return r; } catch (_) {}
+    }
+
+    // --- 策略 6：尝试提取最外层 {} 之间内容后修复 ---
+    {
+        const braceStart = text.indexOf('{');
+        const braceEnd = text.lastIndexOf('}');
+        if (braceStart >= 0 && braceEnd > braceStart) {
+            let extracted = text.substring(braceStart, braceEnd + 1);
+            extracted = escapeNewlinesInStrings(extracted);
+            extracted = removeTrailingCommas(removeComments(extracted));
+            try { const r = JSON.parse(extracted); if (r && typeof r === 'object') return r; } catch (_) {}
+            // 加全套修复再试
+            let fixed = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(extracted)));
+            try { const r = JSON.parse(fixed); if (r && typeof r === 'object') return r; } catch (_) {}
+        }
+    }
+
+    // 全部失败
+    console.warn('repairAIJson: 所有修复策略均失败，原始文本前200字符:', text.substring(0, 200));
     return null;
 }
 
@@ -4672,19 +4881,15 @@ function parseDataUpdate(aiResponse) {
     try {
         data = JSON.parse(match[1].trim());
     } catch (e) {
-        // 尝试修复后解析
-        try {
-            let fixed = match[1].trim();
-            fixed = fixed.replace(/,\s*([}\]])/g, '$1');
-            fixed = fixed.replace(/'/g, '"');
-            fixed = fixed.replace(/(\w+)\s*:/g, '"$1":'); // 无引号 key 加引号
-            data = JSON.parse(fixed);
-        } catch (e2) {
-            console.error('parseDataUpdate: JSON 解析失败', e2);
+        // 使用 repairAIJson 进行多策略修复
+        console.warn('parseDataUpdate: 首次 JSON.parse 失败，启动修复', e.message);
+        data = repairAIJson(match[1]);
+        if (!data) {
+            console.error('parseDataUpdate: repairAIJson 也未能修复');
             appendTableEditErrorLog({
-                reason: '<dataUpdate> JSON 解析失败',
+                reason: '<dataUpdate> JSON 解析失败（修复后仍无效）',
                 command: match[1].substring(0, 200),
-                detail: String(e2.message || e2),
+                detail: String(e.message || e),
             });
             return false;
         }
