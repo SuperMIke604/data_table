@@ -1625,6 +1625,7 @@ function openDataManagePopup() {
                     <div id="data-manage-error-log-area" style="display: none; margin-top: 15px;">
                         <div class="data-manage-button-group" style="margin-bottom: 10px;">
                             <button id="data-manage-clear-error-log" class="secondary">清空日志</button>
+                            <button id="data-manage-copy-all-log" class="secondary">复制全部</button>
                             <button id="data-manage-close-error-log" class="secondary">关闭</button>
                         </div>
                         <div id="data-manage-error-log-container" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--ios-border); border-radius: 8px; padding: 12px; background-color: var(--ios-gray);"></div>
@@ -4516,21 +4517,48 @@ function setupDataTabListeners(parentDoc) {
                     .map((e, idx) => {
                         const time = escapeHtmlSafe(e.time || '');
                         const reason = escapeHtmlSafe(e.reason || '');
-                        const command = escapeHtmlSafe(e.command || '');
+                        const command = e.command || '';
+                        const commandHtml = escapeHtmlSafe(command.length > 2000 ? command.substring(0, 2000) + '\n... (已截断，点击复制获取完整内容)' : command);
                         const detail = escapeHtmlSafe(e.detail || '');
+                        // 构建复制用的纯文本
+                        const copyText = `#${idx + 1} ${e.time || ''}\n${e.reason || ''}\n\n${command}\n${e.detail ? '\n' + e.detail : ''}`;
                         return `
                             <div style="padding: 10px; border: 1px solid var(--ios-border); border-radius: 8px; margin-bottom: 10px; background: rgba(255, 59, 48, 0.06);">
-                                <div style="display:flex; justify-content:space-between; gap:12px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
                                     <div><b>#${idx + 1}</b> <span style="color: var(--ios-text-secondary);">${time}</span></div>
-                                    <div style="color: #FF3B30;"><b>${reason}</b></div>
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <div style="color: #FF3B30;"><b>${reason}</b></div>
+                                        <button class="data-manage-copy-log secondary" data-copy="${encodeURIComponent(copyText)}" style="padding: 2px 10px; font-size: 12px; cursor: pointer; flex-shrink: 0;">复制</button>
+                                    </div>
                                 </div>
-                                <div style="margin-top:8px; font-family: monospace; white-space: pre-wrap; word-break: break-word;">${command}</div>
+                                <div style="margin-top:8px; font-family: monospace; white-space: pre-wrap; word-break: break-word;">${commandHtml}</div>
                                 ${detail ? `<div style="margin-top:8px; color: var(--ios-text-secondary); white-space: pre-wrap; word-break: break-word;">${detail}</div>` : ''}
                             </div>
                         `;
                     })
                     .join('');
                 container.innerHTML = rows;
+                // 绑定复制按钮事件
+                container.querySelectorAll('.data-manage-copy-log').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        const text = decodeURIComponent(this.getAttribute('data-copy'));
+                        navigator.clipboard.writeText(text).then(() => {
+                            this.textContent = '已复制';
+                            setTimeout(() => { this.textContent = '复制'; }, 1500);
+                        }).catch(() => {
+                            // fallback
+                            const ta = document.createElement('textarea');
+                            ta.value = text;
+                            ta.style.cssText = 'position:fixed;left:-9999px;';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            this.textContent = '已复制';
+                            setTimeout(() => { this.textContent = '复制'; }, 1500);
+                        });
+                    });
+                });
             }
             area.style.display = 'block';
         });
@@ -4551,6 +4579,32 @@ function setupDataTabListeners(parentDoc) {
             const container = parentDoc.getElementById('data-manage-error-log-container');
             if (container) container.innerHTML = '<em style="color: var(--ios-text-secondary);">暂无报错日志</em>';
             showToast('报错日志已清空', 'success');
+        });
+    }
+
+    const copyAllLogBtn = parentDoc.getElementById('data-manage-copy-all-log');
+    if (copyAllLogBtn) {
+        copyAllLogBtn.addEventListener('click', function () {
+            const log = getTableEditErrorLog();
+            if (!log.length) {
+                showToast('暂无日志可复制', 'info');
+                return;
+            }
+            const text = log.slice().reverse().map((e, idx) =>
+                `#${idx + 1} ${e.time || ''}\n${e.reason || ''}\n\n${e.command || ''}${e.detail ? '\n' + e.detail : ''}`
+            ).join('\n\n' + '─'.repeat(40) + '\n\n');
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('全部日志已复制到剪贴板', 'success');
+            }).catch(() => {
+                const ta = parentDoc.createElement('textarea');
+                ta.value = text;
+                ta.style.cssText = 'position:fixed;left:-9999px;';
+                parentDoc.body.appendChild(ta);
+                ta.select();
+                parentDoc.execCommand('copy');
+                parentDoc.body.removeChild(ta);
+                showToast('全部日志已复制到剪贴板', 'success');
+            });
         });
     }
 }
@@ -4833,7 +4887,9 @@ function repairAIJson(raw) {
     }
 
     // 全部失败
-    console.warn('repairAIJson: 所有修复策略均失败，原始文本前200字符:', text.substring(0, 200));
+    console.warn('repairAIJson: 所有修复策略均失败');
+    console.warn('原始文本前500字符:', text.substring(0, 500));
+    // 输出位置附近的上下文（如果有错误位置信息传入的话）
     return null;
 }
 
@@ -4888,7 +4944,7 @@ function parseDataUpdate(aiResponse) {
             console.error('parseDataUpdate: repairAIJson 也未能修复');
             appendTableEditErrorLog({
                 reason: '<dataUpdate> JSON 解析失败（修复后仍无效）',
-                command: match[1].substring(0, 200),
+                command: match[1],
                 detail: String(e.message || e),
             });
             return false;
