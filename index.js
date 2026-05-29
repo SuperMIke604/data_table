@@ -4886,6 +4886,40 @@ function repairAIJson(raw) {
         }
     }
 
+    // --- 策略 7：中间缺少 } 修复 ---
+    // 针对 AI 在 operations 数组条目中漏写闭合括号的情况
+    // 思路：找到括号不平衡的位置，在 }, 或 }] 前面插入缺失的 }
+    {
+        const base = escapeNewlinesInStrings(text);
+        // 找出所有 "}" 的位置（不在字符串内的）
+        const insertionCandidates = [];
+        let inString7 = false, escape7 = false;
+        for (let i = 0; i < base.length; i++) {
+            const ch = base[i];
+            if (escape7) { escape7 = false; continue; }
+            if (ch === '\\' && inString7) { escape7 = true; continue; }
+            if (ch === '"') { inString7 = !inString7; continue; }
+            if (inString7) continue;
+            // 每个 },  或 }] 或 }\n 的位置都是候选插入点
+            if (ch === '}' && i + 1 < base.length) {
+                const next = base[i + 1];
+                if (next === ',' || next === ']' || next === '\n' || next === '\r' || next === ' ') {
+                    insertionCandidates.push(i);
+                }
+            }
+        }
+        // 从后往前逐个候选位置尝试插入一个 }
+        for (let ci = insertionCandidates.length - 1; ci >= 0; ci--) {
+            const pos = insertionCandidates[ci];
+            const candidate = base.substring(0, pos + 1) + '}' + base.substring(pos + 1);
+            const repaired = removeTrailingCommas(candidate);
+            try { const r = JSON.parse(repaired); if (r && typeof r === 'object') return r; } catch (_) {}
+            // 加全套修复
+            const full = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(repaired)));
+            try { const r = JSON.parse(full); if (r && typeof r === 'object') return r; } catch (_) {}
+        }
+    }
+
     // 全部失败
     console.warn('repairAIJson: 所有修复策略均失败');
     console.warn('原始文本前500字符:', text.substring(0, 500));
