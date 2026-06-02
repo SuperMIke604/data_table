@@ -4688,10 +4688,13 @@ function extractDataFromMessage(message, options = {}) {
  * 修复策略（按顺序）：
  *   0. 原文直接 JSON.parse
  *   1. 转义字符串内的裸换行符（最常见：AI 在值里写多行文本）
- *   2. 移除尾随逗号 + 单引号转双引号
- *   3. 为无引号的 key 加双引号
- *   4. 截断修复：补齐未闭合的括号/花括号
- *   5. 以上全部组合
+ *   2. 移除注释 + 转义换行
+ *   3. 移除尾随逗号
+ *   4. 单引号转双引号 + key 加引号 + 补齐括号
+ *   5. 全部修复不转义换行（兜底）
+ *   6. 提取最外层 {} 后全套修复
+ *   7. 中间缺少 }（漏写闭合括号）：逐个候选位置插入 }
+ *   8. 中间多余 }（多写闭合括号）：逐个候选位置删除 }
  *
  * @param {string} raw - AI 输出的原始 JSON 文本
  * @returns {object|array|null} 解析成功返回对象/数组，全部失败返回 null
@@ -4912,6 +4915,33 @@ function repairAIJson(raw) {
         for (let ci = insertionCandidates.length - 1; ci >= 0; ci--) {
             const pos = insertionCandidates[ci];
             const candidate = base.substring(0, pos + 1) + '}' + base.substring(pos + 1);
+            const repaired = removeTrailingCommas(candidate);
+            try { const r = JSON.parse(repaired); if (r && typeof r === 'object') return r; } catch (_) {}
+            // 加全套修复
+            const full = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(repaired)));
+            try { const r = JSON.parse(full); if (r && typeof r === 'object') return r; } catch (_) {}
+        }
+    }
+
+    // --- 策略 8：中间多余 } 修复 ---
+    // 针对 AI 多写了一个 } 的情况（与策略7相反）
+    // 思路：找出所有结构性 } 的位置，从后往前逐个尝试删除一个，直到解析成功
+    {
+        const base = escapeNewlinesInStrings(text);
+        const deletionCandidates = [];
+        let inString8 = false, escape8 = false;
+        for (let i = 0; i < base.length; i++) {
+            const ch = base[i];
+            if (escape8) { escape8 = false; continue; }
+            if (ch === '\\' && inString8) { escape8 = true; continue; }
+            if (ch === '"') { inString8 = !inString8; continue; }
+            if (inString8) continue;
+            if (ch === '}') deletionCandidates.push(i);
+        }
+        // 从后往前逐个尝试删除一个 }
+        for (let ci = deletionCandidates.length - 1; ci >= 0; ci--) {
+            const pos = deletionCandidates[ci];
+            const candidate = base.substring(0, pos) + base.substring(pos + 1);
             const repaired = removeTrailingCommas(candidate);
             try { const r = JSON.parse(repaired); if (r && typeof r === 'object') return r; } catch (_) {}
             // 加全套修复
