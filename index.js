@@ -253,6 +253,33 @@ let currentJsonTableData = null;
 let tableEditErrorLogCache = null;
 const TABLE_EDIT_ERROR_LOG_STORAGE_KEY = 'TavernDB_TableEditErrorLog';
 
+/**
+ * 通用剪贴板复制函数，兼容非安全上下文（HTTP / iframe）
+ * 优先使用 Clipboard API，失败则回退到 execCommand
+ * @param {string} text - 要复制的文本
+ * @param {Document} [doc] - 目标 document（iframe 场景需要传按钮所在的 document）
+ */
+function copyTextToClipboard(text, doc) {
+    doc = doc || document;
+    // 方案1：Clipboard API（需要安全上下文 + 聚焦窗口）
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            navigator.clipboard.writeText(text);
+            return;
+        } catch (_) { /* 降级到方案2 */ }
+    }
+    // 方案2：textarea + execCommand（兼容性最好）
+    const ta = doc.createElement('textarea');
+    ta.value = text;
+    // 确保不可见但能被选中
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+    doc.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { doc.execCommand('copy'); } catch (_) { /* 静默失败 */ }
+    doc.body.removeChild(ta);
+}
+
 function getTableEditErrorLog() {
     if (Array.isArray(tableEditErrorLogCache)) return tableEditErrorLogCache;
     try {
@@ -4542,21 +4569,10 @@ function setupDataTabListeners(parentDoc) {
                 container.querySelectorAll('.data-manage-copy-log').forEach(btn => {
                     btn.addEventListener('click', function () {
                         const text = decodeURIComponent(this.getAttribute('data-copy'));
-                        navigator.clipboard.writeText(text).then(() => {
-                            this.textContent = '已复制';
-                            setTimeout(() => { this.textContent = '复制'; }, 1500);
-                        }).catch(() => {
-                            // fallback
-                            const ta = document.createElement('textarea');
-                            ta.value = text;
-                            ta.style.cssText = 'position:fixed;left:-9999px;';
-                            document.body.appendChild(ta);
-                            ta.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(ta);
-                            this.textContent = '已复制';
-                            setTimeout(() => { this.textContent = '复制'; }, 1500);
-                        });
+                        const doc = this.ownerDocument || document;
+                        copyTextToClipboard(text, doc);
+                        this.textContent = '已复制';
+                        setTimeout(() => { this.textContent = '复制'; }, 1500);
                     });
                 });
             }
@@ -4593,18 +4609,9 @@ function setupDataTabListeners(parentDoc) {
             const text = log.slice().reverse().map((e, idx) =>
                 `#${idx + 1} ${e.time || ''}\n${e.reason || ''}\n\n${e.command || ''}${e.detail ? '\n' + e.detail : ''}`
             ).join('\n\n' + '─'.repeat(40) + '\n\n');
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('全部日志已复制到剪贴板', 'success');
-            }).catch(() => {
-                const ta = parentDoc.createElement('textarea');
-                ta.value = text;
-                ta.style.cssText = 'position:fixed;left:-9999px;';
-                parentDoc.body.appendChild(ta);
-                ta.select();
-                parentDoc.execCommand('copy');
-                parentDoc.body.removeChild(ta);
-                showToast('全部日志已复制到剪贴板', 'success');
-            });
+            const doc = this.ownerDocument || document;
+            copyTextToClipboard(text, doc);
+            showToast('全部日志已复制到剪贴板', 'success');
         });
     }
 }
