@@ -4896,12 +4896,12 @@ function repairAIJson(raw) {
         }
     }
 
-    // --- 策略 7：中间缺少 } 修复 ---
+    // --- 策略 7：中间缺少 } 修复（支持单处 & 多处同时缺失）---
     // 针对 AI 在 operations 数组条目中漏写闭合括号的情况
-    // 思路：找到括号不平衡的位置，在 }, 或 }] 前面插入缺失的 }
+    // 思路：找到候选插入点，先逐个尝试，再尝试多点组合（最多4处同时缺失）
     {
         const base = escapeNewlinesInStrings(text);
-        // 找出所有 "}" 的位置（不在字符串内的）
+        // 找出所有结构性 "}" 的位置（不在字符串内）
         const insertionCandidates = [];
         let inString7 = false, escape7 = false;
         for (let i = 0; i < base.length; i++) {
@@ -4910,7 +4910,6 @@ function repairAIJson(raw) {
             if (ch === '\\' && inString7) { escape7 = true; continue; }
             if (ch === '"') { inString7 = !inString7; continue; }
             if (inString7) continue;
-            // 每个 },  或 }] 或 }\n 的位置都是候选插入点
             if (ch === '}' && i + 1 < base.length) {
                 const next = base[i + 1];
                 if (next === ',' || next === ']' || next === '\n' || next === '\r' || next === ' ') {
@@ -4918,15 +4917,50 @@ function repairAIJson(raw) {
                 }
             }
         }
-        // 从后往前逐个候选位置尝试插入一个 }
+
+        // 辅助：在多个位置同时插入 }（positions 必须升序），返回修复后的字符串
+        function insertBracesAt(src, positions) {
+            let result = src;
+            // 从后往前插入，避免偏移量变化
+            for (let k = positions.length - 1; k >= 0; k--) {
+                const p = positions[k];
+                result = result.substring(0, p + 1) + '}' + result.substring(p + 1);
+            }
+            return result;
+        }
+
+        // 单点修复（原有逻辑）
         for (let ci = insertionCandidates.length - 1; ci >= 0; ci--) {
-            const pos = insertionCandidates[ci];
-            const candidate = base.substring(0, pos + 1) + '}' + base.substring(pos + 1);
+            const candidate = insertBracesAt(base, [insertionCandidates[ci]]);
             const repaired = removeTrailingCommas(candidate);
             try { const r = JSON.parse(repaired); if (r && typeof r === 'object') return r; } catch (_) {}
-            // 加全套修复
             const full = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(repaired)));
             try { const r = JSON.parse(full); if (r && typeof r === 'object') return r; } catch (_) {}
+        }
+
+        // 多点修复：对候选点取最后 N 个（N=2,3,4），暴力枚举组合（候选点过多时限制范围避免性能问题）
+        const maxCandidates = Math.min(insertionCandidates.length, 20); // 最多取后20个候选点
+        const tail = insertionCandidates.slice(insertionCandidates.length - maxCandidates);
+        for (let n = 2; n <= 4; n++) {
+            // 枚举 tail 中所有 C(len, n) 的组合
+            const len = tail.length;
+            if (len < n) continue;
+            // 使用迭代组合枚举
+            const indices = Array.from({length: n}, (_, i) => i);
+            while (true) {
+                const positions = indices.map(i => tail[i]);
+                const candidate = insertBracesAt(base, positions);
+                const repaired = removeTrailingCommas(candidate);
+                try { const r = JSON.parse(repaired); if (r && typeof r === 'object') return r; } catch (_) {}
+                const full = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(repaired)));
+                try { const r = JSON.parse(full); if (r && typeof r === 'object') return r; } catch (_) {}
+                // 推进组合
+                let i = n - 1;
+                while (i >= 0 && indices[i] === len - n + i) i--;
+                if (i < 0) break;
+                indices[i]++;
+                for (let j = i + 1; j < n; j++) indices[j] = indices[j - 1] + 1;
+            }
         }
     }
 
