@@ -4700,8 +4700,9 @@ function extractDataFromMessage(message, options = {}) {
  *   4. 单引号转双引号 + key 加引号 + 补齐括号
  *   5. 全部修复不转义换行（兜底）
  *   6. 提取最外层 {} 后全套修复
- *   7. 中间缺少 }（漏写闭合括号）：逐个候选位置插入 }
+ *   7. 中间缺少 }（漏写闭合括号）：逐个/多个候选位置组合插入 }（最多同时4处）
  *   8. 中间多余 }（多写闭合括号）：逐个候选位置删除 }
+ *   9. 逐行括号平衡修复：对每一操作行单独计算括号缺口并补全（处理多行同时缺 } 的情况）
  *
  * @param {string} raw - AI 输出的原始 JSON 文本
  * @returns {object|array|null} 解析成功返回对象/数组，全部失败返回 null
@@ -4989,6 +4990,41 @@ function repairAIJson(raw) {
             const full = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(repaired)));
             try { const r = JSON.parse(full); if (r && typeof r === 'object') return r; } catch (_) {}
         }
+    }
+
+    // --- 策略 9：逐行括号平衡修复 ---
+    // 针对多行同时缺 }（策略7枚举组合超出范围）的情况
+    // 思路：按行扫描，对每一行单独计算花括号缺口，在行尾补上对应数量的 }
+    {
+        const base = escapeNewlinesInStrings(text);
+        const lines9 = base.split('\n');
+        const fixedLines = lines9.map(line => {
+            const trimmed = line.trim();
+            // 只处理 operations 数组里的操作条目行（有缩进且以 { 开头，且包含 "action"）
+            if (!trimmed.startsWith('{') || !trimmed.includes('"action"')) return line;
+            let depth9 = 0, inStr9 = false, esc9 = false;
+            for (const ch of trimmed) {
+                if (esc9) { esc9 = false; continue; }
+                if (ch === '\\' && inStr9) { esc9 = true; continue; }
+                if (ch === '"') { inStr9 = !inStr9; continue; }
+                if (inStr9) continue;
+                if (ch === '{') depth9++;
+                else if (ch === '}') depth9--;
+            }
+            if (depth9 <= 0) return line; // 平衡或多余，不动
+            // 在行尾（逗号之前）补上缺失的 }
+            const trailingComma = trimmed.endsWith(',');
+            const withoutComma = trailingComma ? trimmed.slice(0, -1) : trimmed;
+            const fixed = withoutComma + '}'.repeat(depth9) + (trailingComma ? ',' : '');
+            // 保留原缩进
+            const indent = line.match(/^(\s*)/)[1];
+            return indent + fixed;
+        });
+        const fixedText = fixedLines.join('\n');
+        const repaired = removeTrailingCommas(fixedText);
+        try { const r = JSON.parse(repaired); if (r && typeof r === 'object') return r; } catch (_) {}
+        const full = closeBrackets(quoteBareKeys(smartSingleToDoubleQuotes(repaired)));
+        try { const r = JSON.parse(full); if (r && typeof r === 'object') return r; } catch (_) {}
     }
 
     // 全部失败
